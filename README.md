@@ -22,7 +22,7 @@ The [Model Context Protocol (MCP)](https://modelcontextprotocol.io) is an open s
 
 ## Repository Contents
 
-### [**ONBOARDING.md**](./ONBOARDING.md) - Omnistrate Onboarding Instructions
+### [**COMPOSE-ONBOARDING.md**](./COMPOSE-ONBOARDING.md) - Omnistrate Onboarding Instructions
 
 Step-by-step instructions for transforming a Docker Compose file into an Omnistrate-enabled service definition. This guide covers the complete transformation process including service plan configuration, API parameter definition, compute and storage resource configuration, and deployment testing. It provides detailed patterns for single-service and multi-service applications, environment variable interpolation with system parameters, and production readiness validation.
 
