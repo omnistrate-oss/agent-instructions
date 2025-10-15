@@ -1,4 +1,4 @@
-# AI Instructions for Omnistrate
+# Agent Instructions for Omnistrate
 
 This repository contains comprehensive instructions and configurations for using AI agents to interact with Omnistrate. It enables seamless integration between popular AI coding assistants and the Omnistrate platform through the Model Context Protocol (MCP).
 
