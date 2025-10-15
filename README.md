@@ -30,7 +30,7 @@ Step-by-step instructions for transforming a Docker Compose file into an Omnistr
 
 Systematic approach for debugging failed Omnistrate deployments with a focus on efficiency and avoiding token limits. This guide provides a structured seven-step debugging process including instance analysis, workflow analysis, pod-level debugging with kubectl, and Helm-specific debugging. It includes common failure patterns, analysis templates, and best practices for identifying root causes of deployment failures.
 
-### **LICENSE** - Repository License
+### [**LICENSE**](./LICENSE) - Repository License
 
 Standard open-source license for this repository.
 
