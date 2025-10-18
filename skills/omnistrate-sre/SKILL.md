@@ -140,10 +140,10 @@ Use time windows from workflow analysis, filter by relevant event types.
 ## Response Management
 - Always use `--output json`
 - If token limit exceeded: add more specific filters, use smaller time windows, target specific resources
-- Provide analysis in template format (see Failure Analysis Template in OMNISTRATE_FDE_REFERENCE.md)
+- Provide analysis in template format (see Failure Analysis Template in OMNISTRATE_SRE_REFERENCE.md)
 
 ## Reference
-See OMNISTRATE_FDE_REFERENCE.md for:
+See OMNISTRATE_SRE_REFERENCE.md for:
 - Detailed tool parameter documentation
 - Complete failure analysis template
 - Extended examples
