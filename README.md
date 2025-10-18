@@ -20,28 +20,86 @@ This repository provides instructions and MCP server configurations for the foll
 
 The [Model Context Protocol (MCP)](https://modelcontextprotocol.io) is an open standard that allows AI agents to securely interact with external tools and services. This repository leverages MCP to enable agents to communicate with Omnistrate's APIs and services.
 
-## Repository Contents
+## Repository Structure
 
-### [**COMPOSE-ONBOARDING.md**](./COMPOSE-ONBOARDING.md) - Omnistrate Onboarding Instructions
+### Agent Configuration Files
 
-Step-by-step instructions for transforming a Docker Compose file into an Omnistrate-enabled service definition. This guide covers the complete transformation process including service plan configuration, API parameter definition, compute and storage resource configuration, and deployment testing. It provides detailed patterns for single-service and multi-service applications, environment variable interpolation with system parameters, and production readiness validation.
+- **[CLAUDE.md](./CLAUDE.md)** - Claude Code skill configuration
+- **[AGENTS.md](./AGENTS.md)** - Generic agent instructions for all MCP-capable agents
 
-### [**DEBUGGING.md**](./DEBUGGING.md) - Omnistrate Debugging Instructions
+### Skills
 
-Systematic approach for debugging failed Omnistrate deployments with a focus on efficiency and avoiding token limits. This guide provides a structured seven-step debugging process including instance analysis, workflow analysis, pod-level debugging with kubectl, and Helm-specific debugging. It includes common failure patterns, analysis templates, and best practices for identifying root causes of deployment failures.
+This repository organizes agent capabilities into specialized skills:
 
-### [**LICENSE**](./LICENSE) - Repository License
+#### [**skills/omnistrate-fde/**](./skills/omnistrate-fde/) - Service Onboarding
 
-Standard open-source license for this repository.
+Guide users through onboarding applications onto the Omnistrate platform.
 
-## How to use the Agent Instructions
+- **SKILL.md** - Core onboarding workflow and decision guides
+- **COMPOSE_ONBOARDING_REFERENCE.md** - Complete Docker Compose transformation reference
 
-1. Choose your preferred AI agent (Claude, GitHub Copilot, or another MCP-capable agent)
-2. Configure the MCP server connection to Omnistrate
-3. Start with **ONBOARDING.md** to transform your Docker Compose file into an Omnistrate service
-4. Use **DEBUGGING.md** if you encounter deployment issues
-5. Iterate and refine your service configuration
+**Currently supported**: Docker Compose-based services with full deployment lifecycle management including compose spec transformation, API parameter configuration, compute/storage setup, and iterative debugging until instances are RUNNING.
+
+**Planned support**: Helm charts, Terraform modules, Kustomize configurations, and Kubernetes operators (see [Omnistrate docs](https://docs.omnistrate.com/getting-started/overview/)).
+
+#### [**skills/omnistrate-sre/**](./skills/omnistrate-sre/) - Deployment Debugging
+
+Systematically debug failed Omnistrate deployments using a progressive workflow that identifies root causes efficiently.
+
+- **SKILL.md** - Progressive debugging workflow
+- **OMNISTRATE_SRE_REFERENCE.md** - Detailed debugging procedures and templates
+
+**Capabilities**: Instance status analysis, workflow event analysis, pod-level investigation with kubectl, Helm-specific verification, and common failure pattern recognition.
+
+## How to Use
+
+### For Claude Code Users
+
+Claude Code automatically discovers and uses skills defined in [CLAUDE.md](./CLAUDE.md). Simply start working with Omnistrate and Claude will invoke the appropriate skill based on your intent.
+
+### For Other Agent Users
+
+1. Read [AGENTS.md](./AGENTS.md) to understand available skills
+2. Browse `skills/*/SKILL.md` files for workflow guidance
+3. Consult `skills/*/*_REFERENCE.md` files for detailed syntax and examples
+4. Configure your agent with the Omnistrate MCP server
+
+### Quick Start
+
+**Onboarding a service:**
+1. Use the **omnistrate-fde** skill
+2. Start with your Docker Compose file
+3. Follow the transformation workflow
+4. Build, deploy, and iterate until RUNNING
+
+**Debugging a deployment:**
+1. Use the **omnistrate-sre** skill
+2. Start with deployment status analysis
+3. Follow the progressive debugging workflow
+4. Identify root cause and resolve issues
+
+## MCP Tools Required
+
+Both skills require the Omnistrate MCP server providing:
+- `mcp__ctl__account_*` - Cloud account management
+- `mcp__ctl__docs_*` - Documentation search
+- `mcp__ctl__build_compose` - Service builds
+- `mcp__ctl__service_plan_*` - Plan management
+- `mcp__ctl__instance_*` - Instance operations
+- `mcp__ctl__workflow_*` - Workflow analysis
+- `mcp__ctl__deployment-cell_*` - Kubernetes access
+
+## Contributing
+
+To add new skills:
+1. Follow [Claude's skill best practices](https://docs.claude.com/en/docs/agents-and-tools/agent-skills/best-practices)
+2. Create `skills/<skill-name>/` directory
+3. Add `SKILL.md` with workflow and patterns
+4. Add method-specific reference documentation
+5. Update [CLAUDE.md](./CLAUDE.md) and [AGENTS.md](./AGENTS.md)
 
 ## Support
 
-For issues, questions, or contributions, please refer to the Omnistrate documentation or open an issue in this repository.
+- **Omnistrate Documentation**: https://docs.omnistrate.com
+- **Skill Best Practices**: https://docs.claude.com/en/docs/agents-and-tools/agent-skills/best-practices
+- **Issues**: Report issues in this repository
