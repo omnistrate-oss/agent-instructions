@@ -47,7 +47,9 @@ For multi-service applications, Omnistrate requires one "parent" service to coor
 
 ## Docker Compose Workflow
 
-**Quick Start**: Verify cloud account → Create `-omnistrate.yaml` → Add service plan → Transform services → Build → Deploy → Debug until RUNNING
+**Quick Start**: Verify cloud account → Create `-omnistrate.yaml` → Add service plan → Transform services (NO PARAMETERS) → Build → Deploy → Debug until RUNNING → Add parameters when user requests customization
+
+**CRITICAL RULE**: ALWAYS start with ZERO parameterization. Use hardcoded values for everything (passwords, replica counts, storage sizes, environment variables). Only add API parameters AFTER the initial deployment is successful AND the user explicitly requests customization capabilities.
 
 ### 1. Preparation
 **Analyze compose file structure** (Docker Compose only):
@@ -76,17 +78,40 @@ mcp__ctl__docs_system_parameters  # For $sys.* variable paths
 - Single service (count = 1): Mark service with `x-omnistrate-mode-internal: false`
 - Multi-service (count ≥ 2): Create synthetic root service using `omnistrate/noop` image
 
-**Key transformations**:
-1. Add service plan with real cloud account values
+**Key transformations** (STRICT ORDER - no parameters initially):
+
+**Phase 1: Initial Build** (ZERO parameterization - get working deployment first):
+1. Add service plan with real cloud account values (use `byoaDeployment` format)
 2. Create/configure root service (multi-service apps)
 3. Mark child services as internal (`x-omnistrate-mode-internal: true`)
-4. Define API parameters on root service
-5. Transform environment variables to use `$var.*` and `$sys.*` references
-6. Configure compute resources per service
-7. Transform volumes to `x-omnistrate-storage` definitions
-8. Add capabilities (backups, autoscaling, multi-zone)
-9. Configure load balancers (only for replicas > 1)
-10. Add integrations (logging, metrics)
+4. **NO API parameters** - use hardcoded values for everything:
+   - Passwords: Use defaults like `"ChangeMe123!"`
+   - Replica counts: Use fixed numbers like `replicaCount: 3`
+   - Storage sizes: Use hardcoded numbers like `instanceStorageSizeGi: 100`
+   - Environment variables: Hardcode all values
+5. Configure compute resources per service (fixed replicaCount, simple instanceTypes)
+6. Transform volumes to `x-omnistrate-storage` (numeric sizes, hardcoded)
+7. Add basic capabilities (enableMultiZone, simple backups)
+8. **BUILD AND VALIDATE** - must succeed
+9. **DEPLOY instance** - must reach RUNNING status
+10. **STOP** - do not add parameters unless user requests customization
+
+**Phase 2: Add Parameterization** (ONLY when user explicitly requests):
+When user asks for customizable passwords, replica counts, storage sizes, etc.:
+11. Add ONE API parameter at a time to root service
+12. Add parameterDependencyMap on root for that parameter
+13. Add child parameter definition (key + name + description + type) on child service
+14. Replace hardcoded value with `$var.paramName` in child service
+15. **RE-BUILD** to validate
+16. **RE-DEPLOY instance** to validate runtime
+17. Repeat steps 11-16 for each additional parameter
+
+**Phase 3: Add Advanced Features** (ONLY when user explicitly requests):
+18. Add autoscaling (remove any replicaCountAPIParam first)
+19. Configure load balancers (if not already added)
+20. Add integrations (observability, metering)
+21. Add action hooks
+22. **RE-BUILD and RE-DEPLOY to validate**
 
 ### 3. Build and Deploy
 ```bash
@@ -121,6 +146,83 @@ Refer to `../omnistrate-sre/SKILL.md` for systematic debugging approach.
 - **Never hallucinate** syntax - if doc search returns no results, skip the feature
 - **Skip when uncertain** - working basic service > broken advanced service
 
+### API Parameter Syntax Rules
+
+**IMPORTANT**: Before adding ANY API parameters, always search documentation:
+```bash
+mcp__omnistrate__omnistrate-ctl_docs_compose-spec query="x-omnistrate-api-params"
+```
+Verify the correct syntax, supported types, and configuration options from the official docs.
+
+**Default Values**: Always quote as strings (even for numeric types)
+```yaml
+- key: replicas
+  type: Float64
+  defaultValue: "5"  # ✅ Quoted string
+  # defaultValue: 5  # ❌ Unquoted number fails build
+```
+
+**Autoscaling Conflicts**: Cannot have replicaCountAPIParam AND autoscaling together
+```yaml
+# ❌ Wrong - causes build error
+x-omnistrate-compute:
+  replicaCountAPIParam: replicas
+x-omnistrate-capabilities:
+  autoscaling: [...]
+
+# ✅ Correct - only autoscaling
+x-omnistrate-compute:
+  instanceTypes: [...]
+x-omnistrate-capabilities:
+  autoscaling:
+    minReplicas: 3
+    maxReplicas: 10
+```
+
+**Parameter Options**: Use simple `options` array for String types
+```yaml
+options:  # ✅ Simple array
+  - value1
+  - value2
+# labeledOptions may not work in all contexts
+```
+
+### Build Strategy: Zero Parameterization First
+
+**CRITICAL RULE**: ALWAYS start with ZERO API parameters and ZERO templatization.
+
+**Phase 1 - Hardcoded Everything** (priority: get working deployment):
+- **NO API parameters** on root service
+- **NO x-omnistrate-api-params** on any child services
+- **NO $var.* references** in environment variables
+- **NO {{ }} concatenations**
+- All passwords: Hardcoded defaults (e.g., `"ChangeMe123!"`)
+- All replica counts: Fixed numbers (e.g., `replicaCount: 3`)
+- All storage sizes: Hardcoded numbers (e.g., `instanceStorageSizeGi: 100`)
+- All environment variables: Hardcoded values
+- No autoscaling (use fixed replicas)
+- Basic capabilities only (enableMultiZone, simple backups)
+- **BUILD → DEPLOY → Verify RUNNING status**
+
+**Phase 2 - Add Parameterization** (ONLY when user explicitly asks for it):
+Wait for user to request: "I want to customize X" or "Make Y configurable"
+
+Then add parameters ONE AT A TIME:
+1. Add single API parameter to root service
+2. Add parameterDependencyMap on root
+3. Add full child parameter definition (key + name + description + type)
+4. Replace hardcoded value with `$var.paramName`
+5. **BUILD → DEPLOY → Validate**
+6. Repeat for next parameter only if user requests
+
+**Phase 3 - Advanced Features** (ONLY when user explicitly requests):
+- Add autoscaling (user must request)
+- Add custom replica counts (user must request)
+- Add storage parameterization (user must request)
+- Add integrations (user must request)
+
+**Never add parameterization proactively** - only when explicitly requested by user.
+
 ### Parameter Flow Patterns
 
 **Simple flow** (root → child for env vars):
@@ -136,22 +238,28 @@ environment:
   - MAX_MEMORY=$var.cacheSize
 ```
 
-**Dual definition** (required for compute/storage):
+**Dual definition** (required for ALL parameters used in child services):
 ```yaml
 # Root service
 x-omnistrate-api-params:
-  - key: instanceType
+  - key: dbPassword
+    name: Database Password
+    description: PostgreSQL password
+    type: Password
     parameterDependencyMap:
-      backend: instanceType
+      backend: dbPassword
 
-# Child service (MUST redefine)
+# Child service (MUST redefine with name, description, type)
 x-omnistrate-api-params:
-  - key: instanceType
-x-omnistrate-compute:
-  instanceTypes:
-    - cloudProvider: gcp
-      apiParam: instanceType
+  - key: dbPassword
+    name: Database Password  # Required
+    description: PostgreSQL password  # Required
+    type: Password  # Required
+environment:
+  - POSTGRES_PASSWORD=$var.dbPassword
 ```
+
+**Note**: Do NOT add parameters in initial build - use hardcoded values first.
 
 ### String Concatenation
 Use `{{ }}` syntax when concatenating system parameters:
@@ -218,15 +326,27 @@ services:
 ```
 
 ## Success Criteria
+
+### Phase 1: Initial Deployment (Required)
 - ✅ Build succeeds without validation errors
 - ✅ **Instance reaches RUNNING status**
 - ✅ **All resources healthy (not FAILED)**
 - ✅ All health checks pass
-- ✅ Parameters work as expected
-- ✅ Multiple instances can run concurrently
+- ✅ **NO API parameters** (everything hardcoded)
 - ✅ **Completed at least one deploy-debug-fix cycle**
 - ✅ All transformations based on verified documentation
-- ✅ Skipped features documented with reasons
+
+### Phase 2: Parameterization (Optional - only if user requests)
+- ✅ Parameters added one at a time
+- ✅ Each parameter validated with build + deploy
+- ✅ Dual definition pattern followed (root + child)
+- ✅ Re-deployed successfully after each parameter addition
+
+### Phase 3: Advanced Features (Optional - only if user requests)
+- ✅ Autoscaling configured (no conflicts with replicaCountAPIParam)
+- ✅ Load balancers working
+- ✅ Integrations functional
+- ✅ Multiple instances can run concurrently
 
 
 ## Reference
