@@ -31,16 +31,31 @@ The [Model Context Protocol (MCP)](https://modelcontextprotocol.io) is an open s
 
 This repository organizes agent capabilities into specialized skills:
 
+#### [**skills/omnistrate-sa/**](./skills/omnistrate-sa/) - Solutions Architect
+
+Guide users through designing application architectures from scratch for SaaS deployment on Omnistrate.
+
+- **SKILL.md** - Architecture design workflow and technology selection
+- **SOLUTIONS_ARCHITECT_REFERENCE.md** - Domain patterns, compliance checklists, SLA guidelines
+
+**Capabilities**: Technology stack selection (frameworks, databases, caches, queues), domain-specific architecture patterns (AI/ML, analytics, APIs, data platforms), tenancy model design (shared, siloed, hybrid), deployment model planning (SaaS, BYOC, BYOC Copilot, On-Premise), compliance and security architecture (SOC2, HIPAA, GDPR, PCI), SLA-driven availability design (99.9% to 99.999% uptime), iterative Docker Compose spec development.
+
+**Use when**: Designing new SaaS applications from scratch, choosing technology stacks, architecting for specific domains/compliance/SLA requirements.
+
+**Output**: Production-ready vanilla Docker Compose spec (without `x-omnistrate-*` extensions) ready for FDE transformation.
+
 #### [**skills/omnistrate-fde/**](./skills/omnistrate-fde/) - Service Onboarding
 
-Guide users through onboarding applications onto the Omnistrate platform.
+Guide users through onboarding applications onto the Omnistrate platform. **ALWAYS starts with zero parameterization** (hardcoded values) to ensure successful initial deployment.
 
 - **SKILL.md** - Core onboarding workflow and decision guides
 - **COMPOSE_ONBOARDING_REFERENCE.md** - Complete Docker Compose transformation reference
 
-**Currently supported**: Docker Compose-based services with full deployment lifecycle management including compose spec transformation, API parameter configuration, compute/storage setup, and iterative debugging until instances are RUNNING.
+**Currently supported**: Docker Compose-based services with full deployment lifecycle management including compose spec transformation, zero-parameterization initial builds, incremental API parameter addition (ONLY when user requests), compute/storage setup, and iterative debugging until instances are RUNNING.
 
 **Planned support**: Helm charts, Terraform modules, Kustomize configurations, and Kubernetes operators (see [Omnistrate docs](https://docs.omnistrate.com/getting-started/overview/)).
+
+**Use when**: Transforming existing Docker Compose specs to Omnistrate-native format.
 
 #### [**skills/omnistrate-sre/**](./skills/omnistrate-sre/) - Deployment Debugging
 
@@ -50,6 +65,8 @@ Systematically debug failed Omnistrate deployments using a progressive workflow 
 - **OMNISTRATE_SRE_REFERENCE.md** - Detailed debugging procedures and templates
 
 **Capabilities**: Instance status analysis, workflow event analysis, pod-level investigation with kubectl, Helm-specific verification, and common failure pattern recognition.
+
+**Use when**: Instance deployments showing FAILED or DEPLOYING status, need to identify root cause of deployment failures.
 
 ## How to Use
 
@@ -66,11 +83,19 @@ Claude Code automatically discovers and uses skills defined in [CLAUDE.md](./CLA
 
 ### Quick Start
 
+**Designing a new SaaS application:**
+1. Use the **omnistrate-sa** skill
+2. Start with requirements (domain, scale, compliance, SLA)
+3. Select appropriate technologies
+4. Iteratively develop Docker Compose spec
+5. Handoff vanilla compose to FDE skill
+
 **Onboarding a service:**
 1. Use the **omnistrate-fde** skill
-2. Start with your Docker Compose file
-3. Follow the transformation workflow
+2. Start with your Docker Compose file (vanilla or from SA skill)
+3. Transform to Omnistrate-native (ZERO parameterization initially)
 4. Build, deploy, and iterate until RUNNING
+5. Add API parameters incrementally when user requests customization
 
 **Debugging a deployment:**
 1. Use the **omnistrate-sre** skill

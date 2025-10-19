@@ -1,13 +1,9 @@
-# Claude Code Instructions
-
-This file configures Claude Code with specialized skills for working with the Omnistrate platform.
-
 ## Available Skills
 
 ### Onboarding Services to Omnistrate
 **Location**: `skills/omnistrate-fde/`
 
-Guide users through onboarding applications onto the Omnistrate platform. Currently supports Docker Compose-based services with full deployment lifecycle management.
+Guide users through onboarding applications onto the Omnistrate platform. Currently supports Docker Compose-based services with full deployment lifecycle management. **CRITICAL**: ALWAYS starts with ZERO parameterization (hardcoded values) to ensure successful initial deployment, then adds API parameters incrementally ONLY when user explicitly requests customization.
 
 **When to use**:
 - Onboarding applications to Omnistrate platform
@@ -21,7 +17,8 @@ Guide users through onboarding applications onto the Omnistrate platform. Curren
 
 **Key capabilities**:
 - Compose spec transformation with validation
-- API parameter configuration and flow patterns
+- Zero-parameterization initial builds (hardcoded defaults)
+- Incremental API parameter addition (ONLY when user requests)
 - Compute and storage resource setup
 - Iterative debugging until instances are RUNNING
 - Multi-service architecture with synthetic root patterns
@@ -44,4 +41,33 @@ Systematically debug failed Omnistrate instance deployments using a progressive 
 - Helm-specific verification
 - Common failure pattern recognition
 - Infrastructure and application-level analysis
+
+### Omnistrate Solutions Architect
+**Location**: `skills/omnistrate-sa/`
+
+Guide users through designing application architectures from scratch for SaaS deployment on Omnistrate. Focuses on technology selection, domain-specific patterns, compliance/SLA requirements, and iterative Docker Compose development. Output is a production-ready vanilla compose spec (without `x-omnistrate-*` extensions) that can be handed off to the FDE skill for Omnistrate-native transformation.
+
+**When to use**:
+- Designing new SaaS applications from scratch and choosing technology stacks
+- Selecting databases, frameworks, caches, message queues for specific domains
+- Understanding domain-specific requirements (AI/ML, analytics, APIs, data platforms)
+- Evaluating compliance needs (SOC2, HIPAA, GDPR, data residency)
+- Determining customer SLA requirements and availability architecture
+- Making architectural decisions informed by Omnistrate's tenancy and deployment models
+- Iteratively developing and validating Docker Compose specifications
+- Preparing compose specs for FDE skill transformation
+
+**Do NOT use when**:
+- User already has a complete compose spec → Use **FDE skill** instead
+- User needs to debug failed deployments → Use **SRE skill** instead
+
+**Key capabilities**:
+- Technology stack selection (frameworks, databases, caches, queues, storage)
+- Domain-specific architecture patterns (API, ML, analytics, data platforms)
+- Tenancy model design (shared, siloed, hybrid) informed by Omnistrate capabilities
+- Deployment model planning (SaaS, BYOC, BYOC Copilot, On-Premise)
+- Compliance and security architecture (SOC2, HIPAA, GDPR, PCI)
+- SLA-driven availability design (99.9% to 99.999% uptime)
+- Iterative Docker Compose spec development and validation
+- Omnistrate-aware design decisions (autoscaling, backups, multi-zone readiness)
 
