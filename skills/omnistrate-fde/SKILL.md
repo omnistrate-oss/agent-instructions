@@ -414,11 +414,11 @@ x-omnistrate-service-plan:
   deployment:
     hostedDeployment:  # ✅ ALWAYS USE THIS (unless user explicitly requests BYOC/on-prem)
       # YOUR cloud accounts (where YOUR SaaS service runs)
-      awsAccountId: "541226919566"  # YOUR AWS account
-      awsBootstrapRoleAccountArn: "arn:aws:iam::541226919566:role/omnistrate-bootstrap-role"
-      gcpProjectId: "my-project"  # YOUR GCP project
-      gcpProjectNumber: "383746634676"
-      gcpServiceAccountEmail: "sa@my-project.iam.gserviceaccount.com"
+      awsAccountId: "YOUR_AWS_ACCOUNT_ID"  # YOUR AWS account
+      awsBootstrapRoleAccountArn: "arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/omnistrate-bootstrap-role"
+      gcpProjectId: "YOUR_GCP_PROJECT_ID"  # YOUR GCP project
+      gcpProjectNumber: "YOUR_GCP_PROJECT_NUMBER"
+      gcpServiceAccountEmail: "sa@YOUR_GCP_PROJECT_ID.iam.gserviceaccount.com"
 ```
 
 **BYOC Offering** - Only when user wants to offer customer-hosted option:
@@ -429,8 +429,8 @@ x-omnistrate-service-plan:
   deployment:
     byoaDeployment:  # Use ONLY if user says "I want to OFFER BYOC to my customers"
       # This is still YOUR intermediate account, not customer account
-      awsAccountId: "541226919566"
-      awsBootstrapRoleAccountArn: "arn:aws:iam::541226919566:role/omnistrate-bootstrap-role"
+      awsAccountId: "YOUR_AWS_ACCOUNT_ID"
+      awsBootstrapRoleAccountArn: "arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/omnistrate-bootstrap-role"
 ```
 
 **Multi-Model** - Offer both hosted AND BYOC:
@@ -440,10 +440,10 @@ x-omnistrate-service-plan:
   name: 'My Service'
   deployment:
     hostedDeployment:  # For most customers
-      awsAccountId: "541226919566"
+      awsAccountId: "YOUR_AWS_ACCOUNT_ID"
       awsBootstrapRoleAccountArn: "arn:..."
     byoaDeployment:  # For enterprise customers who want BYOC
-      awsAccountId: "541226919566"
+      awsAccountId: "YOUR_AWS_ACCOUNT_ID"
       awsBootstrapRoleAccountArn: "arn:..."
 ```
 
