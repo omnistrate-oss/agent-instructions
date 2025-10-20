@@ -49,7 +49,9 @@ For multi-service applications, Omnistrate requires one "parent" service to coor
 
 **Quick Start**: Verify cloud account → Create `-omnistrate.yaml` → Add service plan → Transform services (NO PARAMETERS) → Build → Deploy → Debug until RUNNING → Add parameters when user requests customization
 
-**CRITICAL RULE**: ALWAYS start with ZERO parameterization. Use hardcoded values for everything (passwords, replica counts, storage sizes, environment variables). Only add API parameters AFTER the initial deployment is successful AND the user explicitly requests customization capabilities.
+**CRITICAL RULES**:
+1. **ALWAYS start with ZERO parameterization** - Use hardcoded values for everything. Only add API parameters AFTER initial deployment succeeds AND user explicitly requests customization.
+2. **ALWAYS use `hostedDeployment`** - This deploys YOUR SaaS service in YOUR provider cloud account (not Omnistrate's account, not customer accounts). Only use `byoaDeployment` if user wants to OFFER BYOC as an option to their customers.
 
 ### 1. Preparation
 **Analyze compose file structure** (Docker Compose only):
@@ -65,6 +67,13 @@ mcp__ctl__account_describe account-name="<name>"
 ```
 Extract account IDs, bootstrap roles, project IDs for service plan configuration.
 
+**Determine deployment model** (ALWAYS use hostedDeployment unless specified):
+- **ALWAYS DEFAULT** → Use `hostedDeployment` (deploy in YOUR PROVIDER account - this is where YOUR SaaS service runs)
+- **ONLY if user explicitly wants to OFFER BYOC to their customers** → Use `byoaDeployment` (allows YOUR CUSTOMERS to deploy in THEIR accounts)
+- **ONLY if user wants on-premise** → Use `onPremDeployment`
+
+**CRITICAL**: `hostedDeployment` means deploying in YOUR (the SaaS provider's) account, NOT Omnistrate's account. This is the standard SaaS model. BYOC is for when you want to OFFER customers the option to deploy in THEIR accounts.
+
 ### 2. Transformation
 **Never modify original compose file** - create new `-omnistrate.yaml` file
 
@@ -74,6 +83,18 @@ mcp__ctl__docs_compose_spec_search query="<extension-name>"
 mcp__ctl__docs_system_parameters  # For $sys.* variable paths
 ```
 
+**Test image accessibility** (for custom images from SA handoff):
+For each custom image (non-public like postgres, nginx, etc.), test if publicly accessible:
+```bash
+# Create temporary Docker config to test without local credentials
+TEMP_DOCKER_CONFIG=$(mktemp -d)
+DOCKER_CONFIG=$TEMP_DOCKER_CONFIG docker pull <image>:<tag> 2>&1
+rm -rf $TEMP_DOCKER_CONFIG
+```
+
+If pull succeeds: Image is public (no auth needed)
+If pull fails with auth error: Image is private (need to configure auth)
+
 **Service architecture decision**:
 - Single service (count = 1): Mark service with `x-omnistrate-mode-internal: false`
 - Multi-service (count ≥ 2): Create synthetic root service using `omnistrate/noop` image
@@ -81,10 +102,92 @@ mcp__ctl__docs_system_parameters  # For $sys.* variable paths
 **Key transformations** (STRICT ORDER - no parameters initially):
 
 **Phase 1: Initial Build** (ZERO parameterization - get working deployment first):
-1. Add service plan with real cloud account values (use `byoaDeployment` format)
-2. Create/configure root service (multi-service apps)
-3. Mark child services as internal (`x-omnistrate-mode-internal: true`)
-4. **NO API parameters** - use hardcoded values for everything:
+1. **Test image accessibility and configure registry authentication** (if needed):
+
+   **For each custom image** (skip public images like postgres, nginx, redis):
+
+   a. **Test if image is publicly accessible**:
+   ```bash
+   TEMP_DOCKER_CONFIG=$(mktemp -d)
+   DOCKER_CONFIG=$TEMP_DOCKER_CONFIG docker pull mycompany/api:v1.0.0 2>&1
+   rm -rf $TEMP_DOCKER_CONFIG
+   ```
+
+   - If succeeds: Image is public, skip to next image
+   - If fails with "unauthorized" or "denied": Image is private, continue to step b
+
+   b. **Identify registry type and ask for credentials**:
+
+   **Docker Hub (docker.io)**:
+   - Ask: "What is your Docker Hub username?"
+   - Ask: "Please create a Docker Hub Personal Access Token (PAT) at https://hub.docker.com/settings/security with read permissions. Once created, what should I name the secret in Omnistrate?" (suggest: `DOCKERHUB_PASSWORD`)
+
+   **GitHub Container Registry (ghcr.io)**:
+   - Ask: "What is your GitHub username or organization?"
+   - Ask: "Please create a GitHub PAT at https://github.com/settings/tokens with `read:packages` scope. What should I name the username and token secrets?" (suggest: `GITHUB_USERNAME`, `GITHUB_TOKEN`)
+
+   **AWS ECR / GCP Artifact Registry / Azure ACR / Custom**:
+   - Ask: "What is the username for this registry?"
+   - Ask: "What should I name the password secret in Omnistrate?" (suggest: `REGISTRY_PASSWORD`)
+
+   c. **Guide customer to create Omnistrate secrets**:
+   ```
+   I need you to create these secrets in Omnistrate:
+
+   1. Log into Omnistrate console: https://omnistrate.cloud
+   2. Navigate to: Services → [Your Service] → Environments → Dev → Secrets
+   3. Click "Add Secret"
+   4. Name: DOCKERHUB_PASSWORD (use exact name I suggested)
+   5. Value: [Paste your Docker Hub PAT here]
+   6. Click Save
+   7. Repeat steps 2-6 for Prod environment (same secret name, same value)
+
+   Let me know when you've created the secret(s).
+   ```
+
+   d. **Add `x-omnistrate-image-registry-attributes` section to compose file**:
+
+   Search docs first: `mcp__ctl__docs_compose_spec_search query="x-omnistrate-image-registry-attributes"`
+
+   Add at TOP LEVEL of compose (same level as `version:` and `services:`):
+   ```yaml
+   version: '3.8'
+
+   x-omnistrate-image-registry-attributes:
+     docker.io:  # Include ONLY if using private docker.io images
+       auth:
+         username: mycompany  # Customer's username
+         password: {{ $secret.DOCKERHUB_PASSWORD }}
+     ghcr.io:  # Include ONLY if using private ghcr.io images
+       auth:
+         username: {{ $secret.GITHUB_USERNAME }}
+         password: {{ $secret.GITHUB_TOKEN }}
+     registry.company.com:  # Include ONLY if using custom private registry
+       auth:
+         username: registryuser
+         password: {{ $secret.PRIVATE_REGISTRY_PASSWORD }}
+
+   services: [...]
+   ```
+
+   **Important**:
+   - Include ONLY registries with private images (don't add unused registries)
+   - Registry hostname must match image URLs (e.g., `docker.io` for `mycompany/api:tag`)
+   - Username can be hardcoded OR use `{{ $secret.NAME }}`
+   - Password/token MUST use `{{ $secret.NAME }}` syntax
+
+2. Add service plan with real cloud account values (ALWAYS use `hostedDeployment` unless specified)
+   - **ALWAYS USE `hostedDeployment`** (deploy in YOUR provider account - standard SaaS model)
+   - **Only use `byoaDeployment`** if user explicitly says "I want to OFFER BYOC to my customers"
+   - **Only use `onPremDeployment`** if user explicitly says "on-premise deployment"
+
+   **CRITICAL DISTINCTION**:
+   - `hostedDeployment` = Infrastructure in YOUR account (the SaaS provider) where your service runs
+   - `byoaDeployment` = OPTION for YOUR CUSTOMERS to deploy in THEIR accounts (BYOC offering)
+   - These are NOT mutually exclusive - you can offer both deployment models to different customer tiers
+3. Create/configure root service (multi-service apps)
+4. Mark child services as internal (`x-omnistrate-mode-internal: true`)
+5. **NO API parameters** - use hardcoded values for everything:
    - Passwords: Use defaults like `"ChangeMe123!"`
    - Replica counts: Use fixed numbers like `replicaCount: 3`
    - Storage sizes: Use hardcoded numbers like `instanceStorageSizeGi: 100`
@@ -296,6 +399,54 @@ services:
 - Service is externally accessible
 - NOT for omnistrate/noop services
 
+## Deployment Model Patterns
+
+**CRITICAL UNDERSTANDING**:
+- **`hostedDeployment`** = YOUR service runs in YOUR provider account (standard SaaS - like Slack, Stripe)
+- **`byoaDeployment`** = OPTION to let YOUR CUSTOMERS deploy in THEIR accounts (BYOC offering)
+- **`onPremDeployment`** = OPTION for YOUR CUSTOMERS to deploy on-premise
+
+**DEFAULT: ALWAYS use `hostedDeployment`**
+
+```yaml
+x-omnistrate-service-plan:
+  name: 'My Service'
+  deployment:
+    hostedDeployment:  # ✅ ALWAYS USE THIS (unless user explicitly requests BYOC/on-prem)
+      # YOUR cloud accounts (where YOUR SaaS service runs)
+      awsAccountId: "541226919566"  # YOUR AWS account
+      awsBootstrapRoleAccountArn: "arn:aws:iam::541226919566:role/omnistrate-bootstrap-role"
+      gcpProjectId: "my-project"  # YOUR GCP project
+      gcpProjectNumber: "383746634676"
+      gcpServiceAccountEmail: "sa@my-project.iam.gserviceaccount.com"
+```
+
+**BYOC Offering** - Only when user wants to offer customer-hosted option:
+
+```yaml
+x-omnistrate-service-plan:
+  name: 'My Service'
+  deployment:
+    byoaDeployment:  # Use ONLY if user says "I want to OFFER BYOC to my customers"
+      # This is still YOUR intermediate account, not customer account
+      awsAccountId: "541226919566"
+      awsBootstrapRoleAccountArn: "arn:aws:iam::541226919566:role/omnistrate-bootstrap-role"
+```
+
+**Multi-Model** - Offer both hosted AND BYOC:
+
+```yaml
+x-omnistrate-service-plan:
+  name: 'My Service'
+  deployment:
+    hostedDeployment:  # For most customers
+      awsAccountId: "541226919566"
+      awsBootstrapRoleAccountArn: "arn:..."
+    byoaDeployment:  # For enterprise customers who want BYOC
+      awsAccountId: "541226919566"
+      awsBootstrapRoleAccountArn: "arn:..."
+```
+
 ## Architecture Patterns
 
 ### Single Service
@@ -303,7 +454,6 @@ services:
 services:
   web:
     x-omnistrate-mode-internal: false  # Root service
-    x-omnistrate-api-params: [...]
     x-omnistrate-compute: [...]
 ```
 
@@ -314,7 +464,6 @@ services:
     image: omnistrate/noop  # Special Omnistrate image (no workload)
     x-omnistrate-mode-internal: false
     depends_on: [web, database]
-    x-omnistrate-api-params: [...]
     x-omnistrate-capabilities:
       backupConfiguration: [...]  # Only on root
 

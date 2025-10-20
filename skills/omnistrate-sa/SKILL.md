@@ -7,17 +7,20 @@ description: Guide users through designing application architectures from scratc
 
 ## When to Use This Skill
 
-**Use this skill when users need to build applications from scratch**, including:
-- Designing new SaaS applications and choosing technology stacks
+**Use this skill when**:
+- Designing new SaaS applications from scratch and choosing technology stacks
 - Architecting microservices and selecting databases, caches, message queues
 - Understanding domain-specific requirements (AI/ML, analytics, APIs, data platforms)
 - Evaluating compliance needs (SOC2, HIPAA, GDPR, data residency)
 - Determining customer SLA requirements and availability zones
 - Making architectural decisions informed by Omnistrate's tenancy and deployment models
 - Iteratively developing and refining a Docker Compose specification
+- **User has a compose file with `build:` contexts** that only runs locally
+- **Converting local development compose** (build contexts) to cloud-ready compose (image registries)
+- **Setting up container image registries** and authentication for private images
 
 **Do NOT use this skill when**:
-- User already has a complete compose spec → Use **FDE skill** instead
+- User already has a compose spec with ALL services using `image:` references (no `build:` contexts) AND images are accessible in registries → Use **FDE skill** instead
 - User needs to debug failed deployments → Use **SRE skill** instead
 
 ## Relationship to Other Skills
@@ -708,13 +711,80 @@ services:
 - Verify `.env` file support
 - Check parameter validation
 
-#### Iteration 6: Resource Sizing Hints
+#### Iteration 6: Container Image Registry Setup
+**Goal**: Ensure all services have image references (not build contexts)
+
+**Check for build contexts**:
+```yaml
+services:
+  app:
+    build: ./app  # ❌ Won't work on Omnistrate
+    # OR
+    build:
+      context: ./backend
+      dockerfile: Dockerfile  # ❌ Won't work on Omnistrate
+```
+
+**If build contexts exist**, you MUST work with customer to convert them:
+
+1. **Build and push images to a registry**:
+   ```bash
+   # Option 1: Docker Hub
+   docker build -t mycompany/api:v1.0.0 ./app
+   docker push mycompany/api:v1.0.0
+
+   # Option 2: GitHub Container Registry
+   docker build -t ghcr.io/mycompany/api:v1.0.0 ./app
+   docker push ghcr.io/mycompany/api:v1.0.0
+
+   # Option 3: Private registry
+   docker build -t registry.company.com/api:v1.0.0 ./app
+   docker push registry.company.com/api:v1.0.0
+   ```
+
+2. **Replace build context with image reference**:
+   ```yaml
+   services:
+     app:
+       image: mycompany/api:v1.0.0  # ✅ Now cloud-deployable
+       # build: ./app  # Remove this
+   ```
+
+3. **Add registry authentication** (if using private registry):
+
+   Work with customer to create Omnistrate secrets in Dev and Prod environments, then add to compose:
+
+   ```yaml
+   # Add at top level of compose file
+   x-omnistrate-image-registry-attributes:
+     docker.io:
+       auth:
+         username: mycompany
+         password: {{ $secret.DOCKERHUB_PASSWORD }}
+     ghcr.io:
+       auth:
+         username: {{ $secret.GITHUB_USERNAME }}
+         password: {{ $secret.GITHUB_TOKEN }}
+     registry.company.com:
+       auth:
+         username: {{ $secret.PRIVATE_REGISTRY_USERNAME }}
+         password: {{ $secret.PRIVATE_REGISTRY_PASSWORD }}
+   ```
+
+   **Customer must create secrets in Omnistrate**:
+   - Navigate to Omnistrate console → Service → Environment Settings → Secrets
+   - Create secrets: `DOCKERHUB_PASSWORD`, `GITHUB_TOKEN`, etc.
+   - Secrets are environment-specific (Dev, Staging, Prod)
+
+**Validate**: All services have `image:` field with registry reference
+
+#### Iteration 7: Resource Sizing Hints
 **Goal**: Guide Omnistrate resource allocation
 
 ```yaml
 services:
   app:
-    image: mycompany/api:latest
+    image: mycompany/api:v1.0.0  # Must have image reference
     deploy:
       replicas: ${APP_REPLICAS:-2}
       resources:
@@ -751,7 +821,85 @@ volumes:
 
 **Note**: These are hints for FDE transformation, not strict Omnistrate syntax yet.
 
-### Phase 9: Omnistrate-Aware Design Decisions
+### Phase 9: Container Image Registry Validation
+
+**Critical**: Omnistrate cannot build images from source. All services must have `image:` references to pre-built container images.
+
+**Check for build contexts**:
+```bash
+grep -r "build:" docker-compose.yaml
+```
+
+**If any service uses `build:` instead of `image:`**:
+
+1. **Identify all services with build contexts**:
+   ```yaml
+   services:
+     api:
+       build: ./backend  # ❌ Not supported by Omnistrate
+     worker:
+       build:
+         context: ./worker
+         dockerfile: Dockerfile  # ❌ Not supported
+   ```
+
+2. **Ask customer where to host images**:
+
+   **Question**: "I see these services need container images: [list services with build contexts]. Where would you like to host these images?"
+
+   **Options to present**:
+   - Docker Hub (docker.io) - public or private
+   - GitHub Container Registry (ghcr.io) - public or private
+   - AWS ECR (123456.dkr.ecr.region.amazonaws.com)
+   - GCP Artifact Registry (region-docker.pkg.dev/project/repo)
+   - Azure Container Registry (company.azurecr.io)
+   - Custom private registry
+
+3. **Guide customer to build and push images**:
+   ```bash
+   # Example: Docker Hub
+   docker build -t mycompany/api:v1.0.0 ./backend
+   docker push mycompany/api:v1.0.0
+
+   # Example: GitHub Container Registry
+   docker build -t ghcr.io/mycompany/worker:v1.0.0 ./worker
+   docker push ghcr.io/mycompany/worker:v1.0.0
+   ```
+
+4. **Replace build contexts with image references in compose**:
+   ```yaml
+   services:
+     api:
+       image: mycompany/api:v1.0.0  # ✅ Now has registry reference
+       # build: ./backend  # ❌ Remove build context entirely
+
+     worker:
+       image: ghcr.io/mycompany/worker:v1.0.0  # ✅ Registry reference
+       # build:  # ❌ Remove build section
+       #   context: ./worker
+       #   dockerfile: Dockerfile
+   ```
+
+5. **Document registry information for FDE handoff**:
+
+   Create a list for FDE skill:
+   - Custom images: `mycompany/api:v1.0.0` (docker.io), `ghcr.io/mycompany/worker:v1.0.0` (ghcr.io)
+   - Public images: `nginx:alpine`, `postgres:15`, `redis:7-alpine`
+   - Registries used: docker.io, ghcr.io
+
+   **Do NOT add `x-omnistrate-image-registry-attributes`** - FDE skill will:
+   - Test if images are publicly accessible using docker pull
+   - Guide customer through PAT/token creation for private registries
+   - Collect credentials and create Omnistrate secrets
+   - Add the `x-omnistrate-image-registry-attributes` section to the compose file
+
+**Validate before moving to next phase**:
+- ✅ Every service has `image:` field with valid registry reference
+- ✅ NO `build:` contexts remain in compose file
+- ✅ Customer has pushed all custom images to registries
+- ✅ Registry information documented (image names, registry hostnames, public/private if known)
+
+### Phase 10: Omnistrate-Aware Design Decisions
 
 **While building the compose spec, consider Omnistrate features** (even though you won't add `x-omnistrate-*` extensions yet).
 
@@ -804,7 +952,7 @@ services:
       - TENANT_HEADER=X-Tenant-ID  # Header-based routing
 ```
 
-### Phase 10: Handoff to FDE Skill
+### Phase 11: Handoff to FDE Skill
 
 **Once the compose spec is validated and working**, prepare for FDE handoff.
 
@@ -814,6 +962,9 @@ services:
 - [ ] Health checks pass
 - [ ] Inter-service communication works
 - [ ] Database migrations run successfully
+- [ ] **All services have `image:` references (no `build:` contexts remain)**
+- [ ] **Container images pushed to registry (customer completed this)**
+- [ ] **Registry information documented** (which images, which registries, public/private)
 - [ ] Environment variables parameterized
 - [ ] Resource limits documented
 - [ ] Volumes clearly defined
@@ -825,20 +976,25 @@ services:
 
 #### Handoff Documentation
 Provide to FDE skill:
-1. **Compose spec file** (vanilla, no `x-omnistrate-*` yet)
-2. **Architecture diagram** (ASCII or description)
-3. **Service plan requirements**:
+1. **Compose spec file** (vanilla, WITHOUT `x-omnistrate-image-registry-attributes` - FDE will add if needed)
+2. **Container image inventory**:
+   - List all custom images with full registry URLs (e.g., `mycompany/api:v1.0.0`, `ghcr.io/myorg/worker:v1.0.0`)
+   - Mark which are public vs private (if known)
+   - List public images (postgres, redis, nginx, etc.) separately
+3. **Registry information**: Hostnames of registries used (docker.io, ghcr.io, custom registries)
+4. **Architecture diagram** (ASCII or description)
+5. **Service plan requirements**:
    - Free tier: What features/limits?
    - Pro tier: What features/limits?
    - Enterprise tier: What features/limits?
-4. **Deployment model preferences**:
+6. **Deployment model preferences**:
    - SaaS only?
    - BYOC for enterprise?
-5. **Compliance requirements**: SOC2, HIPAA, GDPR, etc.
-6. **SLA targets**: 99.9%, 99.95%, 99.99%
-7. **Scaling expectations**: Fixed replicas, manual, or autoscaling?
-8. **Backup requirements**: Daily, retention period?
-9. **Observability preferences**: NewRelic, Datadog, Omnistrate native?
+7. **Compliance requirements**: SOC2, HIPAA, GDPR, etc.
+8. **SLA targets**: 99.9%, 99.95%, 99.99%
+9. **Scaling expectations**: Fixed replicas, manual, or autoscaling?
+10. **Backup requirements**: Daily, retention period?
+11. **Observability preferences**: NewRelic, Datadog, Omnistrate native?
 
 #### Example Handoff Message
 ```
@@ -850,12 +1006,25 @@ Deployment models: SaaS (starter/pro), BYOC (enterprise)
 Compliance: SOC2, GDPR data residency
 SLA: 99.95% (multi-zone)
 
+Container Images:
+Custom images (customer pushed):
+- API: company/api:v1.0.0 (docker.io registry)
+- Worker: company/worker:v1.0.0 (docker.io registry)
+
+Public images (no auth needed):
+- NGINX: nginx:alpine
+- PostgreSQL: postgres:15
+- Redis: redis:7-alpine
+
+Registry Info:
+- docker.io used for custom images (FDE will test if authentication needed)
+
 Service plans:
 - Starter: 1 API replica, 20GB DB, no backups
 - Pro: 3 API replicas, 100GB DB, daily backups, autoscaling
 - Enterprise: Custom sizing, BYOC option, multi-region
 
-Compose spec attached (validated locally).
+Compose spec attached with x-omnistrate-image-registry-attributes configured.
 Ready for FDE transformation.
 ```
 
@@ -943,13 +1112,13 @@ services:
                                             ↓
                                            No issues
                                             ↓
-5. Add Complexity → 6. Validate → 7. Omnistrate-Aware Adjustments
+5. Add Complexity → 6. Validate → 7. Image Registry Setup → 8. Omnistrate-Aware Adjustments
                         ↓
                      Issues? → Refine
                         ↓
                       No issues
                         ↓
-8. Document → 9. Handoff to FDE
+9. Document → 10. Handoff to FDE
 ```
 
 **Key principle**: Validate at each step before adding complexity.
@@ -966,6 +1135,9 @@ services:
 - ✅ Docker Compose spec validated locally (`docker-compose up` works)
 - ✅ All services start and communicate correctly
 - ✅ Health checks defined and passing
+- ✅ **All services have `image:` references (no `build:` contexts)**
+- ✅ **Custom images pushed to registry (Docker Hub, GHCR, ECR, etc.)**
+- ✅ **Registry information documented** (for FDE to test accessibility and configure auth if needed)
 - ✅ Environment variables parameterized
 - ✅ Resource sizing hints documented
 - ✅ Omnistrate-aware design decisions made (autoscaling, backups, multi-zone)
