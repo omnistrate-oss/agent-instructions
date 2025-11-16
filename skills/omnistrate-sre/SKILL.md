@@ -12,6 +12,9 @@ description: Systematically debug failed Omnistrate instance deployments using a
 - Helm releases with unclear deployment states
 - Need to identify root cause of deployment failures
 
+IMPORTANT! DO NOT USE THE AWS CLI / AZURE CLI / GCLOUD CLI TO CONFIGURE ACCESS TO THE KUBERNETES CLUSTER AT ANY STEP.
+OMNISTRATE PROVIDES A REMOTE TUNNELING FEATURE THAT YOU CAN REFERENCE BELOW AND THESE STEPS STRICTLY WORK ONLY WITH THAT APPROACH.
+
 ## Progressive Debugging Workflow
 
 ### 1. Get Deployment Status
@@ -75,8 +78,12 @@ HH:MM:SS └─── ✅ Started
 ```
 Symbols: ✗ failed, ✅ success, ⚡ autoscaler, 💾 storage, 📥 image, 🚀 runtime, ⚠️ warning
 
-### 4. Application-Level Investigation
-**When**: Resource DEPLOYING with probe failures, containers Running but not Ready, no conclusive evidence from previous steps
+### 4. Application-Level Investigation using Omnistrate's Remote Tunneling feature
+**When**: 
+- Resource DEPLOYING with probe failures
+- Containers Running but not Ready
+- Response from the previous tool is too large
+- No conclusive evidence from previous steps
 
 **Tool**: `mcp__omnistrate-platform__omnistrate-ctl_deployment-cell_update-kubeconfig` + kubectl
 
@@ -92,7 +99,7 @@ Look for:
 - Service dependency failures
 - Configuration issues
 
-### 5. Helm-Specific Verification
+### 5. Helm-Specific Verification (ONLY FOR HELM TYPE RESOURCES)
 **When**: Helm resources with conflicting status, need application credentials, deployment state unclear
 
 **Tool**: Same kubeconfig setup with `--role cluster-admin` + helm
@@ -108,11 +115,6 @@ Extract:
 - Revision number and last deployed time
 - Application credentials from release notes
 - Pod health ratio (Running vs Failed)
-
-### 6. Broader Context (If Needed)
-**Tool**: `mcp__omnistrate-platform__omnistrate-ctl_operations_events`
-
-Use time windows from workflow analysis, filter by relevant event types.
 
 ## Common Failure Patterns
 
