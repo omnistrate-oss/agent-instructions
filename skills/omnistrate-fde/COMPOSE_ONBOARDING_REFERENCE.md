@@ -116,6 +116,7 @@ services:
       backupConfiguration:
         backupRetentionInDays: 7
         backupPeriodInHours: 24
+        snapshotBeforeDeletion: true  # Take final snapshot before deletion
 
   backend:
     image: myapp/backend:latest
@@ -393,7 +394,20 @@ x-omnistrate-capabilities:
   backupConfiguration:
     backupRetentionInDays: 7
     backupPeriodInHours: 24
+    snapshotBeforeDeletion: true  # Optional: take final snapshot before deletion
 ```
+
+**Backup Configuration Properties**:
+- `backupRetentionInDays` (required) - Number of days to retain backups
+- `backupPeriodInHours` (required) - Period in hours between automatic backups
+- `snapshotBeforeDeletion` (optional) - Controls whether a final manual snapshot is automatically created before resource deletion. Defaults to `false` if not specified.
+
+**Final Snapshot Behavior**:
+When `snapshotBeforeDeletion: true`:
+- A final manual snapshot is automatically created before instance deletion
+- The snapshot persists even after the instance is deleted
+- Can be used to restore the instance later or preserve data
+- Can be overridden during deletion with `skipFinalSnapshot: true` flag
 
 ### Multi-Zone Deployment
 ```yaml
