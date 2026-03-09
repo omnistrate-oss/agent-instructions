@@ -14,8 +14,10 @@ description: Systematically close documentation gaps tracked in the Omnistrate G
 
 ## Overview
 
+**Project Board**: https://github.com/orgs/omnistrate/projects/22/views/23
+
 This skill works with two GitHub repos:
-- **omnistrate/roadmap** — the project board with issues tracked in GitHub Project #22
+- **omnistrate/roadmap** — the project board with issues tracked in [GitHub Project #22, View 23 "Documentation tracker"](https://github.com/orgs/omnistrate/projects/22/views/23)
 - **omnistrate/documentation** — the MkDocs documentation site (Material for MkDocs)
 
 Each roadmap issue has a "Docs (+ API docs)" field that can be Pending, Done, or N/A. This skill processes Pending items for issues with status=Done (feature shipped but docs not updated).
