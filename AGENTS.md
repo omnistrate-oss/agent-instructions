@@ -76,3 +76,29 @@ Guide users through designing application architectures from scratch for SaaS de
 - Private registry authentication configuration (x-omnistrate-image-registry-attributes)
 - Omnistrate-aware design decisions (autoscaling, backups, multi-zone readiness)
 
+### Closing Documentation Gaps
+**Location**: `skills/omnistrate-docs/`
+
+Systematically close documentation gaps tracked in the Omnistrate GitHub Project board (#22). Fetches pending items, triages them, groups by topic, analyzes existing docs, writes documentation updates, creates draft PRs, and marks items as Done after confirmation.
+
+**When to use**:
+- Closing documentation gaps for shipped features tracked on the project board
+- Triaging project board items to determine what needs documentation
+- Creating or updating docs for completed platform features
+- Grouping related documentation tasks into consolidated PRs
+- Marking documentation items as Done/N/A on the project board
+
+**Do NOT use when**:
+- Writing documentation for features not tracked on the project board
+- General documentation edits unrelated to roadmap issues
+- The user just wants to edit a specific doc file directly
+
+**Key capabilities**:
+- Fetch and filter pending docs items from GitHub Project #22
+- Auto-triage: documentable vs not-applicable (PoCs, internal, consulting)
+- Topic-based grouping of related issues
+- Deep analysis of issues + existing docs to determine changes needed
+- Draft PR creation with proper style, terminology, and formatting
+- GraphQL mutations to update project board fields (Done/N/A)
+- Mandatory confirmation gates before PRs and board updates
+
