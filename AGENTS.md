@@ -76,3 +76,25 @@ Guide users through designing application architectures from scratch for SaaS de
 - Private registry authentication configuration (x-omnistrate-image-registry-attributes)
 - Omnistrate-aware design decisions (autoscaling, backups, multi-zone readiness)
 
+### Optimizing List API Performance
+**Location**: `skills/omnistrate-perf/`
+
+Systematically optimize Omnistrate platform list APIs that suffer from N+1 query patterns, missing indices, and over-fetching. Applies the proven methodology from the Fleet ListSubscription optimization (reduced ~2,500 queries to ~10 for 500 items).
+
+**When to use**:
+- List API response times degrade at scale (hundreds/thousands of items)
+- N+1 query patterns identified in handler code (DAO calls inside loops)
+- Need to add bulk DAO methods to commons
+- Need to add `exclude*` query parameters to reduce response payload
+- Database index design for bulk GROUP BY queries
+- Adding unit tests with stub-based mocking for parallel pre-fetch handlers
+
+**Key capabilities**:
+- Query profiling and N+1 pattern detection
+- Bulk DAO method design (COUNT, MIN/MAX, fetch-related templates)
+- API spec changes (exclude parameters in Goa DSL)
+- Parallel pre-fetch with sync.WaitGroup (goroutine-safe map patterns)
+- Database index design (GORM tags vs raw SQL for partial indices)
+- Comprehensive unit testing with stub callbacks
+- Multi-repo PR sequencing (api-design → commons → service-orchestration)
+
