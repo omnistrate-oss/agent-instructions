@@ -1,5 +1,5 @@
 ---
-name: Onboarding Services to Omnistrate
+name: onboarding-services-to-omnistrate
 description: Guide users through onboarding applications onto the Omnistrate platform. Currently supports Docker Compose-based services with full deployment lifecycle management. Future support planned for Helm charts, Terraform modules, Kustomize configurations, and Kubernetes operators. Handles service transformation, API parameter configuration, compute/storage setup, and iterative debugging until instances are running.
 ---
 
