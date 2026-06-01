@@ -1,5 +1,5 @@
 ---
-name: Omnistrate Solutions Architect
+name: omnistrate-solutions-architect
 description: Guide users through designing application architectures from scratch for SaaS deployment on Omnistrate. Focuses on technology selection, domain-specific architecture patterns, compliance and SLA requirements, and iterative compose spec development. The output is a production-ready compose spec that can be handed off to the FDE skill for Omnistrate-native onboarding.
 ---
 
