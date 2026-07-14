@@ -382,12 +382,15 @@ the same object.
 | `modify` | instance modify | — | re-apply CR with new `$var` values; same `metadata.name` |
 | `start` | instance start | — | `action: patch` — undo the quiesce (e.g. CNPG `cnpg.io/hibernation: "off"`) |
 | `stop` | instance stop | — | `action: patch` — operator-native quiesce (CNPG hibernation `"on"`; other operators: pause/suspend field or replicas 0) |
-| `addCapacity` / `removeCapacity` | capacity ops | `$var.replicaCount` (target count) | patch instance count, successCondition waits on ready count |
 | `delete` | instance delete | — | delete CR first, then secrets/aux objects (`dependencies` orders it) |
 | `backup` | manual, periodic (`backupPeriodInHours`), before-delete (`snapshotBeforeDeletion`) | `$sys.snapshot.id`, `$sys.snapshot.time` | un-quiesce if needed (operators can't back up hibernated clusters) → apply Backup CR named `{{ $sys.snapshot.id }}` with `successCondition: status.phase == completed` |
 | `restore` | restore API | `$sys.restore.snapshotId`, `$sys.restore.snapshotTime`, `$sys.restore.metadata.*`, `$sys.sourceInstanceId`, `$sys.targetInstanceId` | create NEW cluster named `{{ $sys.targetInstanceId }}` bootstrapped from the snapshot |
 | `deleteBackup` | snapshot deletion / retention cleanup | `$sys.snapshot.id`, `$sys.snapshot.time` | delete the Backup CR |
 | `failover` | Omnistrate failover action | `$var.failedReplicaId`, `$var.failedReplicaAction` | e.g. delete the failed pod, let the operator promote |
+
+`addCapacity`/`removeCapacity` verbs also exist (patch the CR's instance
+count) but are intentionally not covered here yet — scale via `modify` with a
+replica-count parameter instead.
 
 Backup verbs require the capability block on the CR service:
 

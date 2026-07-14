@@ -104,7 +104,7 @@ Iterate build → deploy → fix; expect 2-3 cycles. For failures, follow
 
 **Phase 3 — Add lifecycle verbs one at a time**, re-building and re-deploying
 after each: `modify` (re-apply CR with new `$var` values), `stop`/`start`
-(operator-native quiesce via `action: patch`), `addCapacity`/`removeCapacity`,
+(operator-native quiesce via `action: patch`),
 `backup`/`restore`/`deleteBackup` (+ `capabilities.backupConfiguration`),
 `failover`, then provider-defined `customWorkflows`. Syntax for each verb and
 its context variables: see the reference.
