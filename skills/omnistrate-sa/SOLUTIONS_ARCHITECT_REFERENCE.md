@@ -792,6 +792,49 @@ x-omnistrate-capabilities:
 
 ---
 
+## Deployment Model Implications for Architecture
+
+Source: `deployment-models.md`, `byoc-overview.md`, `air-gapped-overview.md`, `licensing-protection.md` in the Omnistrate documentation. Full spec blocks and account-onboarding flows are in `../omnistrate-fde/DEPLOYMENT_MODELS_REFERENCE.md`.
+
+When designing an architecture, the chosen deployment model affects four cross-cutting concerns: networking topology, licensing enforcement, backup storage availability, and upgrade agility. The table below summarizes each model's constraints so you can factor them in during Phase 1 discovery and Phase 4 deployment-model planning.
+
+### Per-Model Implications
+
+| Dimension | Hosted | BYOC-Account / BYO-VPC / PrivateLink | BYOC-K8s | Air-gapped |
+|-----------|--------|--------------------------------------|-----------|------------|
+| **Networking** | Standard public endpoints; optional Customer Networks for per-customer VPC isolation (hosted-only feature) | Control traffic over encrypted reverse channel (TLS/OAuth/mTLS); no inbound to customer account. BYO-VPC: customer-controlled routes and egress. PrivateLink: zero public exposure — all control traffic over AWS PrivateLink | Internal cluster endpoints (`$sys.network.internalClusterEndpoint`); no Omnistrate-provisioned infra — customer owns nodes, DNS, firewall, load balancer | No live control-plane connection; endpoints are installer-defined; no remote telemetry or debugging |
+| **Licensing** | Not required — software runs in your account | **Required** for BYOC-Account and BYO-VPC: software runs in a customer account you cannot control; 7-day signed license auto-renewed while subscription is active. PrivateLink: same requirement | **Required** — same as BYOC-Account; software runs outside your account | **Required** — license enforced offline via Omnistrate SDK (Let's Encrypt CA baked in); license expires at its expiration date and **will not auto-rotate** in a fully disconnected deployment |
+| **Backup storage** | Cloud object storage (S3/GCS/Azure Blob) in your account — fully managed by Omnistrate | Customer-account object storage used; customer must have S3/GCS/Blob available and bootstrap role must have access | Customer cluster must provide StorageClasses for persistent volumes; backup strategy depends on what the customer has installed (CSI snapshots, Velero, etc.) | No Omnistrate-managed backup automation; backup action hooks must write to a registry or storage the customer controls locally; no S3-style object store assumed |
+| **Upgrade agility** | Fleet-managed: Omnistrate can push upgrades across all instances centrally | Customer-approved: BYOC upgrades flow through the same control plane, but the customer account must accept the deployment cell changes; operator-assisted for enterprise | Customer-approved at cluster level; the customer controls when the dataplane agent is updated and when workloads are restarted | Installer-shipped: each new version is a new installer artifact; customers receive, scan, approve, and apply it manually; no automated rollout |
+
+### Design Guidance per Model
+
+**Hosted:**
+- Use standard Omnistrate public endpoints; no special endpoint configuration required.
+- Licensing is optional but can be added if you anticipate future BYOC expansion.
+- Backups and upgrades are fully automated.
+
+**BYOC-Account / BYO-VPC / BYOC PrivateLink:**
+- Enable licensing (`x-customer-integrations.licensing` in compose, or `features.CUSTOMER.licensing` in ServicePlanSpec) — software runs outside your perimeter.
+- Minimize cross-account dependencies; use customer IAM roles via the bootstrap role.
+- Design endpoints for private or restricted access; for PrivateLink plans, use INTERNAL `networkingType` and expose only what the customer VPC can reach.
+- Backup configuration must assume customer-account object storage; confirm the bootstrap role has write access to S3/GCS/Blob before enabling backup.
+
+**BYOC-K8s:**
+- Expose services via `$sys.network.internalClusterEndpoint` with `networkingType: INTERNAL` (default); use `externalClusterEndpoint` with `networkingType: PUBLIC` only if the customer cluster has a working load balancer.
+- The customer owns the cluster's storage classes, ingress controllers, and DNS — validate these prerequisites during onboarding.
+- Enable licensing — same enforcement need as BYOC-Account.
+- Upgrade timing is partially customer-controlled (they control the cluster and the agent).
+
+**Air-gapped:**
+- Enable licensing (`onPremDeployment`-based specs use `features.CUSTOMER.licensing`); use `INSTALLER_EMBED` pull mode so images are bundled into the artifact and no internet access is needed at install time.
+- Do not design architecture components that assume live internet connectivity, remote telemetry, or automatic image pulls.
+- Backup action hooks must write to customer-local storage; S3-compatible object store availability is not guaranteed — parameterize the backup target or make it optional.
+- Design upgrade paths as discrete installer artifacts; each release is a self-contained package. Build in `BACKUP` action hooks so the customer can snapshot before upgrading.
+- The license will **not** auto-rotate in a disconnected environment; plan for a license refresh workflow as part of the upgrade cycle.
+
+---
+
 ## Production Readiness Checklist
 
 ### Security

@@ -1,6 +1,6 @@
 ---
-name: omnistrate-solutions-architect
-description: Guide users through designing application architectures from scratch for SaaS deployment on Omnistrate. Focuses on technology selection, domain-specific architecture patterns, compliance and SLA requirements, and iterative compose spec development. The output is a production-ready compose spec that can be handed off to the FDE skill for Omnistrate-native onboarding.
+name: omnistrate-sa
+description: Guide users through designing application architectures from scratch for SaaS deployment on Omnistrate, including deployment-model selection (hosted/BYOC/BYOC-K8s/air-gapped). Focuses on technology selection, domain-specific architecture patterns, compliance and SLA requirements, and iterative compose spec development. Output may be a production-ready Docker Compose spec handed off to the FDE skill, or a ServicePlanSpec skeleton recommendation (when the stack uses Helm, Terraform, or a Kubernetes operator).
 ---
 
 # Omnistrate Solutions Architect
@@ -64,6 +64,37 @@ As a Solutions Architect, you will:
 - Who are your target customers? (startups, mid-market, enterprise, developers)
 - What is your pricing model? (freemium, usage-based, tiered plans)
 - What customer segments need different deployment models? (SaaS, BYOC, On-Premise)
+
+#### Deployment Model Discovery (ask BEFORE technology selection)
+
+Ask these questions before discussing tech stack — the answers determine not just where instances run, but what artifact format (compose vs. helm vs. operator) makes sense and which reference to use at handoff time.
+
+1. **Who are your customers?** (segment/industry: startups, enterprise, regulated sectors such as healthcare/finance/defense?)
+2. **Data sovereignty or compliance demands?** Do any customers require their data to stay in their own cloud account, or in a specific geography?
+3. **Cloud account / cluster ownership?**
+   - Do any customers require instances to run in *their* own cloud account (AWS/GCP/Azure)? → BYOC-Account
+   - Do any customers require deployment into an *existing* VPC or private network they control? → BYO-VPC
+   - Do any customers require a no-public-egress guarantee (PrivateLink)? → BYOC PrivateLink
+   - Do any customers want to bring their own Kubernetes cluster (EKS on-prem, OpenShift, Rancher)? → BYOC-K8s
+   - Do any customers operate fully disconnected environments (government, defense, no internet)? → Air-gapped
+4. **Connectivity constraints?** Any customers with air-gap, firewall, egress, or PrivateLink requirements?
+
+**Map answers to deployment model(s):**
+
+| Customer says… | Deployment model | Spec block |
+|----------------|-----------------|------------|
+| "Just host it for me" | **Hosted** | `hostedDeployment` |
+| "Run it in our AWS/GCP/Azure account" | **BYOC-Account** | `byoaDeployment` |
+| "Deploy into our existing VPC/VNet" | **BYO-VPC** | `byoaDeployment` (variant at onboarding) |
+| "We need PrivateLink — no public endpoints" | **BYOC PrivateLink** | `byoaDeployment` + `--private-link` |
+| "We run OpenShift/EKS on-prem, cluster has outbound egress" | **BYOC-K8s** | `byoaDeployment` (`--cloud-provider byoc-onprem`) |
+| "Defense/air-gapped, no internet whatsoever" | **Air-gapped** | `onPremDeployment` |
+
+> Models are not mutually exclusive — one Plan may target both `hostedDeployment` (starter/pro tier) and `byoaDeployment` (enterprise tier). Confirm which model(s) to support before proceeding.
+>
+> Full model details, spec blocks, and account-onboarding flows: see `../omnistrate-fde/DEPLOYMENT_MODELS_REFERENCE.md`.
+
+**Record the chosen model(s) — you will name them explicitly in the handoff summary.**
 
 #### Technical Requirements
 - What is your expected scale? (users, requests/sec, data volume)
@@ -952,6 +983,20 @@ services:
       - TENANT_HEADER=X-Tenant-ID  # Header-based routing
 ```
 
+### Phase 10b: Output-Format Decision
+
+Before drafting the handoff, decide which artifact format the FDE skill (or operator skill) should receive. The decision affects the handoff artifact and which reference file the next skill uses.
+
+| Stack description | Output format | Consequence for handoff |
+|-------------------|--------------|------------------------|
+| Plain containers, no existing Helm chart or Terraform | **Docker Compose** (default) | Produce a vanilla compose spec; FDE uses `COMPOSE_ONBOARDING_REFERENCE.md` |
+| Application already ships a Helm chart | **Helm ServicePlanSpec skeleton** | Recommend a `helmChartConfiguration` skeleton; FDE uses `HELM_ONBOARDING_REFERENCE.md` |
+| Cloud-managed services (RDS, CloudSQL, Azure DB) in the architecture, provisioned via Terraform/OpenTofu | **Terraform ServicePlanSpec skeleton** | Recommend a `terraformConfigurations` skeleton; FDE uses `TERRAFORM_KUSTOMIZE_REFERENCE.md` |
+| Data infrastructure managed by a Kubernetes operator (e.g., CloudNativePG, Strimzi, KubeAI) | **Operator** | Do NOT produce compose or helm; invoke the **omnistrate-operator** skill instead |
+| Mixed stack (e.g., Terraform infra + Helm app) | **Mixed ServicePlanSpec skeleton** | Recommend combined spec with `dependsOn`; FDE uses both `HELM_ONBOARDING_REFERENCE.md` and `TERRAFORM_KUSTOMIZE_REFERENCE.md` |
+
+**Decision rule**: if the user has containers only and no existing Helm/Terraform artifacts, default to Docker Compose — it is the quickest path to a running instance. Escalate to Helm/Terraform only when those artifacts already exist or when the architecture inherently requires cloud-managed services.
+
 ### Phase 11: Handoff to FDE Skill
 
 **Once the compose spec is validated and working**, prepare for FDE handoff.
@@ -996,13 +1041,30 @@ Provide to FDE skill:
 10. **Backup requirements**: Daily, retention period?
 11. **Observability preferences**: NewRelic, Datadog, Omnistrate native?
 
+#### Handoff Routing
+
+Route to the correct skill/path based on the output-format decision from Phase 10b. **Always name the chosen deployment model(s) in the handoff summary.**
+
+| Output format | Route to | Reference used by next skill |
+|---------------|----------|------------------------------|
+| Docker Compose | **omnistrate-fde** (compose path) | `COMPOSE_ONBOARDING_REFERENCE.md` |
+| Helm ServicePlanSpec | **omnistrate-fde** (helm path) | `HELM_ONBOARDING_REFERENCE.md` |
+| Terraform/Kustomize ServicePlanSpec | **omnistrate-fde** (terraform/kustomize path) | `TERRAFORM_KUSTOMIZE_REFERENCE.md` |
+| Mixed ServicePlanSpec | **omnistrate-fde** (mixed path) | `HELM_ONBOARDING_REFERENCE.md` + `TERRAFORM_KUSTOMIZE_REFERENCE.md` |
+| Operator (CRDs + controller) | **omnistrate-operator** skill | (operator skill owns this path) |
+
+All paths also read `../omnistrate-fde/DEPLOYMENT_MODELS_REFERENCE.md` for the `deployment:` block that encodes the chosen model(s).
+
 #### Example Handoff Message
 ```
 Ready for Omnistrate onboarding. Here's the summary:
 
 Architecture: Three-tier web app (NGINX → API → PostgreSQL + Redis)
 Tenancy: Hybrid (shared API, isolated databases for enterprise)
-Deployment models: SaaS (starter/pro), BYOC (enterprise)
+Output format: Docker Compose
+Deployment models: Hosted (starter/pro tiers) + BYOC-Account (enterprise tier)
+  → hostedDeployment for starter/pro; byoaDeployment for enterprise
+  → See DEPLOYMENT_MODELS_REFERENCE.md for deployment: block and account-onboarding flow
 Compliance: SOC2, GDPR data residency
 SLA: 99.95% (multi-zone)
 
@@ -1022,10 +1084,9 @@ Registry Info:
 Service plans:
 - Starter: 1 API replica, 20GB DB, no backups
 - Pro: 3 API replicas, 100GB DB, daily backups, autoscaling
-- Enterprise: Custom sizing, BYOC option, multi-region
+- Enterprise: Custom sizing, BYOC-Account option, multi-region
 
-Compose spec attached with x-omnistrate-image-registry-attributes configured.
-Ready for FDE transformation.
+Next step: hand compose spec to omnistrate-fde → compose path (COMPOSE_ONBOARDING_REFERENCE.md).
 ```
 
 ## Domain-Specific Guidance
