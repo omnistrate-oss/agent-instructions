@@ -33,40 +33,76 @@ This repository organizes agent capabilities into specialized skills:
 
 #### [**skills/omnistrate-sa/**](./skills/omnistrate-sa/) - Solutions Architect
 
-Guide users through designing application architectures from scratch for SaaS deployment on Omnistrate.
+Guide users through designing application architectures from scratch for SaaS deployment on Omnistrate, including deployment-model discovery (hosted/BYOC/BYOC-K8s/air-gapped).
 
-- **SKILL.md** - Architecture design workflow and technology selection
+- **SKILL.md** - Architecture design workflow, deployment-model discovery, and technology selection
 - **SOLUTIONS_ARCHITECT_REFERENCE.md** - Domain patterns, compliance checklists, SLA guidelines
 
-**Capabilities**: Technology stack selection (frameworks, databases, caches, queues), domain-specific architecture patterns (AI/ML, analytics, APIs, data platforms), tenancy model design (shared, siloed, hybrid), deployment model planning (SaaS, BYOC, BYOC Copilot, On-Premise), compliance and security architecture (SOC2, HIPAA, GDPR, PCI), SLA-driven availability design (99.9% to 99.999% uptime), iterative Docker Compose spec development.
+**Capabilities**: Technology stack selection (frameworks, databases, caches, queues), domain-specific architecture patterns (AI/ML, analytics, APIs, data platforms), tenancy model design (shared, siloed, hybrid), deployment model planning (hosted, BYOC, BYOC-K8s, air-gapped), compliance and security architecture (SOC2, HIPAA, GDPR, PCI), SLA-driven availability design (99.9% to 99.999% uptime), iterative Docker Compose spec development.
 
 **Use when**: Designing new SaaS applications from scratch, choosing technology stacks, architecting for specific domains/compliance/SLA requirements.
 
-**Output**: Production-ready vanilla Docker Compose spec (without `x-omnistrate-*` extensions) ready for FDE transformation.
+**Output**: Production-ready vanilla Docker Compose spec (without `x-omnistrate-*` extensions), or a ServicePlanSpec skeleton recommendation when the stack uses Helm, Terraform, or a Kubernetes operator — ready for FDE or operator-skill transformation.
 
-#### [**skills/omnistrate-fde/**](./skills/omnistrate-fde/) - Service Onboarding
+#### [**skills/omnistrate-fde/**](./skills/omnistrate-fde/) - Service Onboarding (Universal Router)
 
-Guide users through onboarding applications onto the Omnistrate platform. **ALWAYS starts with zero parameterization** (hardcoded values) to ensure successful initial deployment.
+The primary onboarding skill. Runs an intake interview, selects the right artifact method and deployment model, and drives the phased build-deploy-debug workflow. **Starts with zero parameterization** (hardcoded values) and iterates until instances are RUNNING.
 
-- **SKILL.md** - Core onboarding workflow and decision guides
-- **COMPOSE_ONBOARDING_REFERENCE.md** - Complete Docker Compose transformation reference
+- **SKILL.md** - Universal onboarding router, Decision Matrix, and phased workflow
+- **COMPOSE_ONBOARDING_REFERENCE.md** - Docker Compose path: `x-omnistrate-*` transformation, API parameters, compute/storage, lifecycle
+- **HELM_ONBOARDING_REFERENCE.md** - Helm `helmChartConfiguration`, values templating, multi-service `dependsOn`
+- **TERRAFORM_KUSTOMIZE_REFERENCE.md** - Terraform/OpenTofu and Kustomize ServicePlanSpec, combined patterns
+- **DEPLOYMENT_MODELS_REFERENCE.md** - Hosted / BYOC / BYOC-K8s / air-gapped `deployment:` blocks, customer account onboarding, ISV-phrasing FAQ
 
-**Currently supported**: Docker Compose-based services with full deployment lifecycle management including compose spec transformation, zero-parameterization initial builds, incremental API parameter addition (ONLY when user requests), compute/storage setup, and iterative debugging until instances are RUNNING.
+**Supported artifact types**: Docker Compose, Helm charts, Terraform/OpenTofu modules, Kustomize overlays, and mixed stacks.
 
-**Planned support**: Helm charts, Terraform modules, Kustomize configurations, and Kubernetes operators (see [Omnistrate docs](https://docs.omnistrate.com/getting-started/overview/)).
+**Supported deployment models**: Hosted (provider cloud), BYOC including BYO-VPC and PrivateLink (customer cloud accounts), BYOC-K8s (customer-managed Kubernetes / `byoc-onprem`), and air-gapped (`onPremDeployment` installer).
 
-**Use when**: Transforming existing Docker Compose specs to Omnistrate-native format.
+**Use when**: Onboarding any application to Omnistrate regardless of artifact type or deployment target.
+
+#### [**skills/omnistrate-operator/**](./skills/omnistrate-operator/) - Kubernetes Operator Onboarding
+
+Deep-dive onboarding for Kubernetes operator-based services (CRDs + controller). Owns `systemWorkflows` and lifecycle verb mapping.
+
+- **SKILL.md** - Operator integration workflow, `systemWorkflows` authoring, canonical examples
+
+**Use when**: Onboarding an operator-managed service (CloudNativePG, Strimzi, KubeAI, ECK, RabbitMQ operator, etc.) or writing/extending a ServicePlanSpec with `systemWorkflows`.
 
 #### [**skills/omnistrate-sre/**](./skills/omnistrate-sre/) - Deployment Debugging
 
-Systematically debug failed Omnistrate deployments using a progressive workflow that identifies root causes efficiently.
+Systematically debug failed Omnistrate deployments across all resource types and all deployment models using a progressive workflow.
 
-- **SKILL.md** - Progressive debugging workflow
-- **OMNISTRATE_SRE_REFERENCE.md** - Detailed debugging procedures and templates
+- **SKILL.md** - Progressive debugging workflow per resource type and deployment model
+- **OMNISTRATE_SRE_REFERENCE.md** - Detailed debugging procedures, failure-pattern catalog, and templates
 
-**Capabilities**: Instance status analysis, workflow event analysis, pod-level investigation with kubectl, Helm-specific verification, and common failure pattern recognition.
+**Capabilities**: Instance status analysis, workflow event analysis, rendered-artifact debug (`instance debug`), pod-level investigation with kubectl via Omnistrate remote tunneling, and failure-pattern recognition across Compose / Helm / Terraform / Kustomize / Operator resources and hosted / BYOC / BYOC-K8s / air-gapped deployment models.
 
-**Use when**: Instance deployments showing FAILED or DEPLOYING status, need to identify root cause of deployment failures.
+**Use when**: Instance deployments showing FAILED or DEPLOYING status, probe failures, Helm/Terraform/operator errors, BYOC agent or connectivity issues.
+
+## Skill Decision Tree
+
+Use this table to pick the right skill for a request:
+
+| What the user has / wants | Deployment target | Skill to invoke |
+|---------------------------|-------------------|-----------------|
+| Nothing yet — design from scratch | any | **omnistrate-sa** |
+| Compose file with `build:` contexts (local only) | any | **omnistrate-sa** (convert to image refs first) |
+| Docker Compose (`image:` refs, no build contexts) | hosted / BYOC / BYOC-K8s / air-gapped | **omnistrate-fde** |
+| Helm chart | hosted / BYOC / BYOC-K8s / air-gapped | **omnistrate-fde** |
+| Terraform / OpenTofu module | hosted / BYOC / BYOC-K8s / air-gapped | **omnistrate-fde** |
+| Kustomize overlays | hosted / BYOC / BYOC-K8s / air-gapped | **omnistrate-fde** |
+| Mixed stack (e.g., Terraform infra + Helm app) | hosted / BYOC / BYOC-K8s / air-gapped | **omnistrate-fde** |
+| Kubernetes operator (CRDs + controller) | hosted / BYOC / BYOC-K8s | **omnistrate-operator** |
+| Instance showing FAILED / DEPLOYING / probe errors | hosted / BYOC / BYOC-K8s / air-gapped | **omnistrate-sre** |
+
+**Deployment model quick-map** (all models available for all artifact types via the FDE skill):
+
+| Where instances run | Model name | Spec block |
+|---------------------|------------|------------|
+| Your (provider) cloud account | Hosted | `hostedDeployment` |
+| Customer's cloud account (AWS/GCP/Azure/OCI) | BYOC / BYO-VPC / PrivateLink | `byoaDeployment` |
+| Customer's own Kubernetes cluster | BYOC-K8s (`byoc-onprem`) | `byoaDeployment` |
+| Fully disconnected / no internet | Air-gapped | `onPremDeployment` |
 
 ## How to Use
 
@@ -85,23 +121,29 @@ Claude Code automatically discovers and uses skills defined in [CLAUDE.md](./CLA
 
 **Designing a new SaaS application:**
 1. Use the **omnistrate-sa** skill
-2. Start with requirements (domain, scale, compliance, SLA)
-3. Select appropriate technologies
-4. Iteratively develop Docker Compose spec
-5. Handoff vanilla compose to FDE skill
+2. Start with requirements (domain, scale, compliance, SLA) and deployment-model discovery (hosted vs BYOC vs BYOC-K8s vs air-gapped)
+3. Select appropriate technologies and architecture patterns
+4. Iteratively develop Docker Compose spec (or recommend a Helm/Terraform skeleton if appropriate)
+5. Handoff artifact to the FDE skill for Omnistrate-native transformation
 
-**Onboarding a service:**
+**Onboarding a service (Docker Compose, Helm, Terraform, Kustomize, or mixed):**
 1. Use the **omnistrate-fde** skill
-2. Start with your Docker Compose file (vanilla or from SA skill)
-3. Transform to Omnistrate-native (ZERO parameterization initially)
-4. Build, deploy, and iterate until RUNNING
-5. Add API parameters incrementally when user requests customization
+2. Provide your artifact (compose file, Helm chart, Terraform module, etc.)
+3. FDE runs intake to determine the deployment model (hosted / BYOC / BYOC-K8s / air-gapped)
+4. Transform to Omnistrate-native with ZERO parameterization initially
+5. Build, deploy, and iterate until RUNNING
+6. Add API parameters and lifecycle incrementally as needed
+
+**Onboarding a Kubernetes operator (CRDs + controller):**
+1. Use the **omnistrate-operator** skill
+2. Provide the operator name and CRD/CR examples
+3. Skill authors the `systemWorkflows` ServicePlanSpec and lifecycle verbs
 
 **Debugging a deployment:**
 1. Use the **omnistrate-sre** skill
 2. Start with deployment status analysis
-3. Follow the progressive debugging workflow
-4. Identify root cause and resolve issues
+3. Follow the progressive workflow (status → events → instance debug → live cluster access)
+4. Skill branches by resource type (Compose / Helm / Terraform / Operator / Kustomize) and deployment model (hosted / BYOC / BYOC-K8s / air-gapped)
 
 ## MCP Tools Required
 
