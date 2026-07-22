@@ -999,7 +999,7 @@ Before drafting the handoff, decide which artifact format the FDE skill (or oper
 
 ### Phase 11: Handoff to FDE Skill
 
-**Once the compose spec is validated and working**, prepare for FDE handoff.
+**Once the output artifact (compose spec or ServicePlanSpec skeleton + notes) is validated**, prepare the onboarding handoff.
 
 #### Pre-Handoff Checklist
 - [ ] Compose spec runs successfully with `docker-compose up`
@@ -1051,6 +1051,7 @@ Route to the correct skill/path based on the output-format decision from Phase 1
 | Helm ServicePlanSpec | **omnistrate-fde** (helm path) | `HELM_ONBOARDING_REFERENCE.md` |
 | Terraform/Kustomize ServicePlanSpec | **omnistrate-fde** (terraform/kustomize path) | `TERRAFORM_KUSTOMIZE_REFERENCE.md` |
 | Mixed ServicePlanSpec | **omnistrate-fde** (mixed path) | `HELM_ONBOARDING_REFERENCE.md` + `TERRAFORM_KUSTOMIZE_REFERENCE.md` |
+| Any format, air-gapped target | **omnistrate-fde** + `../omnistrate-fde/DEPLOYMENT_MODELS_REFERENCE.md` §Air-gapped / On-prem Installer | `DEPLOYMENT_MODELS_REFERENCE.md` §Air-gapped |
 | Operator (CRDs + controller) | **omnistrate-operator** skill | (operator skill owns this path) |
 
 All paths also read `../omnistrate-fde/DEPLOYMENT_MODELS_REFERENCE.md` for the `deployment:` block that encodes the chosen model(s).
