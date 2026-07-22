@@ -1,514 +1,214 @@
 ---
-name: onboarding-services-to-omnistrate
-description: Guide users through onboarding applications onto the Omnistrate platform. Currently supports Docker Compose-based services with full deployment lifecycle management. Future support planned for Helm charts, Terraform modules, Kustomize configurations, and Kubernetes operators. Handles service transformation, API parameter configuration, compute/storage setup, and iterative debugging until instances are running.
+name: omnistrate-fde
+description: Guide users through onboarding any application onto the Omnistrate platform and turning it into a managed SaaS offering. Covers Docker Compose, Helm charts, Terraform/OpenTofu modules, Kustomize, and mixed stacks, across all deployment models - hosted (your cloud), BYOC (customer cloud accounts, incl. BYO-VPC and PrivateLink), BYOC-K8s (customer-managed Kubernetes, no infra provisioning), and air-gapped/on-prem installers. Use when a customer/ISV wants to onboard, "SaaS-ify", productize, or offer their software as a managed service, or asks about BYOC / bring-your-own-cloud / on-prem / air-gapped delivery. For Kubernetes operator-based services (CRDs + controller) use omnistrate-operator; for designing an architecture from scratch use omnistrate-sa; for debugging failed instances use omnistrate-sre.
 ---
 
 # Onboarding Services to Omnistrate
 
-## When to Use This Skill
-- Onboarding applications to Omnistrate platform
-- Creating SaaS offerings with multi-tenant infrastructure
-- Setting up customer-facing service catalogs
-- Building managed services with automated deployment
-- Transforming existing applications for cloud delivery
+## Overview
 
-## Supported Onboarding Methods
+Omnistrate is a control plane that turns your existing artifact — a Docker
+Compose file, a Helm chart, a Terraform/OpenTofu module, Kustomize overlays, or
+a Kubernetes operator — into a multi-tenant, managed SaaS with automatic
+provisioning, full lifecycle (create/modify/stop/backup/restore/upgrade), and
+metering/billing. You bring the artifact; Omnistrate owns the substrate (node
+pools, per-instance namespaces, storage, load balancers, TLS, DNS). Instances
+can run in *your* cloud (hosted), in *your customers'* cloud accounts (BYOC), in
+*your customers'* own Kubernetes clusters (BYOC-K8s, no infra provisioned by
+you), or fully disconnected as an air-gapped installer. This skill is the
+router: it runs the intake interview, picks the onboarding method and
+deployment model, and drives the phased build-deploy-debug workflow using the
+per-topic reference files in this directory.
 
-### Currently Supported
-**Docker Compose** - Transform compose files into Omnistrate service definitions
-- Use for: Containerized applications with compose specs
-- Status: Fully supported with complete workflow
+**Core principle: never write Omnistrate spec YAML, field names, or CLI flags
+from memory.** Untrained-knowledge Omnistrate specs are reliably wrong while
+looking plausible. Every fragment must be copied from a reference file in this
+directory, a sample/template, or verified against docs
+(`mcp__ctl__docs_*`) and the JSON schema
+(`https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json`).
 
-### Future Support (Not Yet Implemented)
-- **Helm Charts** - Deploy Kubernetes applications via Helm
-- **Terraform Modules** - Infrastructure-as-code based services
-- **Kustomize** - Kubernetes configuration management
-- **Kubernetes Operators** - Operator-based service management
+## Phase 0 — Intake (ALWAYS start here for new onboarding)
 
-**Note**: When users ask about Helm, Terraform, Kustomize, or Operators, inform them these are not yet supported by this skill and direct them to https://docs.omnistrate.com/getting-started/overview/ for documentation on these methods.
+Ask these five questions in plain language, **one at a time**, adapting to what
+the user already volunteered (skip anything already answered). No Omnistrate
+jargon — translate their answers into platform concepts yourself. The target
+user is an ISV who has never seen Omnistrate: they describe their product and
+their customers' constraints in their own words, and you map those onto the
+onboarding method (Decision Matrix) and deployment model (Q2).
 
-## Quick Decision Guide
+**1. What does your product look like today?**
+Docker Compose file / Helm chart / Terraform (or OpenTofu) module / Kustomize
+overlays / Kubernetes operator (CRDs + controller) / plain container images /
+nothing yet.
+→ *Operator (CRDs + controller)* hands off to the **omnistrate-operator** skill.
+→ *Nothing yet* (needs an architecture designed first) hands off to
+**omnistrate-sa**.
 
-### 1. Check Input Format
-- **Docker Compose file** → Continue with this skill (full support)
-- **Helm/Terraform/Kustomize/Operators** → Not supported, see https://docs.omnistrate.com/getting-started/overview/
+**2. Where should instances run?** (multi-select — one Plan can offer several)
+- *Your cloud account* → **hosted** deployment.
+- *Your customers' cloud accounts* → **BYOC** (`byoaDeployment`). Probe for VPC
+  constraints and no-public-egress requirements → **BYO-VPC** / **PrivateLink**.
+- *Your customers' existing Kubernetes clusters, you do NOT provision infra* →
+  **BYOC-K8s** (deploys via a dataplane agent; customer owns the cluster).
+- *Fully disconnected / no connectivity back to you* → **air-gapped installer**
+  (`onPremDeployment`).
 
-### 2. Determine Architecture Pattern
-Count services in your compose file:
-- **1 service** → Single service pattern (simpler, service is root)
-- **2+ services** → Multi-service pattern (requires synthetic root service)
+**3. Which clouds and regions?** (AWS / GCP / Azure / OCI / Nebius; regions).
 
-### 3. What is a Synthetic Root Service?
-For multi-service applications, Omnistrate requires one "parent" service to coordinate all others. This parent:
-- Uses special `omnistrate/noop` image (no actual workload)
-- Serves as entry point for all API parameters
-- Holds backup configuration
-- Orchestrates children via `depends_on` relationships
+**4. Lifecycle needs?** Backups, stop/start, scaling, upgrades. *Noted for later
+phases — not implemented up front.*
 
-## Docker Compose Workflow
+**5. Private registries or private git repos?** Determines the auth setup steps
+for images (compose/helm) and source (terraform/kustomize/helm).
 
-**Quick Start**: Verify cloud account → Create `-omnistrate.yaml` → Add service plan → Transform services (NO PARAMETERS) → Build → Deploy → Debug until RUNNING → Add parameters when user requests customization
+If the user cannot cleanly place Q2, map their words to a model with the
+ISV-phrasing FAQ in `DEPLOYMENT_MODELS_REFERENCE.md` (e.g. "customers want it in
+their own AWS" → BYOC; "they run EKS on-prem but allow egress" → BYOC-K8s;
+"defense customer, no internet" → air-gapped).
 
-**CRITICAL RULES**:
-1. **ALWAYS start with ZERO parameterization** - Use hardcoded values for everything. Only add API parameters AFTER initial deployment succeeds AND user explicitly requests customization.
-2. **ALWAYS use `hostedDeployment`** - This deploys YOUR SaaS service in YOUR provider cloud account (not Omnistrate's account, not customer accounts). Only use `byoaDeployment` if user wants to OFFER BYOC as an option to their customers.
+## Deployment Models at a Glance
 
-### 1. Preparation
-**Analyze compose file structure** (Docker Compose only):
-- Count services (determines single vs multi-service pattern)
-- Identify service dependencies (depends_on chains)
-- Map environment variables for parameterization
-- Determine stateful services (volumes, databases)
+Intake Q2 selects one or more of these. Details, `deployment:` blocks, and
+account-onboarding flows are all in `DEPLOYMENT_MODELS_REFERENCE.md` — this
+table is only for steering the interview.
 
-**Verify cloud accounts**:
-```bash
-mcp__ctl__account_list
-mcp__ctl__account_describe account-name="<name>"
-```
-Extract account IDs, bootstrap roles, project IDs for service plan configuration.
+| Model | Runs in… | Who owns infra | Connectivity | Spec block |
+|---|---|---|---|---|
+| **Hosted** | your (provider) cloud account | you, via Omnistrate | standard control plane | `hostedDeployment` |
+| **BYOC** (Account / BYO-VPC / PrivateLink) | the customer's cloud account | customer owns account, you operate | reverse/encrypted channel; PrivateLink = no public exposure | `byoaDeployment` |
+| **BYOC-K8s** | the customer's own Kubernetes cluster | customer owns the cluster; you deploy workloads only | cluster opens **outbound** mTLS/gRPC to your control plane | `byoaDeployment` (deploy `--cloud-provider byoc-onprem`) |
+| **Air-gapped** | wherever the customer runs the installer | customer runs and operates | **none** — self-contained artifact, no live link | `onPremDeployment` |
 
-**Determine deployment model** (ALWAYS use hostedDeployment unless specified):
-- **ALWAYS DEFAULT** → Use `hostedDeployment` (deploy in YOUR PROVIDER account - this is where YOUR SaaS service runs)
-- **ONLY if user explicitly wants to OFFER BYOC to their customers** → Use `byoaDeployment` (allows YOUR CUSTOMERS to deploy in THEIR accounts)
-- **ONLY if user wants on-premise** → Use `onPremDeployment`
+BYO-VPC and PrivateLink are BYOC variants selected at customer-account
+onboarding, not separate spec blocks. Models are not mutually exclusive — one
+Plan may declare both `hostedDeployment` and `byoaDeployment`.
 
-**CRITICAL**: `hostedDeployment` means deploying in YOUR (the SaaS provider's) account, NOT Omnistrate's account. This is the standard SaaS model. BYOC is for when you want to OFFER customers the option to deploy in THEIR accounts.
+## Decision Matrix
 
-### 2. Transformation
-**Never modify original compose file** - create new `-omnistrate.yaml` file
+Pick the row for the user's artifact (intake Q1). The **deployment model**
+(intake Q2) is orthogonal: **every** row also reads
+`DEPLOYMENT_MODELS_REFERENCE.md` for the `deployment:` block and account setup.
 
-**Search documentation before every extension**:
-```bash
-mcp__ctl__docs_compose_spec_search query="<extension-name>"
-mcp__ctl__docs_system_parameters  # For $sys.* variable paths
-```
+| Artifact | Spec format | Build command | Guide |
+|---|---|---|---|
+| Docker Compose | compose + `x-omnistrate-*` | `build_compose` / `omnistrate-ctl build -f <file>` | `COMPOSE_ONBOARDING_REFERENCE.md` |
+| Helm chart | ServicePlanSpec (`helmChartConfiguration`) | `omnistrate-ctl build -f spec.yaml --spec-type ServicePlanSpec` | `HELM_ONBOARDING_REFERENCE.md` |
+| Terraform / Kustomize | ServicePlanSpec (`terraformConfigurations` / `kustomizeConfiguration`) | same | `TERRAFORM_KUSTOMIZE_REFERENCE.md` |
+| Operator (CRDs + controller) | ServicePlanSpec (`systemWorkflows`) | same | → invoke **omnistrate-operator** skill |
+| Mixed (e.g. terraform infra + helm app) | ServicePlanSpec, multiple services with `dependsOn` | same | `HELM_ONBOARDING_REFERENCE.md` + `TERRAFORM_KUSTOMIZE_REFERENCE.md` |
+| Any artifact, air-gapped target | ServicePlanSpec with `onPremDeployment` | same | `DEPLOYMENT_MODELS_REFERENCE.md` §Air-gapped |
+| Nothing yet (design first) | — | — | → hand off to **omnistrate-sa** |
 
-**Test image accessibility** (for custom images from SA handoff):
-For each custom image (non-public like postgres, nginx, etc.), test if publicly accessible:
-```bash
-# Create temporary Docker config to test without local credentials
-TEMP_DOCKER_CONFIG=$(mktemp -d)
-DOCKER_CONFIG=$TEMP_DOCKER_CONFIG docker pull <image>:<tag> 2>&1
-rm -rf $TEMP_DOCKER_CONFIG
-```
+ServicePlanSpec builds all share `--spec-type ServicePlanSpec`; the compose path
+is the exception (`build_compose` / plain `omnistrate-ctl build -f <file>`).
+Exact flags and skeletons live in the per-format references — do not reconstruct
+them here.
 
-If pull succeeds: Image is public (no auth needed)
-If pull fails with auth error: Image is private (need to configure auth)
+## Universal Workflow (method-agnostic)
 
-**Service architecture decision**:
-- Single service (count = 1): Mark service with `x-omnistrate-mode-internal: false`
-- Multi-service (count ≥ 2): Create synthetic root service using `omnistrate/noop` image
+Same six phases for every artifact and model. Per-phase commands are named
+generically; copy the exact syntax from the format's reference.
 
-**Key transformations** (STRICT ORDER - no parameters initially):
+**1. Verify accounts / prerequisites.** Confirm the *provider* cloud account is
+READY before anything else: `account_list` / `account_describe` (MCP) or
+`omnistrate-ctl account list` / `account describe`. Extract account IDs,
+bootstrap role ARNs, project IDs for the `deployment:` block. For BYOC and
+BYOC-K8s, explain that *customer* accounts are onboarded later, at deploy time —
+see `DEPLOYMENT_MODELS_REFERENCE.md` (§BYOC, §BYOC-K8s) for the customer
+`account customer create` flows.
 
-**Phase 1: Initial Build** (ZERO parameterization - get working deployment first):
-1. **Test image accessibility and configure registry authentication** (if needed):
+**2. Minimal spec, zero parameterization.** Hardcode everything: one cloud,
+create/delete lifecycle only, no API parameters, no `$var.*`, no autoscaling.
+Get a working deployment before adding anything. Build the deployment block from
+`DEPLOYMENT_MODELS_REFERENCE.md` for the model(s) chosen in Q2, and the service
+body from the format's reference.
+*Exception (from the operator skill): CR-driven specs are parameter-driven from
+day one, but still keep the parameter set minimal.*
 
-   **For each custom image** (skip public images like postgres, nginx, redis):
+**3. Build.** Must succeed before anything is added.
+- Compose: `build_compose` / `omnistrate-ctl build -f <compose-file>`.
+- Helm/Terraform/Kustomize/mixed: `omnistrate-ctl build -f spec.yaml --spec-type ServicePlanSpec ...`.
 
-   a. **Test if image is publicly accessible**:
-   ```bash
-   TEMP_DOCKER_CONFIG=$(mktemp -d)
-   DOCKER_CONFIG=$TEMP_DOCKER_CONFIG docker pull mycompany/api:v1.0.0 2>&1
-   rm -rf $TEMP_DOCKER_CONFIG
-   ```
+**4. Deploy one instance and debug until RUNNING.** `instance create` targeting
+the main resource, then `instance describe`. Expect **2–3 iterations** — do not
+stop at the first failure. Delegate failure analysis to **omnistrate-sre**
+(workflow events, then `instance debug <id>` for rendered helm values /
+terraform apply logs / kustomize YAML / operator CR status, then live pod
+state).
 
-   - If succeeds: Image is public, skip to next image
-   - If fails with "unauthorized" or "denied": Image is private, continue to step b
+**5. Add parameters / lifecycle one at a time.** Rebuild + redeploy after
+*each* change — never batch. One variable, one build-deploy cycle.
 
-   b. **Identify registry type and ask for credentials**:
-
-   **Docker Hub (docker.io)**:
-   - Ask: "What is your Docker Hub username?"
-   - Ask: "Please create a Docker Hub Personal Access Token (PAT) at https://hub.docker.com/settings/security with read permissions. Once created, what should I name the secret in Omnistrate?" (suggest: `DOCKERHUB_PASSWORD`)
-
-   **GitHub Container Registry (ghcr.io)**:
-   - Ask: "What is your GitHub username or organization?"
-   - Ask: "Please create a GitHub PAT at https://github.com/settings/tokens with `read:packages` scope. What should I name the username and token secrets?" (suggest: `GITHUB_USERNAME`, `GITHUB_TOKEN`)
-
-   **AWS ECR / GCP Artifact Registry / Azure ACR / Custom**:
-   - Ask: "What is the username for this registry?"
-   - Ask: "What should I name the password secret in Omnistrate?" (suggest: `REGISTRY_PASSWORD`)
-
-   c. **Guide customer to create Omnistrate secrets**:
-   ```
-   I need you to create these secrets in Omnistrate:
-
-   1. Log into Omnistrate console: https://omnistrate.cloud
-   2. Navigate to: Services → [Your Service] → Environments → Dev → Secrets
-   3. Click "Add Secret"
-   4. Name: DOCKERHUB_PASSWORD (use exact name I suggested)
-   5. Value: [Paste your Docker Hub PAT here]
-   6. Click Save
-   7. Repeat steps 2-6 for Prod environment (same secret name, same value)
-
-   Let me know when you've created the secret(s).
-   ```
-
-   d. **Add `x-omnistrate-image-registry-attributes` section to compose file**:
-
-   Search docs first: `mcp__ctl__docs_compose_spec_search query="x-omnistrate-image-registry-attributes"`
-
-   Add at TOP LEVEL of compose (same level as `version:` and `services:`):
-   ```yaml
-   version: '3.8'
-
-   x-omnistrate-image-registry-attributes:
-     docker.io:  # Include ONLY if using private docker.io images
-       auth:
-         username: mycompany  # Customer's username
-         password: {{ $secret.DOCKERHUB_PASSWORD }}
-     ghcr.io:  # Include ONLY if using private ghcr.io images
-       auth:
-         username: {{ $secret.GITHUB_USERNAME }}
-         password: {{ $secret.GITHUB_TOKEN }}
-     registry.company.com:  # Include ONLY if using custom private registry
-       auth:
-         username: registryuser
-         password: {{ $secret.PRIVATE_REGISTRY_PASSWORD }}
-
-   services: [...]
-   ```
-
-   **Important**:
-   - Include ONLY registries with private images (don't add unused registries)
-   - Registry hostname must match image URLs (e.g., `docker.io` for `mycompany/api:tag`)
-   - Username can be hardcoded OR use `{{ $secret.NAME }}`
-   - Password/token MUST use `{{ $secret.NAME }}` syntax
-
-2. Add service plan with real cloud account values (ALWAYS use `hostedDeployment` unless specified)
-   - **ALWAYS USE `hostedDeployment`** (deploy in YOUR provider account - standard SaaS model)
-   - **Only use `byoaDeployment`** if user explicitly says "I want to OFFER BYOC to my customers"
-   - **Only use `onPremDeployment`** if user explicitly says "on-premise deployment"
-
-   **CRITICAL DISTINCTION**:
-   - `hostedDeployment` = Infrastructure in YOUR account (the SaaS provider) where your service runs
-   - `byoaDeployment` = OPTION for YOUR CUSTOMERS to deploy in THEIR accounts (BYOC offering)
-   - These are NOT mutually exclusive - you can offer both deployment models to different customer tiers
-3. Create/configure root service (multi-service apps)
-4. Mark child services as internal (`x-omnistrate-mode-internal: true`)
-5. **NO API parameters** - use hardcoded values for everything:
-   - Passwords: Use defaults like `"ChangeMe123!"`
-   - Replica counts: Use fixed numbers like `replicaCount: 3`
-   - Storage sizes: Use hardcoded numbers like `instanceStorageSizeGi: 100`
-   - Environment variables: Hardcode all values
-5. Configure compute resources per service (fixed replicaCount, simple instanceTypes)
-6. Transform volumes to `x-omnistrate-storage` (numeric sizes, hardcoded)
-7. Add basic capabilities (enableMultiZone, simple backups)
-8. **BUILD AND VALIDATE** - must succeed
-9. **DEPLOY instance** - must reach RUNNING status
-10. **STOP** - do not add parameters unless user requests customization
-
-**Phase 2: Add Parameterization** (ONLY when user explicitly requests):
-When user asks for customizable passwords, replica counts, storage sizes, etc.:
-11. Add ONE API parameter at a time to root service
-12. Add parameterDependencyMap on root for that parameter
-13. Add child parameter definition (key + name + description + type) on child service
-14. Replace hardcoded value with `$var.paramName` in child service
-15. **RE-BUILD** to validate
-16. **RE-DEPLOY instance** to validate runtime
-17. Repeat steps 11-16 for each additional parameter
-
-**Phase 3: Add Advanced Features** (ONLY when user explicitly requests):
-18. Add autoscaling (remove any replicaCountAPIParam first)
-19. Configure load balancers (if not already added)
-20. Add integrations (observability, metering)
-21. Add action hooks
-22. **RE-BUILD and RE-DEPLOY to validate**
-
-### 3. Build and Deploy
-```bash
-mcp__ctl__build_compose file="docker-compose-omnistrate.yaml" service_name="<name>"
-mcp__ctl__service_plan_list service_name="<name>"
-mcp__ctl__instance_create service_name="<name>" plan_name="<plan>" ...
-```
-
-### 4. Debug Until RUNNING
-**Iterate until instance status is RUNNING and all resources healthy**:
-```bash
-mcp__ctl__instance_describe service_name="<name>" instance_id="<id>" deployment_status=true
-mcp__ctl__workflow_list service_name="<name>" instance_id="<id>"
-mcp__ctl__workflow_events service_name="<name>" workflow_id="<id>"
-```
-
-Refer to `../omnistrate-sre/SKILL.md` for systematic debugging approach.
-
-**Common fixes**:
-- Instance type unavailable → change type or region
-- Volume creation failed → adjust storage type/size
-- Probe failures → check logs with kubectl, fix app dependencies/env vars
-- Environment variable errors → verify parameter definitions and system variable paths
-
-**Do not stop at first failure** - most deployments require 2-3 iterations.
+**6. Production hardening.** Split a prod Plan (accounts differ; spec otherwise
+identical), add metering/billing, additional clouds, and additional deployment
+models. For air-gapped targets the deliverable is the installer artifact rather
+than a running instance — see `DEPLOYMENT_MODELS_REFERENCE.md` §Air-gapped.
 
 ## Critical Rules
 
-### Documentation Verification
-- **Always search docs** before using any `x-omnistrate-*` extension
-- **Verify system parameters** using `mcp__ctl__docs_system_parameters` before using `$sys.*` variables
-- **Never hallucinate** syntax - if doc search returns no results, skip the feature
-- **Skip when uncertain** - working basic service > broken advanced service
+1. **Never write spec YAML, field names, or CLI flags from memory.** Copy from
+   the reference files, samples/templates, or a docs search
+   (`mcp__ctl__docs_*`) / the JSON schema
+   (`https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json`).
+   Search docs before every extension or field you add.
+2. **Zero-parameterization first** (compose / helm / terraform / kustomize).
+   Hardcode everything, get to RUNNING, then parameterize. *Operator-CR
+   exception:* CR specs are parameter-driven from day one, set kept minimal.
+3. **One change per build-deploy cycle.** Add one parameter or capability, then
+   rebuild and redeploy to validate before the next.
+4. **`defaultValue` is always a quoted string** — even for numeric types.
+5. **Never modify the user's original artifact.** Create Omnistrate variants
+   (e.g. `-omnistrate.yaml`, a `spec.yaml`) — leave the source untouched.
+6. **The deployment model comes from intake Q2 — never silently default.** The
+   old "ALWAYS use `hostedDeployment`" rule is gone. Ask Q2, then build the
+   `deployment:` block from `DEPLOYMENT_MODELS_REFERENCE.md`.
+7. **Field casing depends on context.** Compose uses lowerCamel
+   (`awsBootstrapRoleAccountArn`); ServicePlanSpec uses UpperCamel
+   (`AWSBootstrapRoleAccountArn`). Copy from the reference for the right context.
 
-### API Parameter Syntax Rules
+## Red Flags — STOP
 
-**IMPORTANT**: Before adding ANY API parameters, always search documentation:
-```bash
-mcp__omnistrate__omnistrate-ctl_docs_compose-spec query="x-omnistrate-api-params"
-```
-Verify the correct syntax, supported types, and configuration options from the official docs.
+| Thought | Reality |
+|---|---|
+| "Helm / Terraform / Kustomize isn't supported by this skill." | It is. Use `HELM_ONBOARDING_REFERENCE.md` / `TERRAFORM_KUSTOMIZE_REFERENCE.md`. |
+| "This is an operator, I'll write the workflows here." | Hand off to **omnistrate-operator** — it owns `systemWorkflows`. |
+| "I'll default to `hostedDeployment`." | Ask intake Q2 first. The model is a decision, not a default. |
+| "I remember the field name / that ctl flag exists." | Grep the reference or sample; verify flags with `--help` or docs search. |
+| "Air-gapped needs an always-on agent phoning home." | No. Air-gapped is a self-contained *installer* artifact — no live control-plane link (`onPremDeployment`). |
+| "BYOC-K8s will provision the customer's nodes." | It won't. The customer owns the cluster and infra; Omnistrate only deploys workloads via the dataplane agent. |
+| "I'll add all the parameters, then build once." | One change per build-deploy cycle. Batching hides which change broke it. |
+| "I'll parameterize before the first deploy." | Zero-parameterization first (operator-CR excepted). Get to RUNNING, then parameterize. |
 
-**Default Values**: Always quote as strings (even for numeric types)
-```yaml
-- key: replicas
-  type: Float64
-  defaultValue: "5"  # ✅ Quoted string
-  # defaultValue: 5  # ❌ Unquoted number fails build
-```
+## Reference Files
 
-**Autoscaling Conflicts**: Cannot have replicaCountAPIParam AND autoscaling together
-```yaml
-# ❌ Wrong - causes build error
-x-omnistrate-compute:
-  replicaCountAPIParam: replicas
-x-omnistrate-capabilities:
-  autoscaling: [...]
-
-# ✅ Correct - only autoscaling
-x-omnistrate-compute:
-  instanceTypes: [...]
-x-omnistrate-capabilities:
-  autoscaling:
-    minReplicas: 3
-    maxReplicas: 10
-```
-
-**Parameter Options**: Use simple `options` array for String types
-```yaml
-options:  # ✅ Simple array
-  - value1
-  - value2
-# labeledOptions may not work in all contexts
-```
-
-### Build Strategy: Zero Parameterization First
-
-**CRITICAL RULE**: ALWAYS start with ZERO API parameters and ZERO templatization.
-
-**Phase 1 - Hardcoded Everything** (priority: get working deployment):
-- **NO API parameters** on root service
-- **NO x-omnistrate-api-params** on any child services
-- **NO $var.* references** in environment variables
-- **NO {{ }} concatenations**
-- All passwords: Hardcoded defaults (e.g., `"ChangeMe123!"`)
-- All replica counts: Fixed numbers (e.g., `replicaCount: 3`)
-- All storage sizes: Hardcoded numbers (e.g., `instanceStorageSizeGi: 100`)
-- All environment variables: Hardcoded values
-- No autoscaling (use fixed replicas)
-- Basic capabilities only (enableMultiZone, simple backups)
-- **BUILD → DEPLOY → Verify RUNNING status**
-
-**Phase 2 - Add Parameterization** (ONLY when user explicitly asks for it):
-Wait for user to request: "I want to customize X" or "Make Y configurable"
-
-Then add parameters ONE AT A TIME:
-1. Add single API parameter to root service
-2. Add parameterDependencyMap on root
-3. Add full child parameter definition (key + name + description + type)
-4. Replace hardcoded value with `$var.paramName`
-5. **BUILD → DEPLOY → Validate**
-6. Repeat for next parameter only if user requests
-
-**Phase 3 - Advanced Features** (ONLY when user explicitly requests):
-- Add autoscaling (user must request)
-- Add custom replica counts (user must request)
-- Add storage parameterization (user must request)
-- Add integrations (user must request)
-
-**Never add parameterization proactively** - only when explicitly requested by user.
-
-### Parameter Flow Patterns
-
-**Simple flow** (root → child for env vars):
-```yaml
-# Root service
-x-omnistrate-api-params:
-  - key: cacheSize
-    parameterDependencyMap:
-      redis: cacheSize
-
-# Child service
-environment:
-  - MAX_MEMORY=$var.cacheSize
-```
-
-**Dual definition** (required for ALL parameters used in child services):
-```yaml
-# Root service
-x-omnistrate-api-params:
-  - key: dbPassword
-    name: Database Password
-    description: PostgreSQL password
-    type: Password
-    parameterDependencyMap:
-      backend: dbPassword
-
-# Child service (MUST redefine with name, description, type)
-x-omnistrate-api-params:
-  - key: dbPassword
-    name: Database Password  # Required
-    description: PostgreSQL password  # Required
-    type: Password  # Required
-environment:
-  - POSTGRES_PASSWORD=$var.dbPassword
-```
-
-**Note**: Do NOT add parameters in initial build - use hardcoded values first.
-
-### String Concatenation
-Use `{{ }}` syntax when concatenating system parameters:
-```yaml
-environment:
-  # ✅ Correct
-  - API_URL="{{ $sys.network.node.externalEndpoint }}:8000"
-  - DB_URL="{{ $var.protocol }}://{{ $postgres.sys.network.externalEndpoint }}/{{ $var.dbName }}"
-
-  # ❌ Incorrect
-  - API_URL=$sys.network.node.externalEndpoint:8000
-```
-
-### Cross-Service References
-**Requires** `depends_on` relationship:
-```yaml
-services:
-  backend:
-    depends_on:
-      - database  # Required
-    environment:
-      - DB_HOST="${database.sys.network.externalClusterEndpoint}"
-```
-
-### Backup Configuration
-**Only on services with** `x-omnistrate-mode-internal: false`:
-- Multi-service: Add to root service only
-- Single-service: Add to the single service (if stateful)
-- Never add to services with `x-omnistrate-mode-internal: true`
-
-### Load Balancers
-**Only add when**:
-- Service has replicas > 1 OR autoscaling enabled
-- Service is externally accessible
-- NOT for omnistrate/noop services
-
-## Deployment Model Patterns
-
-**CRITICAL UNDERSTANDING**:
-- **`hostedDeployment`** = YOUR service runs in YOUR provider account (standard SaaS - like Slack, Stripe)
-- **`byoaDeployment`** = OPTION to let YOUR CUSTOMERS deploy in THEIR accounts (BYOC offering)
-- **`onPremDeployment`** = OPTION for YOUR CUSTOMERS to deploy on-premise
-
-**DEFAULT: ALWAYS use `hostedDeployment`**
-
-```yaml
-x-omnistrate-service-plan:
-  name: 'My Service'
-  deployment:
-    hostedDeployment:  # ✅ ALWAYS USE THIS (unless user explicitly requests BYOC/on-prem)
-      # YOUR cloud accounts (where YOUR SaaS service runs)
-      awsAccountId: "YOUR_AWS_ACCOUNT_ID"  # YOUR AWS account
-      awsBootstrapRoleAccountArn: "arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/omnistrate-bootstrap-role"
-      gcpProjectId: "YOUR_GCP_PROJECT_ID"  # YOUR GCP project
-      gcpProjectNumber: "YOUR_GCP_PROJECT_NUMBER"
-      gcpServiceAccountEmail: "sa@YOUR_GCP_PROJECT_ID.iam.gserviceaccount.com"
-```
-
-**BYOC Offering** - Only when user wants to offer customer-hosted option:
-
-```yaml
-x-omnistrate-service-plan:
-  name: 'My Service'
-  deployment:
-    byoaDeployment:  # Use ONLY if user says "I want to OFFER BYOC to my customers"
-      # This is still YOUR intermediate account, not customer account
-      awsAccountId: "YOUR_AWS_ACCOUNT_ID"
-      awsBootstrapRoleAccountArn: "arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/omnistrate-bootstrap-role"
-```
-
-**Multi-Model** - Offer both hosted AND BYOC:
-
-```yaml
-x-omnistrate-service-plan:
-  name: 'My Service'
-  deployment:
-    hostedDeployment:  # For most customers
-      awsAccountId: "YOUR_AWS_ACCOUNT_ID"
-      awsBootstrapRoleAccountArn: "arn:..."
-    byoaDeployment:  # For enterprise customers who want BYOC
-      awsAccountId: "YOUR_AWS_ACCOUNT_ID"
-      awsBootstrapRoleAccountArn: "arn:..."
-```
-
-## Architecture Patterns
-
-### Single Service
-```yaml
-services:
-  web:
-    x-omnistrate-mode-internal: false  # Root service
-    x-omnistrate-compute: [...]
-```
-
-### Multi-Service
-```yaml
-services:
-  app:  # Synthetic root (orchestrator)
-    image: omnistrate/noop  # Special Omnistrate image (no workload)
-    x-omnistrate-mode-internal: false
-    depends_on: [web, database]
-    x-omnistrate-capabilities:
-      backupConfiguration: [...]  # Only on root
-
-  web:
-    x-omnistrate-mode-internal: true
-
-  database:
-    x-omnistrate-mode-internal: true
-```
+- **`COMPOSE_ONBOARDING_REFERENCE.md`** — Docker Compose path: `x-omnistrate-*`
+  transformation, single vs multi-service (synthetic `noop` root), API
+  parameters, compute/storage, load balancers, action hooks, build/debug.
+- **`HELM_ONBOARDING_REFERENCE.md`** — Helm ServicePlanSpec:
+  `helmChartConfiguration`, `runtimeConfiguration`, values templating, pod
+  placement/affinity, multi-service `dependsOn`, endpoints, lifecycle.
+- **`TERRAFORM_KUSTOMIZE_REFERENCE.md`** — Terraform (`terraformConfigurations`,
+  git/local sources, execution identity, state, outputs) and Kustomize
+  (`kustomizeConfiguration`, templating, workload affinity), plus combined
+  terraform + helm/kustomize patterns.
+- **`DEPLOYMENT_MODELS_REFERENCE.md`** — the orthogonal `deployment:` block and
+  operational flows for hosted / BYOC (BYO-VPC, PrivateLink) / BYOC-K8s /
+  air-gapped, plus customer-account onboarding, tenancy, and the ISV-phrasing
+  FAQ. Read this for **every** onboarding path.
+- **omnistrate-operator** skill — CRD + controller onboarding
+  (`systemWorkflows`, lifecycle verbs); invoke it for the operator row.
+- **omnistrate-sre** skill — systematic debugging of failed instances (workflow
+  events, `instance debug`, per-resource-type and per-model failure surfaces).
+  Delegate to it in workflow phase 4.
 
 ## Success Criteria
 
-### Phase 1: Initial Deployment (Required)
-- ✅ Build succeeds without validation errors
-- ✅ **Instance reaches RUNNING status**
-- ✅ **All resources healthy (not FAILED)**
-- ✅ All health checks pass
-- ✅ **NO API parameters** (everything hardcoded)
-- ✅ **Completed at least one deploy-debug-fix cycle**
-- ✅ All transformations based on verified documentation
-
-### Phase 2: Parameterization (Optional - only if user requests)
-- ✅ Parameters added one at a time
-- ✅ Each parameter validated with build + deploy
-- ✅ Dual definition pattern followed (root + child)
-- ✅ Re-deployed successfully after each parameter addition
-
-### Phase 3: Advanced Features (Optional - only if user requests)
-- ✅ Autoscaling configured (no conflicts with replicaCountAPIParam)
-- ✅ Load balancers working
-- ✅ Integrations functional
-- ✅ Multiple instances can run concurrently
-
-
-## Reference
-
-### Docker Compose
-See COMPOSE_ONBOARDING_REFERENCE.md for:
-- Complete step-by-step transformation guide
-- Detailed extension syntax examples
-- Environment variable interpolation patterns
-- Storage configuration by cloud provider
-- ActionHooks examples
-- Custom metrics configuration
-- Troubleshooting guide with common errors
-
-### Other Methods
-When additional onboarding methods are implemented, their reference documentation will be linked here.
+- Build succeeds with the chosen spec format.
+- Instance reaches **RUNNING** with all resources healthy — **or**, for
+  air-gapped targets, the installer artifact is produced.
+- Started with zero parameterization (operator-CR excepted) and completed at
+  least one deploy-debug-fix cycle.
+- Every lifecycle/parameter addition validated by a rebuild + redeploy.
+- The deployment model(s) match what the user chose in intake Q2.
+- Every shipped spec fragment is traceable to a reference, sample, or the docs —
+  nothing written from memory.
