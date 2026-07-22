@@ -36,7 +36,7 @@ name: Redis Server
 deployment:
   hostedDeployment:               # see DEPLOYMENT_MODELS_REFERENCE.md for all models
     AwsAccountId: "<AWS_ACCOUNT_ID>"
-    AWSBootstrapRoleAccountArn: "arn:aws:iam::<AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role"
+    AwsBootstrapRoleAccountArn: "arn:aws:iam::<AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role"
 
 services:
   - name: Redis Cluster
@@ -255,8 +255,7 @@ Common `$sys.*` paths used in the sample and docs:
 | `$sys.deploymentCell.cloudProviderName` | Cloud provider (`aws`, `gcp`, `azure`) |
 | `$sys.compute.node.instanceType` | Instance type in play |
 | `$sys.deployment.resourceID` | Resource ID (node-pool label value) |
-| `$sys.instanceId` | Per-instance unique ID |
-| `$sys.namespace` | Per-instance namespace (`instance-<id>`) |
+| `$sys.id` | Unique identifier for the service instance |
 
 ### `$secret.*`
 
@@ -270,12 +269,14 @@ chartValues:
 
 ### Consuming Terraform outputs
 
-Use `{{ $tfSvc.out.<key> }}` (with `{{ }}`) to reference outputs from a sibling Terraform service:
+Use `{{ $<terraformServiceName>.out.<key> }}` (with `{{ }}`) to reference outputs from a sibling Terraform service.
+The variable root is the **Terraform service name** (camelCased, spaces dropped) as declared in `dependsOn`.
+Source: `docs/build-guides/helm-charts-terraform.md`.
 
 ```yaml
 chartValues:
-  db:
-    endpoint: "{{ $out.database_endpoint }}"
+  s3BucketARN: "{{ $dataInfraTerraform.out.s3_bucket_arn }}"
+  dynamoDBTableARN: "{{ $dataInfraTerraform.out.dynamodb_table_arn }}"
 ```
 
 ---
