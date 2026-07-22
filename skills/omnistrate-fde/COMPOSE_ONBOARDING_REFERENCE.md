@@ -6,17 +6,20 @@ Complete reference for transforming Docker Compose applications to Omnistrate se
 
 ## Table of Contents
 1. [Prerequisites and Setup](#prerequisites-and-setup)
-2. [Service Architecture Patterns](#service-architecture-patterns)
-3. [API Parameters and Flow](#api-parameters-and-flow)
-4. [Environment Variable Transformation](#environment-variable-transformation)
-5. [Compute and Storage Configuration](#compute-and-storage-configuration)
-6. [Capabilities and Features](#capabilities-and-features)
-7. [Load Balancers](#load-balancers)
-8. [ActionHooks](#actionhooks)
-9. [Custom Metrics](#custom-metrics)
-10. [Build and Deployment](#build-and-deployment)
-11. [Debugging Workflow](#debugging-workflow)
-12. [Troubleshooting](#troubleshooting)
+2. [Deployment Model](#deployment-model)
+3. [Service Architecture Patterns](#service-architecture-patterns)
+4. [Phased Parameterization Strategy](#phased-parameterization-strategy)
+5. [Image Registry Authentication](#image-registry-authentication)
+6. [API Parameters and Flow](#api-parameters-and-flow)
+7. [Environment Variable Transformation](#environment-variable-transformation)
+8. [Compute and Storage Configuration](#compute-and-storage-configuration)
+9. [Capabilities and Features](#capabilities-and-features)
+10. [Load Balancers](#load-balancers)
+11. [ActionHooks](#actionhooks)
+12. [Custom Metrics](#custom-metrics)
+13. [Build and Deployment](#build-and-deployment)
+14. [Debugging Workflow](#debugging-workflow)
+15. [Troubleshooting](#troubleshooting)
 
 ## Prerequisites and Setup
 
@@ -42,6 +45,31 @@ mcp__ctl__docs_system_parameters
 
 Always verify `$sys.*` variable paths against current schema before use.
 
+## Deployment Model
+
+Model selection, account setup, BYOC/BYOC-K8s/air-gapped flows: see `DEPLOYMENT_MODELS_REFERENCE.md`.
+
+**Default**: Always use `hostedDeployment` (your SaaS service runs in your provider account). Only switch to `byoaDeployment` if you want to offer BYOC to customers, or `onPremDeployment` for on-premise.
+
+Compose spec syntax (lowerCamel fields — see `DEPLOYMENT_MODELS_REFERENCE.md` for the full field reference and casing rules):
+
+```yaml
+x-omnistrate-service-plan:
+  name: "my-service"
+  tenancyType: "OMNISTRATE_DEDICATED_TENANCY"
+  deployment:
+    hostedDeployment:
+      awsAccountId: "<AWS_ACCOUNT_ID>"
+      awsBootstrapRoleAccountArn: arn:aws:iam::<AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role
+      gcpProjectId: "<GCP_PROJECT_ID>"
+      gcpProjectNumber: "<GCP_PROJECT_NUMBER>"
+      gcpServiceAccountEmail: "<GCP_SA_EMAIL>"
+      azureSubscriptionId: "<AZURE_SUBSCRIPTION_ID>"
+      azureTenantId: "<AZURE_TENANT_ID>"
+```
+
+Configure only the cloud providers you plan to support. Obtain values from `mcp__ctl__account_describe`.
+
 ## Service Architecture Patterns
 
 ### Decision Tree
@@ -52,6 +80,9 @@ Count services in compose file:
 ```
 
 ### Single Service Application
+
+One service → the service itself is the root (`x-omnistrate-mode-internal: false`). No synthetic root needed.
+
 ```yaml
 version: "3.9"
 
@@ -59,18 +90,14 @@ x-omnistrate-service-plan:
   name: "service-plan"
   tenancyType: "OMNISTRATE_DEDICATED_TENANCY"
   deployment:
-    hostedDeployment:
-      AwsAccountId: "<from-account-describe>"
-      AwsBootstrapRoleAccountArn: "<from-account-describe>"
+    hostedDeployment:   # See Deployment Model section and DEPLOYMENT_MODELS_REFERENCE.md
+      awsAccountId: "<from-account-describe>"
+      awsBootstrapRoleAccountArn: "<from-account-describe>"
 
 services:
   database:
     image: vendor/database:latest
     x-omnistrate-mode-internal: false  # Single service = root
-    x-omnistrate-api-params:
-      - key: storageSize
-        type: Float64
-        defaultValue: "100"
     x-omnistrate-compute:
       instanceTypes:
         - cloudProvider: aws
@@ -81,6 +108,13 @@ services:
 ```
 
 ### Multi-Service Application
+
+Two or more services → create a synthetic root using `omnistrate/noop` (no actual workload). The root:
+- Uses `image: omnistrate/noop`
+- Is the only service with `x-omnistrate-mode-internal: false`
+- Holds all top-level API parameters and backup configuration
+- Lists all child services in `depends_on`
+
 ```yaml
 version: "3.9"
 
@@ -88,10 +122,10 @@ x-omnistrate-service-plan:
   name: "app-plan"
   tenancyType: "OMNISTRATE_DEDICATED_TENANCY"
   deployment:
-    hostedDeployment:
-      GcpProjectId: "<from-account-describe>"
-      GcpProjectNumber: "<from-account-describe>"
-      GcpServiceAccountEmail: "<from-account-describe>"
+    hostedDeployment:   # See Deployment Model section and DEPLOYMENT_MODELS_REFERENCE.md
+      gcpProjectId: "<from-account-describe>"
+      gcpProjectNumber: "<from-account-describe>"
+      gcpServiceAccountEmail: "<from-account-describe>"
 
 services:
   app:  # Synthetic root service
@@ -149,6 +183,118 @@ services:
     image: redis:7
     x-omnistrate-mode-internal: true
 ```
+
+## Phased Parameterization Strategy
+
+**CRITICAL RULE**: Always start with ZERO parameterization. Only add API parameters AFTER initial deployment succeeds AND user explicitly requests customization.
+
+### Phase 1: Initial Build (ZERO parameterization — get a working deployment first)
+
+- NO `x-omnistrate-api-params` on any service
+- NO `$var.*` references in environment variables
+- NO `{{ }}` concatenations
+- All passwords: Hardcoded defaults, e.g. `"ChangeMe123!"`
+- All replica counts: Fixed numbers, e.g. `replicaCount: 3`
+- All storage sizes: Hardcoded numbers, e.g. `instanceStorageSizeGi: 100`
+- All environment variables: Hardcoded values
+- No autoscaling (use fixed replicas)
+- **BUILD → DEPLOY → Verify RUNNING status**
+
+### Phase 2: Add Parameterization (ONLY when user explicitly requests)
+
+Add parameters ONE AT A TIME:
+1. Add single API parameter to root service with `parameterDependencyMap`
+2. Redefine the parameter on the child service (key + name + description + type — all required)
+3. Replace hardcoded value with `$var.paramName` in child service
+4. **RE-BUILD → RE-DEPLOY → Validate**
+5. Repeat for each additional parameter only if user requests
+
+### Phase 3: Add Advanced Features (ONLY when user explicitly requests)
+
+- Add autoscaling (remove any `replicaCountAPIParam` first — they cannot coexist)
+- Add custom replica count parameters
+- Add storage parameterization
+- Add load balancers if not already present
+- Add integrations (observability, metering)
+- Add action hooks
+- **RE-BUILD → RE-DEPLOY → Validate**
+
+## Image Registry Authentication
+
+### Testing Image Accessibility
+
+For each custom image (non-public images like postgres, nginx, redis are always public), test whether it is publicly accessible before assuming it needs credentials:
+
+```bash
+# Create temporary Docker config to test without local credentials
+TEMP_DOCKER_CONFIG=$(mktemp -d)
+DOCKER_CONFIG=$TEMP_DOCKER_CONFIG docker pull <image>:<tag> 2>&1
+rm -rf $TEMP_DOCKER_CONFIG
+```
+
+- If pull succeeds: Image is public — no auth needed
+- If pull fails with "unauthorized" or "denied": Image is private — configure auth below
+
+### Credential Prompts by Registry Type
+
+**Docker Hub (`docker.io`)**:
+- Ask: "What is your Docker Hub username?"
+- Ask: "Please create a Docker Hub Personal Access Token (PAT) at https://hub.docker.com/settings/security with read permissions. What should I name the secret?" (suggest: `DOCKERHUB_PASSWORD`)
+
+**GitHub Container Registry (`ghcr.io`)**:
+- Ask: "What is your GitHub username or organization?"
+- Ask: "Please create a GitHub PAT at https://github.com/settings/tokens with `read:packages` scope. What should I name the username and token secrets?" (suggest: `GITHUB_USERNAME`, `GITHUB_TOKEN`)
+
+**AWS ECR / GCP Artifact Registry / Azure ACR / Custom registry**:
+- Ask: "What is the username for this registry?"
+- Ask: "What should I name the password secret?" (suggest: `REGISTRY_PASSWORD`)
+
+### Secret Creation Walkthrough (Omnistrate Console)
+
+Guide the customer to create secrets before building:
+
+```
+1. Log into Omnistrate console: https://omnistrate.cloud
+2. Navigate to: Services → [Your Service] → Environments → Dev → Secrets
+3. Click "Add Secret"
+4. Name: DOCKERHUB_PASSWORD (use the exact name agreed above)
+5. Value: [Paste the PAT / token]
+6. Click Save
+7. Repeat steps 2–6 for the Prod environment (same secret name, same value)
+```
+
+Wait for confirmation that secrets have been created before building.
+
+### `x-omnistrate-image-registry-attributes` Block
+
+Search docs first: `mcp__ctl__docs_compose_spec_search query="x-omnistrate-image-registry-attributes"`
+
+Add at the **top level** of the compose file (same level as `version:` and `services:`):
+
+```yaml
+version: '3.8'
+
+x-omnistrate-image-registry-attributes:
+  docker.io:          # Include ONLY if using private docker.io images
+    auth:
+      username: mycompany                       # Hardcoded OR {{ $secret.NAME }}
+      password: "{{ $secret.DOCKERHUB_PASSWORD }}"
+  ghcr.io:            # Include ONLY if using private ghcr.io images
+    auth:
+      username: "{{ $secret.GITHUB_USERNAME }}"
+      password: "{{ $secret.GITHUB_TOKEN }}"
+  registry.company.com:  # Include ONLY if using a custom private registry
+    auth:
+      username: registryuser
+      password: "{{ $secret.PRIVATE_REGISTRY_PASSWORD }}"
+
+services: [...]
+```
+
+**Rules**:
+- Include ONLY registries that have private images — do not add unused entries
+- Registry hostname must match the image URL prefix (e.g., `docker.io` for `mycompany/api:tag`)
+- Username may be hardcoded; password/token MUST use `{{ $secret.NAME }}` syntax
 
 ## API Parameters and Flow
 
@@ -232,6 +378,8 @@ x-omnistrate-api-params:
       - "error"
     description: "Application logging level"
 ```
+
+**Note**: Use the simple `options` array (shown above). `labeledOptions` may not work in all contexts — prefer `options` for reliability.
 
 ### Parameter with Bounds
 ```yaml
@@ -422,7 +570,23 @@ x-omnistrate-capabilities:
 ```
 
 ### Autoscaling
+
+**Conflict rule**: `replicaCountAPIParam` and `autoscalingConfig` cannot be used together on the same service — they are mutually exclusive. Remove `replicaCountAPIParam` from `x-omnistrate-compute` before adding autoscaling.
+
 ```yaml
+# ❌ Wrong — causes build error
+x-omnistrate-compute:
+  replicaCountAPIParam: replicas
+x-omnistrate-capabilities:
+  autoscalingConfig:
+    minReplicas: 2
+    maxReplicas: 10
+
+# ✅ Correct — autoscaling only (no replicaCountAPIParam)
+x-omnistrate-compute:
+  instanceTypes:
+    - cloudProvider: aws
+      name: t3.xlarge
 x-omnistrate-capabilities:
   autoscalingConfig:
     minReplicas: 2
