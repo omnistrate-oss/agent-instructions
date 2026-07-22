@@ -203,8 +203,8 @@ resource "aws_security_group" "app_sg" {
 resource "aws_db_subnet_group" "main" {
   name       = "db-subnet-{{ $sys.id }}"
   subnet_ids = [
-    "{{ $sys.deploymentCell.publicSubnetIDs[0].id }}",
-    "{{ $sys.deploymentCell.publicSubnetIDs[1].id }}"
+    "{{ $sys.deploymentCell.privateSubnetIDs[0].id }}",
+    "{{ $sys.deploymentCell.privateSubnetIDs[1].id }}"
   ]
 }
 ```
@@ -226,22 +226,34 @@ For API parameters, use `$var.<key>` inside `{{ }}` in `.tf` files or in `variab
 (no separate `.tfvars` file needed in the repo). Copied from `docs/build-guides/terraform-params-outputs.md`:
 
 ```yaml
-terraformConfigurations:
-  configurationPerCloudProvider:
-    aws:
-      terraformPath: /terraform/aws
-      variablesValuesFileOverride: |
-        vpc_id = "{{ $sys.deploymentCell.cloudProviderNetworkID }}"
-        region = "{{ $sys.deploymentCell.region }}"
-        instance_type = "{{ $var.dbInstanceClass }}"
-        subnet_ids = [
-          "{{ $sys.deploymentCell.privateSubnetIDs[0].id }}",
-          "{{ $sys.deploymentCell.privateSubnetIDs[1].id }}"
-        ]
-        resource_prefix = "saas-{{ $sys.id }}"
-      gitConfiguration:
-        reference: refs/tags/v1.0.0
-        repositoryUrl: https://github.com/your-org/infra-repo.git
+services:
+  - name: dbInfra
+    internal: true
+    apiParameters:
+      - key: dbInstanceClass
+        description: Database instance class
+        name: Database Instance Class
+        type: String
+        modifiable: true
+        required: false
+        export: false
+        defaultValue: "db.t3.medium"
+    terraformConfigurations:
+      configurationPerCloudProvider:
+        aws:
+          terraformPath: /terraform/aws
+          variablesValuesFileOverride: |
+            vpc_id = "{{ $sys.deploymentCell.cloudProviderNetworkID }}"
+            region = "{{ $sys.deploymentCell.region }}"
+            instance_type = "{{ $var.dbInstanceClass }}"
+            subnet_ids = [
+              "{{ $sys.deploymentCell.privateSubnetIDs[0].id }}",
+              "{{ $sys.deploymentCell.privateSubnetIDs[1].id }}"
+            ]
+            resource_prefix = "saas-{{ $sys.id }}"
+          gitConfiguration:
+            reference: refs/tags/v1.0.0
+            repositoryUrl: https://github.com/your-org/infra-repo.git
 ```
 
 Alternatively, declare the variable's default directly in `variables.tf`. Copied from
