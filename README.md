@@ -147,7 +147,7 @@ Claude Code automatically discovers and uses skills defined in [CLAUDE.md](./CLA
 
 ## MCP Tools Required
 
-Both skills require the Omnistrate MCP server providing:
+All skills require the Omnistrate MCP server providing:
 - `mcp__ctl__account_*` - Cloud account management
 - `mcp__ctl__docs_*` - Documentation search
 - `mcp__ctl__build_compose` - Service builds

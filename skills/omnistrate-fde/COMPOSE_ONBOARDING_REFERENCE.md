@@ -2,7 +2,7 @@
 
 Complete reference for transforming Docker Compose applications to Omnistrate service definitions.
 
-**Note**: This reference covers Docker Compose-based onboarding only. Other onboarding methods (Helm, Terraform, Kustomize, Kubernetes Operators) will have separate reference files when implemented.
+**Note**: This reference covers Docker Compose-based onboarding only. Other onboarding methods have their own reference files: [HELM_ONBOARDING_REFERENCE.md](HELM_ONBOARDING_REFERENCE.md), [TERRAFORM_KUSTOMIZE_REFERENCE.md](TERRAFORM_KUSTOMIZE_REFERENCE.md), and (Kubernetes Operators) the `omnistrate-operator` skill. Deployment models (hosted/BYOC/BYOC-K8s/air-gapped) for every method are in [DEPLOYMENT_MODELS_REFERENCE.md](DEPLOYMENT_MODELS_REFERENCE.md).
 
 ## Table of Contents
 1. [Prerequisites and Setup](#prerequisites-and-setup)
@@ -102,6 +102,14 @@ services:
       instanceTypes:
         - cloudProvider: aws
           name: t3.xlarge
+    volumes:
+      - source: ./data
+        target: /var/lib/postgresql/data
+        type: bind
+        x-omnistrate-storage:        # Phase 1: hardcode storage; parameterize later (Phase 3)
+          aws:
+            instanceStorageType: AWS::EBS_GP3
+            instanceStorageSizeGi: 100
     x-omnistrate-capabilities:
       backupConfiguration:
         backupRetentionInDays: 7
@@ -211,9 +219,9 @@ Add parameters ONE AT A TIME:
 
 ### Phase 3: Add Advanced Features (ONLY when user explicitly requests)
 
-- Add autoscaling (remove any `replicaCountAPIParam` first — they cannot coexist)
+- Add autoscaling (remove any `replicaCountAPIParam` first — they cannot coexist; see the [Autoscaling](#autoscaling) section for the conflict rule and syntax)
 - Add custom replica count parameters
-- Add storage parameterization
+- Add storage parameterization (see the storage `x-omnistrate-api-params` + `instanceStorageSizeGi` pattern in the Storage Configuration section)
 - Add load balancers if not already present
 - Add integrations (observability, metering)
 - Add action hooks

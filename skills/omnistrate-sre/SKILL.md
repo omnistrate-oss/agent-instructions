@@ -95,7 +95,7 @@ Symbols: ✗ failed, ✅ success, ⚡ autoscaler, 💾 storage, 📥 image, 🚀
 | **Terraform** | Progress, **rendered `.tf` files**, Terraform output, live **apply logs**, **plan previews**, app logs, operation history, workflow events |
 | **Operator** | App logs, deployment API parameters, deployment output parameters, **Operator CRD outputs**, workflow events |
 
-Kustomize renders (rendered manifests / substitution results) are surfaced the same way — inspect the rendered yaml here before touching the cluster.
+Kustomize has no dedicated `instance debug` subcommand (the rendered-artifact subcommands are Helm and Terraform only). Read Kustomize substitution/rendering results from the workflow events and, when needed, from the **live rendered manifests via the cluster tunnel** (step 4) — `kubectl get -o yaml` the deployed objects — before making changes.
 
 If you only need metrics dashboard metadata: `omnistrate-ctl instance dashboard <instance-id>`. (If logs/metrics are missing, confirm the integration is enabled: Compose uses `x-customer-integrations`/`x-internal-integrations`; Helm/Terraform/Operator use `features.CUSTOMER`/`features.INTERNAL`.)
 
@@ -147,7 +147,8 @@ Omnistrate runs Terraform/OpenTofu autonomously — there is **no manual `terraf
 1. Separate **Omnistrate orchestration errors** (workflow task failures) from **operator reconciliation errors** (the controller itself).
 2. **`successCondition` never met** → compare the condition expression against the **LIVE CR status fields**: use the tunnel to inspect the CR, operator controller logs, events, and status conditions directly.
    ```bash
-   omctl deployment-cell update-kubeconfig <cell-id> --kubeconfig /tmp/kubeconfig --customer-email <email>
+   # add --customer-email <email> only for a customer-owned cell (BYOC / BYOC-K8s), per step 4
+   omctl deployment-cell update-kubeconfig <cell-id> --kubeconfig /tmp/kubeconfig
    kubectl get <crd-kind> -n <instance-id> -o yaml --kubeconfig /tmp/kubeconfig   # inspect status.*
    kubectl logs deploy/<operator-controller> -n <operator-namespace> --kubeconfig /tmp/kubeconfig
    ```

@@ -230,7 +230,7 @@ omnistrate-ctl account customer create \
   --plan=<plan-name> --customer-email=<customer@example.com> \
   --aws-account-id=<CUSTOMER_AWS_ACCOUNT_ID>
 
-# GCP: --gcp-project-id / --gcp-project-number / --gcp-service-account-email
+# GCP: --gcp-project-id / --gcp-project-number
 # Azure: --azure-subscription-id / --azure-tenant-id
 # PrivateLink: append --private-link
 ```
@@ -243,8 +243,7 @@ omnistrate-ctl account customer create \
   --service=<service-name> --environment=<environment-name> \
   --plan=<plan-name> --customer-email=<customer@example.com> \
   --gcp-project-id=<CUSTOMER_GCP_PROJECT_ID> \
-  --gcp-project-number=<CUSTOMER_GCP_PROJECT_NUMBER> \
-  --gcp-service-account-email=<CUSTOMER_GCP_SA_EMAIL>
+  --gcp-project-number=<CUSTOMER_GCP_PROJECT_NUMBER>
 
 # Azure account
 omnistrate-ctl account customer create \

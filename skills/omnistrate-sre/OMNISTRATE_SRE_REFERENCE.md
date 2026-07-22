@@ -108,7 +108,7 @@ omctl deployment-cell update-kubeconfig <cell-id> [flags]
 | **Helm** | Helm install/upgrade **client logs**; app logs; **rendered chart values**; deployment API/output parameters; workflow events | Template rendering errors; hook/timeout/K8s-API validation failures; verifying rendered values match expected API/system params/defaults |
 | **Terraform / OpenTofu** | **Progress**; **rendered `.tf` files** (post variable-substitution + param mapping); captured **`terraform plan` preview**; live **apply logs**; **Terraform output**; **operation history**; app logs; workflow events | Confirming rendered artifacts + intended plan; classifying apply errors; confirming outputs feed downstream resources; reviewing prior attempts/errors |
 | **Operator** | App logs; deployment API parameters; deployment output parameters; **Operator CRD outputs**; workflow events | Confirming API params resolved to expected CR inputs; inspecting CRD outputs / exported output params; separating orchestration from reconciliation errors |
-| **Kustomize** | Rendered manifests / substitution results (same rendering surface pattern) | Substitution failures; wrong/missing values before touching the cluster |
+| **Kustomize** | No dedicated `instance debug` subcommand (rendered-artifact subcommands are Helm and Terraform only). Read substitution/rendering results from workflow events, and inspect **live rendered manifests via the cluster tunnel** (`kubectl get -o yaml`) | Substitution failures; wrong/missing values before touching the cluster |
 
 Notes:
 - **Terraform execution has no manual `plan` approval gate** — Omnistrate applies autonomously. The plan preview is captured for inspection, not approval.
@@ -155,7 +155,7 @@ Each entry: **symptom → evidence location → fix.** Organized by resource typ
 #### Kustomize
 | Symptom | Evidence location | Fix |
 |---------|-------------------|-----|
-| Substitution failure / unresolved values | `instance debug` → rendered yaml | Fix parameter mapping; republish |
+| Substitution failure / unresolved values | Workflow events; live rendered yaml via tunnel (`kubectl get -o yaml`) | Fix parameter mapping; republish |
 | Pod Pending: missing StorageClass/PVC | Rendered yaml + `kubectl get storageclass`/`get pvc` via tunnel | Ensure StorageClass exists on the cell (amenity or customer prerequisite) |
 
 ### By Deployment Model

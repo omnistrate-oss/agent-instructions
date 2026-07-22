@@ -205,7 +205,7 @@ x-omnistrate-actionhooks:
   - scope: NODE
     type: POST_START  # After node starts
     commandTemplate: |
-      curl -X POST http://control-plane/register?node=$sys.compute.node.nodeId
+      curl -X POST http://control-plane/register?node=$sys.compute.node.name
 
   - scope: CLUSTER
     type: HEALTH_CHECK  # Custom health check
@@ -435,10 +435,10 @@ environment:
 ### Deployment Cell Parameters
 
 ```yaml
-$sys.deploymentCell.cloudProviderName  # aws, gcp, azure
-$sys.deploymentCell.region             # us-west-2, us-central1, etc.
-$sys.deploymentCell.accountId          # Cloud account ID
-$sys.deploymentCell.oidcIssuerID       # For IRSA/Workload Identity
+$sys.deploymentCell.cloudProviderName        # aws, gcp, azure
+$sys.deploymentCell.region                   # us-west-2, us-central1, etc.
+$sys.deploymentCell.cloudProviderAccountID   # Cloud account ID
+$sys.deploymentCell.oidcIssuerID             # For IRSA/Workload Identity
 ```
 
 **Usage**:
@@ -451,25 +451,24 @@ environment:
 ### Compute Parameters
 
 ```yaml
-$sys.compute.node.nodeId        # Unique node identifier
-$sys.compute.node.nodeName      # Node name in cluster
-$sys.compute.instanceType       # Actual instance type deployed
+$sys.compute.node.name          # Name of the current service node
+$sys.compute.node.index         # Index of the current node in the instance
+$sys.compute.node.instanceType  # Actual instance type deployed
 ```
 
 ### Storage Parameters
 
 ```yaml
-$sys.storage.volumeId           # Cloud volume identifier
-$sys.storage.bucket.name        # Object storage bucket name
+$sys.storage.volumes[i].id      # Cloud volume identifier (volume i)
+$sys.storage.volumes[i].size    # Volume size in GB (volume i)
 ```
 
-### Instance Parameters
+### Instance / Deployment Parameters
 
 ```yaml
-$sys.instance.id                # Omnistrate instance ID
-$sys.instance.name              # User-provided instance name
-$sys.resource.id                # Resource ID
-$sys.resource.key               # Resource key
+$sys.id                         # Omnistrate service instance ID
+$sys.deployment.resourceID      # Resource ID
+$sys.deployment.resourceAlias   # Resource alias
 ```
 
 ---

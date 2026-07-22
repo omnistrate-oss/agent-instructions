@@ -85,8 +85,8 @@ Ask these questions before discussing tech stack — the answers determine not j
 |----------------|-----------------|------------|
 | "Just host it for me" | **Hosted** | `hostedDeployment` |
 | "Run it in our AWS/GCP/Azure account" | **BYOC-Account** | `byoaDeployment` |
-| "Deploy into our existing VPC/VNet" | **BYO-VPC** | `byoaDeployment` (variant at onboarding) |
-| "We need PrivateLink — no public endpoints" | **BYOC PrivateLink** | `byoaDeployment` + `--private-link` |
+| "Deploy into our existing VPC/VNet" | **BYO-VPC** | `byoaDeployment` + `cloud_provider_native_network_id` input param (set at deploy via `instance create --cloud-provider-native-network-id`) |
+| "We need PrivateLink — no public endpoints" | **BYOC PrivateLink** | `byoaDeployment`; PrivateLink is enabled at account onboarding (`account customer create --private-link`), not a spec key |
 | "We run OpenShift/EKS on-prem, cluster has outbound egress" | **BYOC-K8s** | `byoaDeployment` (`--cloud-provider byoc-onprem`) |
 | "Defense/air-gapped, no internet whatsoever" | **Air-gapped** | `onPremDeployment` |
 
