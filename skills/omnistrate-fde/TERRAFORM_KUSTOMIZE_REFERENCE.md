@@ -355,6 +355,207 @@ always use the template syntax.
 
 ---
 
+## Managed-service modules for chart dependencies (RDS / ElastiCache / S3)
+
+When a Helm chart bundles a dependency (a `postgresql` subchart, a bundled `redis`, a `minio`),
+the production-tier option is to disable the subchart and point the chart at a terraform-managed
+cloud service instead (see
+[HELM_ONBOARDING_REFERENCE.md § External dependencies](HELM_ONBOARDING_REFERENCE.md#external-dependencies--chart-defaults-vs-managed-cloud-services)
+for the decision factors — this is a **suggestion**, offered only when the chart has a working
+in-cluster default). Each module below is a terraform service marked `internal: true`; the Helm
+service `dependsOn` it and consumes its outputs via `{{ $<tfService>.out.<key> }}`.
+
+These are **AWS examples**. Other clouds follow the same shape — define the equivalent resource
+under a sibling `configurationPerCloudProvider` entry (`gcp`, `azure`, …) and keep the **output
+names identical** across clouds so the consuming chart needs no cloud-specific branching.
+
+### RDS (PostgreSQL / MySQL)
+
+Copied and adapted from `resource-spec-samples/e2etestv2/original/aws/terraform/main.tf`
+(`{{ $sys.* }}` templating kept exactly as the sample uses it):
+
+```hcl
+provider "aws" {
+  region = "{{ $sys.deploymentCell.region }}"
+}
+
+variable "vpc_id" {
+  description = "The VPC ID to use for resources."
+  type        = string
+}
+
+resource "aws_security_group" "rds_sg" {
+  name        = "rds-sg-{{ $sys.id }}"
+  description = "Security group for RDS instances"
+  vpc_id      = var.vpc_id
+
+  ingress {
+    from_port   = 3306
+    to_port     = 3306
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]   # tighten for production
+  }
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_db_subnet_group" "rds_subnet_group" {
+  name        = "rds-subnet-{{ $sys.id }}"
+  description = "RDS subnet group"
+  subnet_ids = [
+    "{{ $sys.deploymentCell.publicSubnetIDs[0].id }}",
+    "{{ $sys.deploymentCell.publicSubnetIDs[1].id }}",
+    "{{ $sys.deploymentCell.publicSubnetIDs[2].id }}"
+  ]
+}
+
+resource "aws_db_instance" "example1" {
+  identifier             = "db-instance-{{ $sys.id }}"
+  engine                 = "mysql"
+  instance_class         = "db.t3.micro"
+  allocated_storage      = 20
+  db_subnet_group_name   = aws_db_subnet_group.rds_subnet_group.name
+  vpc_security_group_ids = [aws_security_group.rds_sg.id]
+  username               = "admin"
+  password               = "yourpassword"   # manage securely — prefer $secret.<name>
+  parameter_group_name   = "default.mysql8.0"
+  engine_version         = "8.0.44"
+  skip_final_snapshot    = true
+
+  depends_on = [
+    aws_security_group.rds_sg,
+    aws_db_subnet_group.rds_subnet_group
+  ]
+}
+```
+
+```hcl
+# outputs.tf
+output "db_endpoints_1" {
+  value = aws_db_instance.example1.endpoint
+}
+```
+
+Consume in the Helm chart's external-database block:
+
+```yaml
+# chartValues:  externalDatabase.host: "{{ $dbInfra.out.db_endpoints_1 }}"
+```
+
+### ElastiCache (Redis / Memcached)
+
+Copied and adapted from `resource-spec-samples/e2etestv2/original/aws/terraform2/main.tf`:
+
+```hcl
+provider "aws" {
+  region = "{{ $sys.deploymentCell.region }}"
+}
+
+resource "aws_security_group" "elasticache_sg" {
+  name        = "elasticache-sg-{{ $sys.id }}"
+  description = "Security group for ElastiCache instances"
+  vpc_id      = "{{ $sys.deploymentCell.cloudProviderNetworkID }}"
+
+  ingress {
+    from_port   = 11211   # default Memcached port
+    to_port     = 11211
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]   # tighten for production
+  }
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_elasticache_subnet_group" "elasticache_subnet_group" {
+  name        = "elasticache-subnet-{{ $sys.id }}"
+  description = "ElastiCache subnet group"
+  subnet_ids = [
+    "{{ $sys.deploymentCell.publicSubnetIDs[0].id }}",
+    "{{ $sys.deploymentCell.publicSubnetIDs[1].id }}",
+    "{{ $sys.deploymentCell.publicSubnetIDs[2].id }}"
+  ]
+}
+
+resource "aws_elasticache_cluster" "example_memcached" {
+  cluster_id         = "memcached-{{ $sys.id }}"
+  engine             = "memcached"
+  node_type          = "cache.t3.micro"
+  num_cache_nodes    = 2
+  subnet_group_name  = aws_elasticache_subnet_group.elasticache_subnet_group.name
+  security_group_ids = [aws_security_group.elasticache_sg.id]
+}
+```
+
+```hcl
+# outputs.tf
+output "redis_endpoint" {
+  value = aws_elasticache_cluster.example_memcached.cache_nodes[0].address
+}
+```
+
+Consume in the Helm chart:
+
+```yaml
+# chartValues:  externalRedis.host: "{{ $cacheInfra.out.redis_endpoint }}"
+```
+
+### S3 (object storage)
+
+Copied and adapted from `resource-spec-samples/e2edr/terraform/aws/storage/main.tf` +
+`resource-spec-samples/e2edr/terraform/aws/storage/outputs.tf`:
+
+```hcl
+provider "aws" {
+  region = var.region
+}
+
+resource "aws_s3_bucket" "this" {
+  bucket        = var.name
+  force_destroy = true
+  tags          = var.tags
+}
+```
+
+```hcl
+# outputs.tf
+output "name" {
+  value = aws_s3_bucket.this.id
+}
+
+output "arn" {
+  value = aws_s3_bucket.this.arn
+}
+```
+
+Set `var.name`/`var.region` via `variablesValuesFileOverride` (e.g.
+`name = "app-bucket-{{ $sys.id }}"`, `region = "{{ $sys.deploymentCell.region }}"`). Consume in
+the Helm chart:
+
+```yaml
+# chartValues:  objectStore.bucket: "{{ $storageInfra.out.name }}"
+#               objectStore.bucketArn: "{{ $storageInfra.out.arn }}"
+```
+
+### Variable discovery for terraform-based services
+
+For a terraform service, inspect **`variables.tf`** the same way you inspect `helm show values`
+for a chart, and apply the identical three-tier classification (defined in
+[HELM_ONBOARDING_REFERENCE.md § Customization discovery](HELM_ONBOARDING_REFERENCE.md#customization-discovery--building-the-recommended-parameter-set)):
+**Tier 1 — Recommended customer-facing** (e.g. `instance_class`, `allocated_storage` → expose as
+`apiParameters`, wired via `variablesValuesFileOverride`); **Tier 2 — Optional/advanced** (tuning
+knobs — offer but default to hardcoded); **Tier 3 — Never expose** (VPC/subnet IDs, security-group
+CIDRs, region — these come from `$sys.*`, not the customer).
+
+---
+
 ### Control-plane-side resources
 
 Some Terraform stacks manage provider-side assets (shared DNS, registry entries, cross-account

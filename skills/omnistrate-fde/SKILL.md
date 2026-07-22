@@ -146,13 +146,34 @@ stop at the first failure. Debug loop, in escalating order:
    The **omnistrate-sre** skill, if installed, extends this loop with
    per-resource-type and per-model failure catalogs.
 
-**5. Add parameters / lifecycle one at a time.** Rebuild + redeploy after
-*each* change — never batch. One variable, one build-deploy cycle.
+**5. Customization discovery & parameterization.** Once the zero-param instance
+is RUNNING, **proactively inspect** the artifact to recommend a customer-facing
+parameter set — do not wait to be asked. For Helm, run `helm show values` /
+`helm show readme` (or Artifact Hub); for terraform, read `variables.tf`; for
+compose, inspect env vars/images. Classify every relevant value into three tiers
+(**Tier 1** recommended customer-facing → `apiParameters`; **Tier 2**
+optional/advanced → default to hardcoded; **Tier 3** platform/ISV-owned → never
+expose), **present the tier table for approval**, and also surface external
+dependencies: when a chart bundles a dependency with a working default, *suggest*
+(never force) replacing it with a terraform-managed RDS/ElastiCache/S3. Then
+implement approved Tier-1 parameters **one at a time** — rebuild + redeploy after
+*each* change, never batch. See
+`HELM_ONBOARDING_REFERENCE.md` §"Customization discovery" and §"External
+dependencies", and `TERRAFORM_KUSTOMIZE_REFERENCE.md` §"Managed-service modules".
 
 **6. Production hardening.** Split a prod Plan (accounts differ; spec otherwise
 identical), add metering/billing, additional clouds, and additional deployment
 models. For air-gapped targets the deliverable is the installer artifact rather
 than a running instance — see `DEPLOYMENT_MODELS_REFERENCE.md` §Air-gapped.
+
+**7. Distribute & document.** Release the Plan
+(`omnistrate-ctl build ... --release-as-preferred --release-description "..."`),
+make the **prod environment Public**, configure the **Customer Portal** (custom
+domain via CNAME, SMTP sender email, SSO identity providers), and optionally add
+billing. **THEN generate `DEPLOYMENT_OVERVIEW.md`** next to the ISV's spec files
+using the template in `DISTRIBUTION_REFERENCE.md`. Onboarding is **not complete**
+until that artifact is generated and the portal path is confirmed (or, for
+air-gapped, the installer is delivered). See `DISTRIBUTION_REFERENCE.md`.
 
 ## Critical Rules
 
@@ -205,6 +226,11 @@ than a running instance — see `DEPLOYMENT_MODELS_REFERENCE.md` §Air-gapped.
   operational flows for hosted / BYOC (BYO-VPC, PrivateLink) / BYOC-K8s /
   air-gapped, plus customer-account onboarding, tenancy, and the ISV-phrasing
   FAQ. Read this for **every** onboarding path.
+- **`DISTRIBUTION_REFERENCE.md`** — release states + `--release` /
+  `--release-as-preferred` / `--release-description`, prod env visibility, the
+  Customer Portal (domain/SMTP/SSO), subscriptions, optional pricing/billing, the
+  ordered go-live checklist, per-model customer experience, and the
+  `DEPLOYMENT_OVERVIEW.md` artifact template (workflow phase 7).
 Companion skills — separate installs; this skill is fully usable without them:
 
 - **omnistrate-operator** — CRD + controller onboarding (`systemWorkflows`,
@@ -223,5 +249,11 @@ Companion skills — separate installs; this skill is fully usable without them:
   least one deploy-debug-fix cycle.
 - Every lifecycle/parameter addition validated by a rebuild + redeploy.
 - The deployment model(s) match what the user chose in intake Q2.
+- Recommended customization tiers were reviewed with the user (tier table
+  presented; approved Tier-1 parameters implemented one per build-deploy cycle).
+- The Plan is **released** and the **portal is reachable** (prod env public,
+  domain/SMTP/SSO configured) — **or**, for air-gapped, the installer is delivered.
+- A **`DEPLOYMENT_OVERVIEW.md`** artifact was generated (with the architecture and
+  responsibility-split diagrams) next to the ISV's spec files.
 - Every shipped spec fragment is traceable to a reference, sample, or the docs —
   nothing written from memory.

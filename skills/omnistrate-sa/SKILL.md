@@ -1078,6 +1078,8 @@ Route to the correct skill/path based on the output-format decision from Phase 1
 
 In every path, the onboarding workflow builds the `deployment:` block that encodes the chosen model(s) — name them explicitly in the handoff so it can.
 
+The onboarding flow does not end at a running instance: it finishes with **portal distribution** (release the Plan, make the prod environment public, configure the Customer Portal) and by generating a **`DEPLOYMENT_OVERVIEW.md`** artifact. Your chosen deployment model(s) and the customer-facing parameters you recommend here flow directly into that overview's architecture and responsibility-split diagrams — so make both explicit in the handoff summary.
+
 #### Example Handoff Message
 ```
 Ready for Omnistrate onboarding. Here's the summary:

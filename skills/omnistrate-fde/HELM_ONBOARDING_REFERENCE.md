@@ -282,6 +282,172 @@ chartValues:
 
 ---
 
+## Customization discovery — building the recommended parameter set
+
+Once the instance first reaches **RUNNING** with zero parameterization, do NOT
+wait for the user to ask "what should we expose?" — **proactively inspect the
+chart** and recommend a customer-facing parameter set. This is a build step, not
+an optional extra.
+
+### 1. Enumerate the chart's surface
+
+```bash
+# Full default values (the complete customization surface)
+helm show values <repo>/<chart> --version <ver>
+# Human-readable notes on what those values do
+helm show readme <repo>/<chart> --version <ver>
+```
+
+If `helm` is not available (or the chart is not in an added repo), fetch from
+Artifact Hub — the package page links the values schema and defaults:
+
+```
+https://artifacthub.io/packages/helm/<org>/<chart>
+```
+
+For a local chart artifact, read `values.yaml` and `README.md` from the chart
+directory directly.
+
+### 2. Classify every relevant value into three tiers
+
+Present this as a table you fill in for the user (one row per value that matters).
+Do NOT try to expose everything — most chart values stay hardcoded.
+
+| Tier | What belongs here | How it maps in the spec |
+|------|-------------------|-------------------------|
+| **Tier 1 — Recommended customer-facing** | Credentials/auth; instance sizing; replica count; storage size; product version (where safe to change); TLS enablement; customer-relevant feature toggles | Becomes an `apiParameter`, wired into `chartValues` via `$var.<key>` |
+| **Tier 2 — Optional / advanced** | Tuning knobs (memory policies, JVM opts); extra config blocks; metrics exporters; plugin lists | Offer to the user, but **default to hardcoding** in `chartValues` |
+| **Tier 3 — Never expose (platform- or ISV-owned)** | Node affinity/placement; `storageClass`; image registry/repository overrides; service `type`/annotations; subchart wiring internals; clustering topology internals | Keep out of `apiParameters` entirely — Omnistrate or you own these |
+
+**Why Tier 3 is never exposed:**
+
+- **Node affinity / placement** is Omnistrate-owned — exposing it lets a customer
+  break scheduling onto managed nodes (see Pod placement section below).
+- **`storageClass`, image registry/repository** overrides break the managed
+  substrate and image-pull path.
+- **Service `type` / annotations** are how Omnistrate wires endpoints, DNS, and
+  load balancers — exposing them breaks endpoint provisioning.
+- **Subchart wiring / clustering topology internals** are internal contracts; a
+  customer changing them produces an unsupported deployment.
+
+### 3. Per-parameter mapping guidance
+
+For each Tier-1 value, choose the right `apiParameters` properties. Property
+semantics are copied from `docs/build-guides/api-params.md`:
+
+| Property | Type | Use it for |
+|----------|------|-----------|
+| `key` | string | Unique key referenced as `$var.<key>` in `chartValues` (same service) |
+| `name` | string | Display name shown in the Customer Portal |
+| `description` | string | Customer-facing explanation |
+| `type` | string | `String`, `Float64`, `Boolean`, `Password`, `Json` (see api-params types) |
+| `required` | boolean | If `false`, `defaultValue` is **mandatory** |
+| `defaultValue` | string | Always a **quoted string**, even for numeric/boolean types |
+| `export` | boolean | If `true`, returned on the describe call (customer can read it back) |
+| `modifiable` | boolean | If `true`, can be changed on a running instance (`helm upgrade`) |
+| `options` | array | Finite set of allowed values (dropdown) — numbers/strings/JSON |
+| `labeledOptions` | object | Labeled key→value choices when the display label differs from the value |
+| `limits` | object | Numeric min/max (or string length) bounds |
+| `regex` | string | Validation pattern (string types only) |
+| `tabIndex` | integer | Display order — lower first; put the most important parameters first |
+| `scope` | object | Restrict to specific `CloudProviders` (e.g. an AWS-only knob) |
+
+Concrete choices:
+
+- **Secrets / credentials** → `type: Password`, `modifiable: false`, `export: false`.
+- **Finite choices** (engine mode, log level) → `options` or `labeledOptions`.
+- **Numeric bounds** (replica count, storage GiB) → `limits` (min/max).
+- **Formats** (usernames, DB names) → `regex` (e.g. `^[a-z0-9_]{8,32}$`).
+- **Live-safe values only** get `modifiable: true`; anything whose change would
+  need a re-provision stays `modifiable: false`.
+- **`export: true`** only for values the customer must read back (endpoints,
+  usernames) — never for passwords.
+- Order with `tabIndex` so the most important parameter appears first.
+
+### 4. Process rule
+
+Present the tier table for approval **first**. Then implement the approved
+Tier-1 parameters **one at a time** — one parameter per build-deploy cycle, per
+the one-change-per-cycle rule in SKILL.md. Do not batch multiple new parameters
+into a single build.
+
+---
+
+## External dependencies — chart defaults vs managed cloud services
+
+Many charts bundle their own dependencies: a `postgresql` subchart, a bundled
+`redis`, a `minio` for object storage, or in-cluster PVCs. Detect these before
+recommending a parameter set:
+
+- **Subchart entries** in `Chart.yaml` (`dependencies:` list).
+- **`<dep>.enabled` toggles** in values (e.g. `postgresql.enabled: true`).
+- **`externalDatabase`-style value blocks** (host/port/user/password fields that
+  point the chart at an out-of-cluster service).
+
+When the chart provides a **working default** for the dependency, present a
+**SUGGESTION — never force**. Two options:
+
+- **Option A (default): keep the chart-bundled dependency in-cluster.** Simplest;
+  no extra cloud cost, no extra IAM. Good for dev/test and lower tiers. The data
+  lives on cluster PVCs.
+- **Option B (suggested for production tiers): replace it with a
+  terraform-managed cloud service** — RDS for PostgreSQL/MySQL, ElastiCache for
+  Redis/Memcached, S3 for object storage. Wire it in via an `internal: true`
+  terraform service, `dependsOn`, and `{{ $<tfService>.out.<key> }}` in
+  `chartValues`: disable the subchart (`<dep>.enabled: false`) and set the
+  chart's external-endpoint values from terraform outputs.
+
+**Decision factors** to walk through with the user:
+
+- **Durability / SLA** — managed services carry provider durability + backup SLAs;
+  in-cluster PVCs do not.
+- **Backup story** — RDS/ElastiCache snapshots vs. chart-managed backups.
+- **Cost** — managed services add per-hour cost and possibly cross-AZ egress.
+- **Egress** — traffic between the cluster and the managed service may cross AZ.
+- **BYOC implication** — terraform runs in **whichever account the deployment
+  model targets** (your account for hosted; the customer's account for BYOC), so
+  the managed service and its cost land there too.
+
+### Worked pattern — disable bundled subchart, point at terraform-managed RDS
+
+The chart bundles PostgreSQL via a `postgresql` subchart. Disable it and feed the
+chart's `externalDatabase` block from a terraform service named `dbInfra`
+(the terraform module + outputs live in
+[TERRAFORM_KUSTOMIZE_REFERENCE.md](TERRAFORM_KUSTOMIZE_REFERENCE.md#managed-service-modules-for-chart-dependencies-rds--elasticache--s3)):
+
+```yaml
+services:
+  - name: dbInfra              # internal terraform service — provisions RDS
+    internal: true
+    # terraformConfigurations: ... (see TERRAFORM_KUSTOMIZE_REFERENCE.md)
+
+  - name: App
+    dependsOn:
+      - dbInfra
+    helmChartConfiguration:
+      chartName: my-app
+      chartVersion: 1.4.2
+      chartRepoName: myrepo
+      chartRepoURL: https://charts.example.com
+      chartValues:
+        postgresql:
+          enabled: false                                   # disable the bundled subchart
+        externalDatabase:
+          host: "{{ $dbInfra.out.db_endpoints_1 }}"        # terraform output ({{ }} for concatenation-safe consumption)
+          port: 5432
+          user: "appuser"
+          database: "appdb"
+          password: $secret.APP_DB_PASSWORD
+```
+
+The `{{ $<tfService>.out.<key> }}` form (with `{{ }}`) is the correct way to
+consume a sibling terraform output in `chartValues` — see the Templating section
+above. Copy the RDS / ElastiCache / S3 terraform module code from
+[TERRAFORM_KUSTOMIZE_REFERENCE.md § Managed-service modules for chart
+dependencies](TERRAFORM_KUSTOMIZE_REFERENCE.md#managed-service-modules-for-chart-dependencies-rds--elasticache--s3).
+
+---
+
 ## Pod placement (CRITICAL)
 
 **Chart-created pods are NOT auto-placed by Omnistrate.** Omnistrate schedules only

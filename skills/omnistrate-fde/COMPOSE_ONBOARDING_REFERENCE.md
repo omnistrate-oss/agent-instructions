@@ -227,6 +227,17 @@ Add parameters ONE AT A TIME:
 - Add action hooks
 - **RE-BUILD → RE-DEPLOY → Validate**
 
+### Customization discovery for compose services
+
+The same three-tier customization-discovery approach applies to compose services —
+inspect **environment variables and images** (rather than chart values) and
+classify each into **Tier 1** (recommended customer-facing → `x-omnistrate-api-params`),
+**Tier 2** (optional/advanced → default to hardcoded), and **Tier 3** (platform/ISV-owned
+→ never expose, e.g. placement, storage class, registry). Present the tier table for
+approval, then implement approved Tier-1 parameters one per build-deploy cycle. The same
+distribution flow applies afterward (release, portal, optional billing, then generate
+`DEPLOYMENT_OVERVIEW.md`) — see [DISTRIBUTION_REFERENCE.md](DISTRIBUTION_REFERENCE.md).
+
 ## Image Registry Authentication
 
 ### Testing Image Accessibility
