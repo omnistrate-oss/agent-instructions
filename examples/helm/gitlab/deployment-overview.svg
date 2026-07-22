@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800" font-family="Helvetica, Arial, sans-serif">
+  <!--
+    GitLab deployment overview — derived from omnistrate-architecture-base.svg.
+    Model: hostedDeployment (Starter tier). See deployment-overview-byoc.svg for BYOC tier.
+    Edits applied per DISTRIBUTION_REFERENCE.md recipe:
+      #diagram-title -> GitLab
+      #diagram-subtitle -> hostedDeployment + byoaDeployment (multi-model)
+      #boundary-label -> Your Cloud Account — hostedDeployment (Starter tier)
+      #workload-slot-1 visible, label -> GitLab (Helm chart)
+      #workload-slot-2 visible, label -> gitlabManagedInfra (Terraform)
+      #managed-services un-hidden; #svc-rds, #svc-cache, #svc-s3 all un-hidden and relabeled
+      #param-line-1..6 -> Tier-1 parameters
+  -->
+
+  <!-- background -->
+  <rect x="0" y="0" width="1200" height="800" fill="#ffffff"/>
+
+  <!-- ===================== TITLE ===================== -->
+  <g id="title">
+    <text id="diagram-title" x="40" y="44" font-size="24" font-weight="bold" fill="#111827">Service deployment overview — GitLab</text>
+    <text id="diagram-subtitle" x="40" y="70" font-size="15" fill="#6b7280">Deployment model: hostedDeployment (Starter) + byoaDeployment (Enterprise/BYOC)</text>
+  </g>
+
+  <!-- ===================== CONTROL PLANE ===================== -->
+  <g id="control-plane">
+    <rect x="40" y="110" width="330" height="210" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+    <text x="205" y="138" font-size="16" font-weight="bold" fill="#2563eb" text-anchor="middle">Omnistrate Control Plane</text>
+    <text x="205" y="160" font-size="12" fill="#6b7280" text-anchor="middle">(runs in Omnistrate's account)</text>
+
+    <rect x="62" y="176" width="286" height="34" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1"/>
+    <text x="205" y="198" font-size="13" fill="#1e3a8a" text-anchor="middle">API + Fleet orchestration</text>
+
+    <rect x="62" y="218" width="286" height="34" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1"/>
+    <text id="portal-label" x="205" y="240" font-size="13" fill="#1e3a8a" text-anchor="middle">Customer Portal (auto-deployed per environment)</text>
+
+    <rect x="62" y="260" width="286" height="34" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1"/>
+    <text x="205" y="282" font-size="13" fill="#1e3a8a" text-anchor="middle">Billing / Metering</text>
+  </g>
+
+  <!-- ===================== CUSTOMERS ===================== -->
+  <g id="customers">
+    <rect x="40" y="400" width="200" height="90" rx="10" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/>
+    <text x="140" y="432" font-size="15" font-weight="bold" fill="#16a34a" text-anchor="middle">Your customers</text>
+    <text x="140" y="456" font-size="11" fill="#166534" text-anchor="middle">sign up / subscribe /</text>
+    <text x="140" y="472" font-size="11" fill="#166534" text-anchor="middle">create instances</text>
+    <!-- arrow from customers up into the portal -->
+    <path id="customer-portal-link" d="M 150 400 L 180 250" fill="none" stroke="#16a34a" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+  </g>
+
+  <!-- ===================== DATA PLANE BOUNDARY ===================== -->
+  <g id="dataplane-boundary">
+    <rect x="430" y="110" width="620" height="580" rx="14" fill="#fafafa" stroke="#111827" stroke-width="2" stroke-dasharray="1 0"/>
+    <text id="boundary-label" x="450" y="138" font-size="14" font-weight="bold" fill="#111827">Your Cloud Account — hostedDeployment (Starter tier)</text>
+
+    <!-- DEPLOYMENT CELL -->
+    <g id="deployment-cell">
+      <rect x="454" y="158" width="572" height="332" rx="10" fill="#f9fafb" stroke="#6b7280" stroke-width="1.5"/>
+      <text x="470" y="182" font-size="14" font-weight="bold" fill="#374151">Deployment Cell — Kubernetes cluster (AWS us-east-1)</text>
+
+      <!-- Omnistrate agents inside the cell -->
+      <g id="dp-agent">
+        <rect x="470" y="198" width="240" height="44" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+        <text x="590" y="220" font-size="13" font-weight="bold" fill="#1e3a8a" text-anchor="middle">Omnistrate agents</text>
+        <text x="590" y="236" font-size="11" fill="#1e3a8a" text-anchor="middle">(outbound only)</text>
+      </g>
+
+      <!-- Workload slots -->
+      <g id="workloads">
+        <text x="470" y="272" font-size="12" fill="#6b7280">Workloads</text>
+        <!-- Slot 1: GitLab Helm chart -->
+        <g id="workload-slot-1">
+          <rect x="470" y="282" width="140" height="60" rx="6" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/>
+          <text id="workload-label-1" x="540" y="308" font-size="11" fill="#166534" text-anchor="middle">GitLab</text>
+          <text x="540" y="324" font-size="10" fill="#166534" text-anchor="middle">(Helm chart 10.2.0)</text>
+        </g>
+        <!-- Slot 2: gitlabManagedInfra Terraform -->
+        <g id="workload-slot-2">
+          <rect x="626" y="282" width="140" height="60" rx="6" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.5"/>
+          <text id="workload-label-2" x="696" y="308" font-size="11" fill="#713f12" text-anchor="middle">gitlabManagedInfra</text>
+          <text x="696" y="324" font-size="10" fill="#713f12" text-anchor="middle">(Terraform internal)</text>
+        </g>
+        <!-- Slot 3: hidden -->
+        <g id="workload-slot-3" display="none">
+          <rect x="742" y="282" width="120" height="60" rx="6" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/>
+          <text id="workload-label-3" x="802" y="316" font-size="12" fill="#166534" text-anchor="middle">workload</text>
+        </g>
+        <!-- Slot 4: hidden -->
+        <g id="workload-slot-4" display="none">
+          <rect x="878" y="282" width="120" height="60" rx="6" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/>
+          <text id="workload-label-4" x="938" y="316" font-size="12" fill="#166534" text-anchor="middle">workload</text>
+        </g>
+      </g>
+
+      <!-- Cell amenities note -->
+      <g id="cell-amenities">
+        <rect x="470" y="418" width="556" height="52" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="1" stroke-dasharray="4 3"/>
+        <text x="748" y="440" font-size="12" font-weight="bold" fill="#374151" text-anchor="middle">cell amenities</text>
+        <text x="748" y="458" font-size="11" fill="#6b7280" text-anchor="middle">(nginx-ingress, cert-manager, DNS, CSI — Omnistrate-managed)</text>
+      </g>
+    </g>
+
+    <!-- MANAGED SERVICES STRIP — un-hidden (all three: RDS + ElastiCache + S3) -->
+    <g id="managed-services">
+      <text x="454" y="524" font-size="12" fill="#6b7280">Terraform-managed dependencies (gitlabManagedInfra)</text>
+      <g id="svc-rds">
+        <rect x="454" y="534" width="170" height="60" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="1.5"/>
+        <text x="539" y="558" font-size="12" fill="#374151" text-anchor="middle">Amazon RDS</text>
+        <text x="539" y="574" font-size="11" fill="#6b7280" text-anchor="middle">(PostgreSQL 14, multi-AZ)</text>
+        <path d="M 539 534 L 539 342" fill="none" stroke="#6b7280" stroke-width="1.2" marker-end="url(#arrow-gray)"/>
+      </g>
+      <g id="svc-cache">
+        <rect x="644" y="534" width="170" height="60" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="1.5"/>
+        <text x="729" y="558" font-size="12" fill="#374151" text-anchor="middle">ElastiCache</text>
+        <text x="729" y="574" font-size="11" fill="#6b7280" text-anchor="middle">(Redis 7, 1 replica)</text>
+        <path d="M 729 534 L 696 342" fill="none" stroke="#6b7280" stroke-width="1.2" marker-end="url(#arrow-gray)"/>
+      </g>
+      <g id="svc-s3">
+        <rect x="834" y="534" width="170" height="60" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="1.5"/>
+        <text x="919" y="558" font-size="12" fill="#374151" text-anchor="middle">Amazon S3</text>
+        <text x="919" y="574" font-size="11" fill="#6b7280" text-anchor="middle">(6 buckets: LFS, artifacts...)</text>
+        <path d="M 919 534 L 919 342" fill="none" stroke="#6b7280" stroke-width="1.2" marker-end="url(#arrow-gray)"/>
+      </g>
+    </g>
+
+    <!-- INGRESS (LB / DNS / TLS) at boundary edge -->
+    <g id="ingress">
+      <rect x="454" y="614" width="240" height="60" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+      <text x="574" y="640" font-size="13" font-weight="bold" fill="#1e3a8a" text-anchor="middle">LB / DNS / TLS</text>
+      <text x="574" y="658" font-size="11" fill="#1e3a8a" text-anchor="middle">(platform-managed ingress — HTTPS 443)</text>
+      <!-- arrow out to the customers actor -->
+      <path id="endpoint-arrow" d="M 454 644 L 240 470" fill="none" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+      <text id="endpoint-label" x="300" y="560" font-size="11" fill="#2563eb">customer endpoint</text>
+    </g>
+  </g>
+
+  <!-- ===================== CONTROL PLANE <-> DP-AGENT LINK ===================== -->
+  <path id="cp-link" d="M 370 216 L 470 220" fill="none" stroke="#2563eb" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrow-blue)"/>
+  <text id="cp-link-label" x="378" y="205" font-size="10" fill="#2563eb">outbound mTLS/gRPC — no inbound</text>
+
+  <!-- ===================== AIR-GAP NOTE (not used — live control plane) ===================== -->
+  <g id="airgap-note" display="none">
+    <rect x="376" y="60" width="220" height="56" rx="6" fill="#fef3c7" stroke="#6b7280" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <text x="486" y="84" font-size="11" fill="#374151" text-anchor="middle">signed installer artifact</text>
+    <text x="486" y="100" font-size="11" fill="#374151" text-anchor="middle">delivered offline</text>
+    <path d="M 486 116 L 550 198" fill="none" stroke="#6b7280" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arrow-gray)"/>
+  </g>
+
+  <!-- ===================== CUSTOMER CONTROLS PANEL ===================== -->
+  <g id="customer-controls">
+    <rect x="1070" y="110" width="110" height="440" rx="10" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/>
+    <text x="1125" y="136" font-size="12" font-weight="bold" fill="#16a34a" text-anchor="middle">Customer controls</text>
+    <text x="1125" y="152" font-size="10" fill="#166534" text-anchor="middle">(API parameters)</text>
+    <text id="param-line-1" x="1078" y="184" font-size="10" fill="#166534">• edition = ee</text>
+    <text id="param-line-2" x="1078" y="208" font-size="10" fill="#166534">• rootPassword</text>
+    <text id="param-line-3" x="1078" y="232" font-size="10" fill="#166534">• instanceType</text>
+    <text id="param-line-4" x="1078" y="256" font-size="10" fill="#166534">• webReplicas=2</text>
+    <text id="param-line-5" x="1078" y="280" font-size="10" fill="#166534">• dbClass</text>
+    <text id="param-line-6" x="1078" y="304" font-size="10" fill="#166534">• redisNode</text>
+    <line x1="1082" y1="500" x2="1168" y2="500" stroke="#16a34a" stroke-width="1"/>
+    <text x="1082" y="520" font-size="9" fill="#6b7280">Everything else:</text>
+    <text x="1082" y="533" font-size="9" fill="#6b7280">ISV defaults +</text>
+    <text x="1082" y="546" font-size="9" fill="#6b7280">platform-managed</text>
+  </g>
+
+  <!-- ===================== LEGEND ===================== -->
+  <g id="legend">
+    <rect x="40" y="620" width="360" height="160" rx="10" fill="#ffffff" stroke="#d1d5db" stroke-width="1"/>
+    <text x="60" y="646" font-size="13" font-weight="bold" fill="#111827">Legend</text>
+
+    <rect x="60" y="660" width="18" height="14" rx="3" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+    <text x="88" y="672" font-size="12" fill="#374151">Platform-managed (Omnistrate)</text>
+
+    <rect x="60" y="684" width="18" height="14" rx="3" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/>
+    <text x="88" y="696" font-size="12" fill="#374151">Customer-controlled</text>
+
+    <rect x="60" y="708" width="18" height="14" rx="3" fill="#f3f4f6" stroke="#6b7280" stroke-width="1.5"/>
+    <text x="88" y="720" font-size="12" fill="#374151">Terraform-managed cloud services</text>
+
+    <rect x="60" y="732" width="18" height="14" rx="3" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.5"/>
+    <text x="88" y="744" font-size="12" fill="#374151">Internal Terraform service (ISV-defined)</text>
+
+    <line x1="60" y1="762" x2="78" y2="762" stroke="#2563eb" stroke-width="1.5" stroke-dasharray="6 4"/>
+    <text x="88" y="766" font-size="12" fill="#374151">Control traffic (outbound only)</text>
+  </g>
+
+  <!-- ===================== ARROW MARKERS ===================== -->
+  <defs>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#16a34a"/>
+    </marker>
+    <marker id="arrow-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6b7280"/>
+    </marker>
+  </defs>
+</svg>

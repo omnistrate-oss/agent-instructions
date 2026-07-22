@@ -1,0 +1,258 @@
+# yaml-language-server: $schema=https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json
+# Omnistrate ServicePlanSpec — PostgreSQL (Bitnami chart), BYOC deployment model.
+# Deployment model: byoaDeployment (customer AWS accounts).
+# Chart: bitnami/postgresql v18.8.0 (app v18.4.0).
+# Intake: artifact=helm, deployment=BYOC (byoaDeployment), cloud=AWS us-east-1.
+# Field casing per DEPLOYMENT_MODELS_REFERENCE.md: ServicePlanSpec uses UpperCamel
+#   with AWS acronym fully uppercased in ARN field: AwsAccountId + AWSBootstrapRoleAccountArn.
+# SIMULATED — no omnistrate-ctl available; build/deploy steps noted but not executed.
+#
+# Placeholder account values:
+#   <PROVISIONER_AWS_ACCOUNT_ID>  — your (ISV/provisioner) AWS account ID
+#   <CUSTOMER_AWS_ACCOUNT_ID>     — filled at customer-account onboarding time (not in spec)
+#
+# Customer account-connect flow (BYOC — happens at deploy time, not in the spec):
+#   1. Customer signs up in the Customer Portal and subscribes.
+#   2. Customer clicks "Connect Cloud Account" → portal walks them through AWS CloudFormation.
+#      Or ISV-assisted via CLI (per DEPLOYMENT_MODELS_REFERENCE.md §BYOC):
+#        omnistrate-ctl account customer create \
+#          --service="PostgreSQL SaaS" --environment=Prod \
+#          --plan="PostgreSQL" --customer-email=<customer@example.com> \
+#          --aws-account-id=<CUSTOMER_AWS_ACCOUNT_ID>
+#   3. Customer runs the CloudFormation stack in their account (link from portal/CLI output).
+#      For --skip-wait flow: omnistrate-ctl account describe <account-config-id>  # wait for READY
+#   4. First instance in account+region bootstraps the deployment cell.
+#   5. Subsequent instances in the same account+region reuse the cell.
+#   6. Deploy into customer account:
+#        omnistrate-ctl instance create \
+#          --service="PostgreSQL SaaS" --environment=Prod --plan="PostgreSQL" \
+#          --cloud-provider=aws --region=us-east-1 \
+#          --customer-account-id=<customer-account-instance-id> \
+#          --resource="PostgreSQL Cluster" \
+#          --param '{"postgresPassword":"<secret>","dbName":"appdb","instanceType":"t4g.medium","storageSizeGi":"50","architecture":"replication","readReplicaCount":"1"}' \
+#          --wait
+
+name: PostgreSQL SaaS
+
+tenancyType: CUSTOM_TENANCY
+
+deployment:
+  # Schema-canonical UpperCamel casing for ServicePlanSpec byoaDeployment.
+  # Source: DEPLOYMENT_MODELS_REFERENCE.md §BYOC — ServicePlanSpec context.
+  # AwsAccountId = provisioner/ISV account that runs the Omnistrate control infra.
+  # AWSBootstrapRoleAccountArn = bootstrap role in the provisioner account.
+  byoaDeployment:
+    AwsAccountId: "<PROVISIONER_AWS_ACCOUNT_ID>"
+    AWSBootstrapRoleAccountArn: "arn:aws:iam::<PROVISIONER_AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role"
+
+services:
+  - name: PostgreSQL Cluster
+    # Ports: 5432 (primary) and 5433 (read replica / pgBouncer — chart default).
+    # Per HELM_ONBOARDING_REFERENCE.md §"LoadBalancer service with external-dns".
+    network:
+      ports:
+        - 5432
+
+    # Compute: instance type parameterized (Tier-1). Per skeleton in HELM_ONBOARDING_REFERENCE.md.
+    compute:
+      instanceTypes:
+        - apiParam: instanceType
+          cloudProvider: aws
+
+    # Helm chart configuration.
+    # Source: HELM_ONBOARDING_REFERENCE.md §helmChartConfiguration fields.
+    # chartVersion pinned to 18.8.0 (latest at onboarding time, app v18.4.0).
+    # Common mistake avoided: chartVersion must be pinned — unpinned causes drift.
+    helmChartConfiguration:
+      chartName: postgresql
+      chartVersion: "18.8.0"
+      chartRepoName: bitnami
+      chartRepoURL: https://charts.bitnami.com/bitnami
+
+      # Affinity injection: enabled (default). Omnistrate automatically injects
+      # node-affinity + pod-anti-affinity into all StatefulSets rendered by the chart.
+      # Source: HELM_ONBOARDING_REFERENCE.md §"Pod placement" §"Option A".
+      chartAffinityControl:
+        enableInjection: true
+        enableSharedHost: true
+
+      # runtimeConfiguration: wait=true so Omnistrate waits for StatefulSet pods
+      # before marking install successful. 10-minute timeout (PostgreSQL init can be slow).
+      # Source: HELM_ONBOARDING_REFERENCE.md §runtimeConfiguration.
+      runtimeConfiguration:
+        wait: true
+        timeoutNanos: 600000000000   # 10 minutes
+        reuseValues: true
+
+      # chartValues: $var.* references must match apiParameters keys on this service.
+      # Bare form (no {{ }}) used inside chartValues. Source: HELM_ONBOARDING_REFERENCE.md §Templating.
+      # Tier-3 values (storageClass, image.registry, service.type, affinity) are NOT exposed.
+      chartValues:
+        # Architecture: standalone (default) or replication. Customer-facing Tier-1.
+        architecture: $var.architecture
+
+        auth:
+          # Postgres admin password — Password type, not exported. Tier-1.
+          postgresPassword: $var.postgresPassword
+          # Application database name. Tier-1.
+          database: $var.dbName
+          # Application username. Tier-1.
+          username: $var.dbUser
+          # Application user password. Password type. Tier-1.
+          password: $var.dbPassword
+
+        primary:
+          # Endpoint annotation so external-dns creates the per-instance hostname.
+          # Source: HELM_ONBOARDING_REFERENCE.md §"LoadBalancer service with external-dns".
+          # Bare $sys.* (no {{ }}) in chartValues.
+          service:
+            type: LoadBalancer
+            annotations:
+              external-dns.alpha.kubernetes.io/hostname: $sys.network.externalClusterEndpoint
+          persistence:
+            # Storage size in GiB. Tier-1.
+            size: $var.storageSizeGi
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+
+        readReplicas:
+          # Replica count — meaningful only when architecture=replication.
+          # When architecture=standalone this value is ignored by the chart.
+          replicaCount: $var.readReplicaCount
+          service:
+            type: LoadBalancer
+            annotations:
+              external-dns.alpha.kubernetes.io/hostname: $sys.network.externalClusterEndpoint
+          persistence:
+            size: $var.storageSizeGi
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+
+    # Endpoint configuration — surfaces connection details to customers via portal + API.
+    # Source: HELM_ONBOARDING_REFERENCE.md §endpointConfiguration.
+    # {{ }} required for concatenation in host values.
+    endpointConfiguration:
+      writer:
+        host: "$sys.network.externalClusterEndpoint"
+        ports:
+          - 5432
+        primary: true
+        networkingType: PUBLIC
+      reader:
+        # Chart names the read-replica LB by a separate hostname prefix — ISV should
+        # configure a stable reader endpoint here once chart Service names are confirmed.
+        # TODO-GAP: chart-created Service name for read replica not confirmed without
+        # a live deploy; using externalClusterEndpoint as placeholder.
+        host: "reader-{{ $sys.network.externalClusterEndpoint }}"
+        ports:
+          - 5432
+        primary: false
+        networkingType: PUBLIC
+
+    # API parameters: Tier-1 customer-facing values approved per CUSTOMIZATION.md.
+    # All defaultValue are quoted strings (even numeric types). Source: HELM_ONBOARDING_REFERENCE.md.
+    apiParameters:
+      - key: instanceType
+        name: Instance Type
+        description: "AWS instance type for PostgreSQL nodes (e.g. t4g.medium, r6g.large)"
+        type: String
+        modifiable: true
+        required: false
+        export: true
+        defaultValue: "t4g.medium"
+        tabIndex: 1
+        options:
+          - "t4g.medium"
+          - "t4g.large"
+          - "r6g.large"
+          - "r6g.xlarge"
+          - "r6g.2xlarge"
+
+      - key: architecture
+        name: Architecture
+        description: "PostgreSQL deployment architecture: standalone (single node) or replication (primary + read replicas)"
+        type: String
+        modifiable: false
+        required: false
+        export: true
+        defaultValue: "standalone"
+        tabIndex: 2
+        options:
+          - "standalone"
+          - "replication"
+
+      - key: postgresPassword
+        name: Postgres Admin Password
+        description: "Password for the postgres superuser account"
+        type: Password
+        modifiable: false
+        required: true
+        export: false
+        tabIndex: 3
+
+      - key: dbName
+        name: Database Name
+        description: "Name of the application database to create on first run"
+        type: String
+        modifiable: false
+        required: false
+        export: true
+        defaultValue: "appdb"
+        regex: "^[a-z][a-z0-9_]{0,62}$"
+        tabIndex: 4
+
+      - key: dbUser
+        name: Database Username
+        description: "Name of the application database user"
+        type: String
+        modifiable: false
+        required: false
+        export: true
+        defaultValue: "appuser"
+        regex: "^[a-z][a-z0-9_]{0,62}$"
+        tabIndex: 5
+
+      - key: dbPassword
+        name: Database User Password
+        description: "Password for the application database user"
+        type: Password
+        modifiable: false
+        required: true
+        export: false
+        tabIndex: 6
+
+      - key: storageSizeGi
+        name: Storage Size (GiB)
+        description: "Persistent volume size in GiB for each PostgreSQL node"
+        type: Float64
+        modifiable: true
+        required: false
+        export: true
+        defaultValue: "50"
+        limits:
+          min: 10
+          max: 1000
+        tabIndex: 7
+
+      - key: readReplicaCount
+        name: Read Replica Count
+        description: "Number of read replicas (applies only when architecture=replication)"
+        type: Float64
+        modifiable: true
+        required: false
+        export: true
+        defaultValue: "1"
+        limits:
+          min: 0
+          max: 5
+        tabIndex: 8

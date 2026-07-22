@@ -1,0 +1,192 @@
+# yaml-language-server: $schema=https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json
+#
+# Apache Kafka (Bitnami Helm chart) — BYOC deployment
+# Chart: bitnami/kafka version 32.4.3 (appVersion 4.0.0, KRaft mode, no Zookeeper)
+#
+# Deployment model: byoaDeployment — runs in the customer's own AWS account.
+# Customer account onboarding flow: see DEPLOYMENT_MODELS_REFERENCE.md §BYOC.
+#
+# Field casing: ServicePlanSpec context — UpperCamel (AwsAccountId, AWSBootstrapRoleAccountArn).
+# Sourced from: DEPLOYMENT_MODELS_REFERENCE.md §Hosted (hostedDeployment → byoaDeployment swap)
+#               and HELM_ONBOARDING_REFERENCE.md (skeleton, helmChartConfiguration, apiParameters).
+
+name: Apache Kafka
+deployment:
+  byoaDeployment:
+    # Replace with your (ISV / provisioner) AWS account IDs and ARNs.
+    # This is the provisioner account Omnistrate uses to bootstrap the customer's
+    # deployment cell; the workloads land in the customer's account.
+    AwsAccountId: "<PROVISIONER_AWS_ACCOUNT_ID>"
+    AWSBootstrapRoleAccountArn: "arn:aws:iam::<PROVISIONER_AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role"
+
+services:
+  - name: Kafka Cluster
+    # TCP port 9092 (SASL_PLAINTEXT client listener) surfaced to customers.
+    # The Bitnami chart creates a headless Service and a per-broker Service by
+    # default; external access requires externalAccess.enabled=true with a
+    # per-broker LoadBalancer, which is wired here via the external listener (9095)
+    # and advertised via $sys.network.externalClusterEndpoint.
+    network:
+      ports:
+        - 9092
+    compute:
+      instanceTypes:
+        - apiParam: instanceType
+          cloudProvider: aws
+    helmChartConfiguration:
+      chartName: kafka
+      chartVersion: "32.4.3"
+      chartRepoName: bitnami
+      chartRepoURL: https://charts.bitnami.com/bitnami
+      # Automatic affinity injection is left enabled (default: enableInjection: true).
+      # Omnistrate injects omnistrate.com/managed-by, topology.kubernetes.io/region,
+      # omnistrate.com/resource, and omnistrate.com/version affinity into every
+      # StatefulSet the chart creates (controller pods, broker-only pods).
+      runtimeConfiguration:
+        wait: true
+        timeoutNanos: 1200000000000   # 20 minutes — Kafka pods are slow to become ready
+        reuseValues: true
+      chartValues:
+        # KRaft mode — no Zookeeper (default in chart 32.x)
+        # controller nodes act as combined controller+broker when broker.replicaCount=0
+        controller:
+          replicaCount: $var.controllerReplicaCount
+          persistence:
+            enabled: true
+            size: $var.storageSizeGi
+        # broker-only replicas (set to 0 = combined mode; >0 = dedicated brokers)
+        broker:
+          replicaCount: $var.brokerReplicaCount
+          persistence:
+            enabled: true
+            size: $var.storageSizeGi
+        # Client listener: SASL_PLAINTEXT on 9092 (chart default)
+        listeners:
+          client:
+            containerPort: 9092
+            protocol: SASL_PLAINTEXT
+            name: CLIENT
+          # External listener for out-of-cluster access.
+          # The chart creates one LoadBalancer Service per broker when
+          # externalAccess.enabled=true. We wire the Omnistrate external
+          # cluster endpoint as the advertised hostname.
+          external:
+            containerPort: 9095
+            protocol: SASL_PLAINTEXT
+            name: EXTERNAL
+        # SASL credentials (Tier-1 customer-facing)
+        sasl:
+          enabledMechanisms: PLAIN,SCRAM-SHA-256,SCRAM-SHA-512
+          interBrokerMechanism: PLAIN
+          controllerMechanism: PLAIN
+          client:
+            users:
+              - $var.kafkaUsername
+            passwords: $var.kafkaPassword
+          interbroker:
+            user: inter_broker_user
+            password: $var.interBrokerPassword
+          controller:
+            user: controller_user
+            password: $var.controllerPassword
+        # External access: one LB per broker, advertising the Omnistrate endpoint.
+        # NOTE: for stateful TCP clusters (Kafka), per-broker advertised listeners
+        # require each broker to announce its own stable hostname. The chart supports
+        # this via externalAccess.controller.service.annotations and
+        # advertisedListeners override, but the per-broker stable-hostname pattern
+        # (e.g. broker-0.<base>, broker-1.<base>) is NOT described in
+        # HELM_ONBOARDING_REFERENCE.md — see GAP-001 in kafka-gaps.md.
+        # For a single-broker cluster the single externalClusterEndpoint suffices.
+        externalAccess:
+          enabled: true
+          controller:
+            service:
+              type: LoadBalancer
+              ports:
+                external: 9095
+              annotations:
+                external-dns.alpha.kubernetes.io/hostname: $sys.network.externalClusterEndpoint
+    endpointConfiguration:
+      kafka:
+        host: "$sys.network.externalClusterEndpoint"
+        ports:
+          - 9092
+        primary: true
+        networkingType: PUBLIC
+    apiParameters:
+      - key: instanceType
+        name: Instance Type
+        description: EC2 instance type for Kafka nodes
+        type: String
+        modifiable: true
+        required: false
+        export: true
+        defaultValue: "m6i.large"
+        tabIndex: 1
+      - key: controllerReplicaCount
+        name: Controller/Broker Count
+        description: Number of KRaft controller-eligible nodes (also act as brokers in combined mode when brokerReplicaCount=0)
+        type: Float64
+        modifiable: true
+        required: false
+        export: true
+        defaultValue: "3"
+        limits:
+          min: 1
+          max: 9
+        tabIndex: 2
+      - key: brokerReplicaCount
+        name: Dedicated Broker Count
+        description: Number of broker-only nodes (0 = combined controller+broker mode)
+        type: Float64
+        modifiable: true
+        required: false
+        export: true
+        defaultValue: "0"
+        limits:
+          min: 0
+          max: 9
+        tabIndex: 3
+      - key: storageSizeGi
+        name: Storage Size (GiB)
+        description: Persistent volume size per Kafka node
+        type: String
+        modifiable: false
+        required: false
+        export: true
+        defaultValue: "50Gi"
+        tabIndex: 4
+      - key: kafkaUsername
+        name: Kafka Client Username
+        description: Username for Kafka client authentication (SASL/PLAIN)
+        type: String
+        modifiable: false
+        required: false
+        export: true
+        defaultValue: "kafka-user"
+        regex: "^[a-zA-Z0-9_-]{3,32}$"
+        tabIndex: 5
+      - key: kafkaPassword
+        name: Kafka Client Password
+        description: Password for Kafka client authentication
+        type: Password
+        modifiable: false
+        required: true
+        export: false
+        tabIndex: 6
+      - key: interBrokerPassword
+        name: Inter-Broker Password
+        description: Internal SASL password for inter-broker communication
+        type: Password
+        modifiable: false
+        required: true
+        export: false
+        tabIndex: 7
+      - key: controllerPassword
+        name: Controller Password
+        description: Internal SASL password for KRaft controller communication
+        type: Password
+        modifiable: false
+        required: true
+        export: false
+        tabIndex: 8

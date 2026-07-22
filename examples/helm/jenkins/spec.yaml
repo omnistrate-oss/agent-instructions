@@ -1,0 +1,97 @@
+# yaml-language-server: $schema=https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json
+# Jenkins — BYOC-K8s deployment (customer-managed Kubernetes cluster)
+# Chart: jenkins/jenkins version 5.9.42
+# Deployment model: byoaDeployment — deploy with --cloud-provider byoc-onprem --region on-prem
+# Onboarding guide: skills/omnistrate-fde/HELM_ONBOARDING_REFERENCE.md
+#                   skills/omnistrate-fde/DEPLOYMENT_MODELS_REFERENCE.md §BYOC-K8s
+
+name: Jenkins
+tenancyType: CUSTOM_TENANCY
+
+deployment:
+  byoaDeployment:
+    AwsAccountId: "<PROVISIONER_AWS_ACCOUNT_ID>"
+    AWSBootstrapRoleAccountArn: "arn:aws:iam::<PROVISIONER_AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role"
+
+services:
+  - name: Jenkins Controller
+    network:
+      ports:
+        - 8080
+        - 50000
+    endpointConfiguration:
+      jenkinsUI:
+        host: "$sys.network.internalClusterEndpoint"
+        ports:
+          - 8080
+        primary: true
+        networkingType: INTERNAL
+    helmChartConfiguration:
+      chartName: jenkins
+      chartVersion: 5.9.42
+      chartRepoName: jenkins
+      chartRepoURL: https://charts.jenkins.io
+      runtimeConfiguration:
+        wait: true
+        timeoutNanos: 1800000000000   # 30 minutes — Jenkins plugin installation can be slow
+      chartValues:
+        controller:
+          admin:
+            username: $var.adminUser
+            password: $var.adminPassword
+          installPlugins:
+            - kubernetes:4467.vf26561292824
+            - workflow-aggregator:608.v67378e9d3db_1
+            - git:5.10.1
+            - configuration-as-code:2100.vb_fd699d2a_09c
+          serviceType: ClusterIP
+          servicePort: 8080
+          targetPort: 8080
+          agentListenerServiceType: ClusterIP
+          agentListenerPort: 50000
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "256Mi"
+            limits:
+              cpu: "2000m"
+              memory: "4096Mi"
+        persistence:
+          enabled: true
+          size: $var.persistenceSizeGi
+          accessMode: "ReadWriteOnce"
+          # storageClass is Tier 3 (platform-owned) — never expose to customers
+          # The customer's cluster must have a default StorageClass or one configured via cell amenities
+        agent:
+          enabled: true
+    apiParameters:
+      - key: adminUser
+        name: Admin Username
+        description: Jenkins administrator username
+        type: String
+        modifiable: false
+        required: false
+        export: true
+        defaultValue: "admin"
+        tabIndex: 1
+        regex: "^[a-zA-Z][a-zA-Z0-9_-]{1,31}$"
+      - key: adminPassword
+        name: Admin Password
+        description: Jenkins administrator password (keep secret)
+        type: Password
+        modifiable: false
+        required: true
+        export: false
+        tabIndex: 2
+      - key: persistenceSizeGi
+        name: Persistence Size
+        description: Size of the Jenkins home persistent volume claim (e.g. 8Gi, 20Gi, 50Gi)
+        type: String
+        modifiable: false
+        required: false
+        export: true
+        defaultValue: "8Gi"
+        tabIndex: 3
+        # NOTE: modifiable: false because PVC resizing requires storage class support and
+        # Helm does not resize PVCs by default; changing size on modify would not take effect
+        # without manual PVC expansion. Revisit when a resize workflow is added.

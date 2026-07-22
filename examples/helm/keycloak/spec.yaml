@@ -1,0 +1,156 @@
+# yaml-language-server: $schema=https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json
+# Keycloak — Omnistrate ServicePlanSpec
+# Deployment model: hostedDeployment (AWS us-east-1)
+# Chart: bitnami/keycloak v25.2.0 (Keycloak 26.3.3)
+# PostgreSQL: bundled subchart disabled; replaced by terraform-managed RDS (Option B — ISV decision for prod)
+# Dev-tier note: set postgresql.enabled=true (remove the externalDatabase block) to use the bundled subchart.
+
+name: Keycloak
+tenancyType: CUSTOM_TENANCY
+
+deployment:
+  hostedDeployment:
+    AwsAccountId: "<AWS_ACCOUNT_ID>"
+    AWSBootstrapRoleAccountArn: "arn:aws:iam::<AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role"
+
+services:
+  # ── Internal terraform service: provisions RDS PostgreSQL ──────────────────
+  - name: keycloakDb
+    internal: true
+    terraformConfigurations:
+      configurationPerCloudProvider:
+        aws:
+          terraformPath: /terraform
+          # Use artifactRelativePath for local dev; swap for gitConfiguration in production:
+          artifactRelativePath: terraform
+          variablesValuesFileOverride: |
+            vpc_id      = "{{ $sys.deploymentCell.cloudProviderNetworkID }}"
+            region      = "{{ $sys.deploymentCell.region }}"
+            db_password = "{{ $var.dbPassword }}"
+            resource_id = "{{ $sys.id }}"
+    apiParameters:
+      - key: dbPassword
+        name: Database Password
+        description: Password for the Keycloak PostgreSQL database user
+        type: Password
+        required: true
+        modifiable: false
+        export: false
+
+  # ── Customer-facing Helm service: Keycloak ────────────────────────────────
+  - name: keycloak
+    dependsOn:
+      - keycloakDb
+    compute:
+      instanceTypes:
+        - apiParam: instanceType
+          cloudProvider: aws
+    network:
+      ports:
+        - 80
+        - 443
+    helmChartConfiguration:
+      chartName: keycloak
+      chartVersion: "25.2.0"
+      chartRepoName: bitnami
+      chartRepoURL: https://charts.bitnami.com/bitnami
+      runtimeConfiguration:
+        wait: true
+        timeoutNanos: 1200000000000    # 20 minutes — Keycloak initialisation is slow
+        reuseValues: true
+      chartValues:
+        replicaCount: $var.replicaCount
+
+        auth:
+          adminUser: $var.adminUser
+          adminPassword: $secret.KEYCLOAK_ADMIN_PASSWORD
+
+        # Disable bundled PostgreSQL subchart — replaced by terraform-managed RDS (Option B)
+        # For a dev/test tier, delete these two blocks and set postgresql.enabled: true instead.
+        postgresql:
+          enabled: false
+
+        externalDatabase:
+          host: "{{ $keycloakDb.out.db_endpoint }}"
+          port: 5432
+          user: keycloak_user
+          database: keycloak
+          password: $var.dbPassword      # matches the $var threaded into the tf variablesValuesFileOverride
+
+        service:
+          type: LoadBalancer
+          annotations:
+            external-dns.alpha.kubernetes.io/hostname: $sys.network.externalClusterEndpoint
+
+        # Affinity injection is enabled by default (chartAffinityControl.enableInjection: true)
+        # — Omnistrate auto-injects node affinity onto all Deployments/StatefulSets.
+
+    endpointConfiguration:
+      keycloakConsole:
+        host: "$sys.network.externalClusterEndpoint"
+        ports:
+          - 80
+          - 443
+        primary: true
+        networkingType: PUBLIC
+
+    apiParameters:
+      # --- Tier 1: Recommended customer-facing parameters ---
+      - key: adminUser
+        name: Admin Username
+        description: Keycloak initial admin username
+        type: String
+        required: false
+        modifiable: false
+        export: true
+        defaultValue: "admin"
+        tabIndex: 1
+
+      - key: adminPassword
+        name: Admin Password
+        description: Keycloak initial admin password (stored as a secret)
+        type: Password
+        required: true
+        modifiable: false
+        export: false
+        tabIndex: 2
+
+      - key: replicaCount
+        name: Replica Count
+        description: Number of Keycloak pod replicas
+        type: Float64
+        required: false
+        modifiable: true
+        export: true
+        defaultValue: "1"
+        limits:
+          min: 1
+          max: 10
+        tabIndex: 3
+
+      - key: instanceType
+        name: Instance Type
+        description: EC2 instance type for the Keycloak node
+        type: String
+        required: false
+        modifiable: true
+        export: true
+        defaultValue: "t3.medium"
+        options:
+          - "t3.medium"
+          - "t3.large"
+          - "m5.large"
+          - "m5.xlarge"
+        tabIndex: 4
+
+      # dbPassword is declared on keycloakDb and threaded here via parameterDependencyMap
+      - key: dbPassword
+        name: Database Password
+        description: Password for the RDS PostgreSQL database (managed internally)
+        type: Password
+        required: true
+        modifiable: false
+        export: false
+        tabIndex: 5
+        parameterDependencyMap:
+          keycloakDb: dbPassword

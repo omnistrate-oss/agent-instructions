@@ -1,0 +1,187 @@
+# yaml-language-server: $schema=https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json
+# HashiCorp Vault — BYOC with PrivateLink
+# Deployment model: byoaDeployment (BYOC); PrivateLink selected at customer account-onboarding time via --private-link
+# Cloud: AWS us-east-1 (initial); HA raft mode
+# Chart: hashicorp/vault 0.34.0 (appVersion 2.0.3)
+# NO Omnistrate account available — deployment block uses placeholder values; build/deploy steps are simulated.
+# Field casing: UpperCamel (ServicePlanSpec context) per DEPLOYMENT_MODELS_REFERENCE.md.
+
+name: HashiCorp Vault
+
+tenancyType: CUSTOM_TENANCY
+
+deployment:
+  # byoaDeployment covers BYOC-Account, BYO-VPC, and BYOC PrivateLink.
+  # PrivateLink is NOT a separate spec block — it is selected at customer account-onboarding time:
+  #   omnistrate-ctl account customer create ... --private-link
+  # See DEPLOYMENT_MODELS_REFERENCE.md §PrivateLink for VPC endpoint requirements.
+  byoaDeployment:
+    # UpperCamel casing, schema-canonical form (AWSBootstrapRoleAccountArn has AWS fully uppercased).
+    AwsAccountId: "<PROVISIONER_AWS_ACCOUNT_ID>"
+    AWSBootstrapRoleAccountArn: "arn:aws:iam::<PROVISIONER_AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role"
+
+services:
+  - name: Vault
+    compute:
+      instanceTypes:
+        - apiParam: instanceType
+          cloudProvider: aws
+    network:
+      # Vault API/UI port. In BYOC+PrivateLink, endpoint is INTERNAL (no public exposure).
+      ports:
+        - 8200
+    helmChartConfiguration:
+      chartName: vault
+      chartVersion: "0.34.0"          # pinned per HELM_ONBOARDING_REFERENCE.md rule
+      chartRepoName: hashicorp
+      chartRepoURL: https://helm.releases.hashicorp.com
+      runtimeConfiguration:
+        wait: true
+        timeoutNanos: 900000000000     # 15 min — Vault StatefulSet + raft bootstrap takes time
+        reuseValues: true
+      # Automatic affinity injection is left ENABLED (default).
+      # Omnistrate injects omnistrate.com/managed-by, topology.kubernetes.io/region,
+      # omnistrate.com/resource, and omnistrate.com/version rules into all chart workloads.
+      chartAffinityControl:
+        enableInjection: true
+        enableSharedHost: false        # strict anti-affinity: raft peers land on separate hosts
+      chartValues:
+        global:
+          tlsDisable: true             # Tier 3 (ISV-owned); TLS termination is handled at the Omnistrate LB layer
+        injector:
+          enabled: false               # Agent injector not needed for basic SaaS usage; disable to reduce surface
+        server:
+          ha:
+            enabled: true
+            replicas: $var.haReplicas
+            raft:
+              enabled: true
+              config: |
+                ui = true
+                listener "tcp" {
+                  tls_disable = 1
+                  address = "[::]:8200"
+                  cluster_address = "[::]:8201"
+                }
+                storage "raft" {
+                  path = "/vault/data"
+                  retry_join {
+                    leader_api_addr = "http://vault-0.vault-internal:8200"
+                  }
+                  retry_join {
+                    leader_api_addr = "http://vault-1.vault-internal:8200"
+                  }
+                  retry_join {
+                    leader_api_addr = "http://vault-2.vault-internal:8200"
+                  }
+                }
+                service_registration "kubernetes" {}
+          dataStorage:
+            enabled: true
+            size: $var.storageSizeGi   # references apiParameter below (bare $var — no {{ }})
+            storageClass: null         # Tier 3: Omnistrate provisions the correct StorageClass
+            accessMode: ReadWriteOnce
+          auditStorage:
+            enabled: false             # disabled by default; can be exposed as Tier-2 option
+          service:
+            type: ClusterIP            # Tier 3: LB is managed by Omnistrate's endpointConfiguration
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: $var.cpuLimit
+              memory: $var.memoryLimit
+        ui:
+          enabled: true
+          serviceType: ClusterIP       # Tier 3: UI access via Omnistrate endpoint only
+    endpointConfiguration:
+      # INTERNAL networkingType — PrivateLink means no public endpoint.
+      # Customers reach Vault through the PrivateLink endpoint (VPC-private DNS).
+      vaultApi:
+        host: "$sys.network.internalClusterEndpoint"
+        ports:
+          - 8200
+        primary: true
+        networkingType: INTERNAL
+    apiParameters:
+      - key: instanceType
+        name: Instance Type
+        description: "EC2 instance type for Vault nodes (e.g. m5.large for production HA)"
+        type: String
+        required: false
+        modifiable: false             # changing instance type requires re-provision
+        export: true
+        defaultValue: "m5.large"
+        tabIndex: 1
+      - key: haReplicas
+        name: HA Replica Count
+        description: "Number of Vault raft peers (3 recommended for production quorum)"
+        type: Float64
+        required: false
+        modifiable: false             # changing replica count from 3→1 could break quorum
+        export: true
+        defaultValue: "3"
+        limits:
+          min: "3"
+          max: "5"
+        tabIndex: 2
+      - key: storageSizeGi
+        name: Storage Size (GiB)
+        description: "PVC size for each Vault raft node's data volume"
+        type: String
+        required: false
+        modifiable: false             # PVC resize is not safely online; keep modifiable false
+        export: true
+        defaultValue: "10Gi"
+        tabIndex: 3
+      - key: cpuLimit
+        name: CPU Limit
+        description: "CPU limit per Vault pod (e.g. 500m, 1)"
+        type: String
+        required: false
+        modifiable: true
+        export: true
+        defaultValue: "500m"
+        tabIndex: 4
+      - key: memoryLimit
+        name: Memory Limit
+        description: "Memory limit per Vault pod (e.g. 512Mi, 1Gi)"
+        type: String
+        required: false
+        modifiable: true
+        export: true
+        defaultValue: "512Mi"
+        tabIndex: 5
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SIMULATION NOTES (no Omnistrate account available)
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 0 (intake):
+#   Q1 artifact = helm chart  →  HELM_ONBOARDING_REFERENCE.md path
+#   Q2 model    = BYOC + PrivateLink  →  byoaDeployment + --private-link at onboarding
+#   Q3 cloud    = AWS us-east-1
+#   Q4 lifecycle= create/delete (phase 1 minimal); HA raft noted for later
+#   Q5 registry = none (public hashicorp registry)
+#
+# Phase 1 (minimal spec): this file — create only, Tier-1 params included.
+#
+# Phase 2 (would run):
+#   omnistrate-ctl build -f spec.yaml --spec-type ServicePlanSpec \
+#     --product-name "HashiCorp Vault" --environment Dev --environment-type Dev \
+#     --release-as-preferred
+#   # Customer account onboarding with PrivateLink:
+#   omnistrate-ctl account customer create \
+#     --service "HashiCorp Vault" --environment Dev --plan "HashiCorp Vault" \
+#     --customer-email customer@example.com \
+#     --aws-account-id <CUSTOMER_AWS_ACCOUNT_ID> \
+#     --private-link
+#   # VPC endpoint must be pre-provisioned per DEPLOYMENT_MODELS_REFERENCE.md §PrivateLink table (rows 1-5):
+#   #   - Tag VPC+subnets with omnistrate.com/managed-by=omnistrate
+#   #   - Interface VPC Endpoint to Omnistrate PrivateLink service name provided
+#   #   - SG inbound TCP 8443-8506 from VPC CIDR
+#   omnistrate-ctl instance create --service "HashiCorp Vault" --plan "HashiCorp Vault" \
+#     --environment Dev --cloud-provider aws --region us-east-1 \
+#     --resource Vault \
+#     --customer-account-id <customer-account-instance-id> \
+#     --param '{"instanceType":"m5.large","haReplicas":"3","storageSizeGi":"10Gi","cpuLimit":"500m","memoryLimit":"512Mi"}'
