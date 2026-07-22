@@ -436,14 +436,25 @@ resource "aws_db_instance" "example1" {
 ```hcl
 # outputs.tf
 output "db_endpoints_1" {
-  value = aws_db_instance.example1.endpoint
+  value = aws_db_instance.example1.endpoint   # host:port (e.g. mydb.abc123.us-east-1.rds.amazonaws.com:3306)
+}
+
+output "db_host" {
+  value = aws_db_instance.example1.address    # host only (no :port) — for charts wanting host-only
 }
 ```
 
-Consume in the Helm chart's external-database block:
+`aws_db_instance.<name>.endpoint` is **`host:port`**; `.address` is **host only**
+(standard `aws_db_instance` attributes). Charts differ on which they want: a chart's
+`externalDatabase.host` field usually expects **host only** with `port` as a separate
+field — feed it `db_host` (the `.address` output), not `db_endpoints_1`, or you get a
+malformed connection string. Consume in the Helm chart's external-database block:
 
 ```yaml
-# chartValues:  externalDatabase.host: "{{ $dbInfra.out.db_endpoints_1 }}"
+# chartValues:
+#   externalDatabase.host: "{{ $dbInfra.out.db_host }}"        # host only
+#   externalDatabase.port: 3306
+# (use db_endpoints_1 only when the chart wants a combined host:port value)
 ```
 
 ### ElastiCache (Redis / Memcached)
@@ -543,6 +554,67 @@ the Helm chart:
 # chartValues:  objectStore.bucket: "{{ $storageInfra.out.name }}"
 #               objectStore.bucketArn: "{{ $storageInfra.out.arn }}"
 ```
+
+#### S3 as a backup target for a database chart
+
+The same S3 module doubles as a **backup destination** for a database-style Helm
+chart's native backup mechanism (pgBackRest/WAL-G, `mysqldump`, Vault raft snapshots),
+cross-referenced from
+[HELM_ONBOARDING_REFERENCE.md § Lifecycle: backups](HELM_ONBOARDING_REFERENCE.md#lifecycle-backups-and-stopstart-for-helm-services).
+Provision the bucket as an `internal: true` terraform service, `dependsOn` it from the
+chart service, and feed the bucket name/region into the chart's backup values:
+
+```yaml
+services:
+  - name: backupBucket
+    internal: true
+    # terraformConfigurations: ... (S3 module above; name = "backup-{{ $sys.id }}")
+
+  - name: Postgres
+    dependsOn:
+      - backupBucket
+    helmChartConfiguration:
+      chartValues:
+        backup:                                    # chart-specific keys — verify in `helm show values`
+          enabled: true
+          s3:
+            bucket: "{{ $backupBucket.out.name }}"
+            region: $sys.deploymentCell.region
+```
+
+The chart's `backup.*` keys are **chart-specific** (verify via `helm show values`); the
+Omnistrate-side wiring — internal S3 terraform service + `dependsOn` + `{{ $backupBucket.out.name }}`
+— is the platform pattern. In **BYOC** the bucket is created in the customer account
+(terraform runs there). In **BYOC-K8s / air-gapped** there is no cloud target for this
+module — use the chart's in-cluster/native storage or the customer's own object store
+(see the model-applicability box in the Helm reference).
+
+#### Multiple buckets with `for_each`
+
+When a chart needs several named buckets (e.g. GitLab's artifacts / lfs / uploads /
+packages / registry / backups), iterate with standard terraform `for_each` over a
+name set rather than copy-pasting the resource:
+
+```hcl
+variable "bucket_names" {
+  type    = set(string)
+  default = ["artifacts", "lfs", "uploads", "packages", "registry", "backups"]
+}
+
+resource "aws_s3_bucket" "buckets" {
+  for_each      = var.bucket_names
+  bucket        = "${each.value}-{{ $sys.id }}"
+  force_destroy = true
+}
+
+# outputs.tf — a map of role -> bucket id
+output "bucket_names" {
+  value = { for k, b in aws_s3_bucket.buckets : k => b.id }
+}
+```
+
+Consume a specific bucket by its map key: `{{ $storageInfra.out.bucket_names.artifacts }}`
+(dot-notation for the nested map field, as with any nested output).
 
 ### Variable discovery for terraform-based services
 

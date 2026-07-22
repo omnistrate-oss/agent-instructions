@@ -292,21 +292,36 @@ edited by targeting ids — not by redrawing. Optional elements ship
 | Reveal + label workloads | `#workload-slot-1…4`, `#workload-label-1…4` | Remove `display="none"` on one slot per workload/resource in the plan; set each `#workload-label-N` to the workload name (e.g. "app", "worker", "postgres"). Slot 1 is visible by default. |
 | Reveal terraform-managed dependencies | `#managed-services`, `#svc-rds` / `#svc-cache` / `#svc-s3` | Remove `display="none"` on `#managed-services` **and** on each specific `#svc-*` box that applies; relabel the box `<text>` to the actual resource (e.g. "Amazon RDS (Postgres)"). Hide the `#svc-*` boxes you don't use with `display="none"`. |
 | Air-gapped control link | `#cp-link`, `#cp-link-label`, `#airgap-note` | Set `#cp-link` **and** `#cp-link-label` to `display="none"`; remove `display="none"` from `#airgap-note`. |
+| PrivateLink endpoint | `#endpoint-label`, `#endpoint-arrow` | Set `#endpoint-label` `<text>` to "private endpoint (PrivateLink)"; add `stroke-dasharray="6 4"` to `#endpoint-arrow` to show no public exposure. Pair with the PrivateLink `#boundary-label` in the per-model table. |
 | BYOC-K8s amenities note | `#cell-amenities` | Relabel its `<text>` to note "customer-provided StorageClasses / ingress". |
 | Fill customer-facing parameters | `#param-line-1…6` | Set `#param-line-1` and un-hide/set one line per Tier-1 customer-facing parameter (`name = default`). Lines 2–6 are `display="none"` by default — remove that attribute on the ones you use. |
 
-**Per-model `#boundary-label` text:**
+**Per-model `#boundary-label` text (and PrivateLink endpoint labels):**
 
-| Model | `#boundary-label` text |
-|---|---|
-| Hosted | `Your Cloud Account — hostedDeployment` |
-| BYOC | `Customer's Cloud Account — byoaDeployment` |
-| BYOC-K8s | `Customer's Kubernetes Cluster — byoc-onprem (customer-owned infra)` |
-| Air-gapped | `Customer Air-gapped Site — onPremDeployment` |
+| Model | `#boundary-label` text | `#endpoint-label` / `#cp-link-label` |
+|---|---|---|
+| Hosted | `Your Cloud Account — hostedDeployment` | (defaults) |
+| BYOC | `Customer's Cloud Account — byoaDeployment` | (defaults) |
+| BYOC PrivateLink | `Customer's Cloud Account — byoaDeployment + PrivateLink` | `#endpoint-label` → `private endpoint (PrivateLink)`; dash `#endpoint-arrow` (`stroke-dasharray="6 4"`) to signal no public exposure |
+| BYOC-K8s | `Customer's Kubernetes Cluster — byoc-onprem (customer-owned infra)` | (defaults) |
+| Air-gapped | `Customer Air-gapped Site — onPremDeployment` | (see air-gapped control-link op) |
 
-If the Plan offers multiple models, produce one diagram per model (e.g.
-`deployment-overview-hosted.svg`, `deployment-overview-byoc.svg`) or pick the
-primary model and note the others in the `.md` distribution summary.
+The PrivateLink row reuses the BYOC `byoaDeployment` boundary (PrivateLink is a
+per-account onboarding option, not a separate spec block — see
+[DEPLOYMENT_MODELS_REFERENCE.md § PrivateLink](DEPLOYMENT_MODELS_REFERENCE.md#privatelink---private-link-vpc-endpoint-requirements---service-region)),
+but marks the endpoint as private: set `#endpoint-label` to "private endpoint
+(PrivateLink)" and make the customer-facing endpoint arrow dashed to convey "no public
+endpoint."
+
+**Multi-model rule (which files to produce).** This is not an arbitrary OR:
+
+- **Multiple models offered** → produce **one SVG per offered model**, named
+  `deployment-overview-<model>.svg` (e.g. `deployment-overview-hosted.svg`,
+  `deployment-overview-byoc.svg`, `deployment-overview-privatelink.svg`). In
+  `DEPLOYMENT_OVERVIEW.md`, add a subsection per model under §1 Architecture, each
+  embedding its own SVG (`![Deployment overview — Hosted](deployment-overview-hosted.svg)`).
+- **Single model** → keep the single default name `deployment-overview.svg`, embedded
+  once as `![Deployment overview](deployment-overview.svg)`.
 
 Editing tips:
 - To un-hide, delete the ` display="none"` attribute (or set it to `inline`). To

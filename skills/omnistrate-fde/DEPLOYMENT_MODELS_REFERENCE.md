@@ -382,6 +382,20 @@ Omnistrate does **not** provision nodes here — the customer-managed cluster is
 deployment target. This is different from air-gapped: in BYOC-K8s the customer
 stays **connected** to your control plane.
 
+#### `byoaDeployment` account fields for a pure BYOC-K8s plan
+
+BYOC-K8s is "configured as a BYOC deployment Plan" and you "set up the provider side
+the same way you would for other BYOC Plans" (`docs/usecases/byoc-onprem.md`). Its
+`byoaDeployment` block therefore still carries the provider `AwsAccountId` +
+`AWSBootstrapRoleAccountArn` (see the doc's §1 example, which uses exactly these
+fields) — even though Omnistrate provisions no AWS infra in the customer's cluster.
+These are the **provider-side** account values Omnistrate uses to anchor trust and host
+generated artifacts (install kit, chart/registry access); they are **required by the
+spec schema** for a BYOC plan. Use your real provider account values — do not treat the
+block as a throwaway placeholder. (The docs describe the provider-side setup but do not
+spell out every internal use of the ARN for the no-infra case; if you need that detail,
+run a docs search.)
+
 ### Target-cluster prerequisites
 
 | Requirement | Details |
@@ -395,6 +409,18 @@ stays **connected** to your control plane.
 
 Cluster-level components (ingress controllers, cert-manager, monitoring, etc.)
 should be configured as deployment-cell amenities or pre-installed by the customer.
+
+> **Surfacing prerequisites (e.g. StorageClass) to the customer.** These
+> prerequisites (a default StorageClass for PVC-backed plans, an ingress controller
+> for HTTP apps) are the customer's responsibility, and the plan cannot auto-provision
+> them on a customer-managed cluster. The `VALIDATE`/`PRE_INSTALL` `actionHooks`
+> that assert cluster preconditions are documented only for the **air-gapped**
+> installer path (see §Air-gapped), **not** for BYOC-K8s. So on BYOC-K8s, communicate
+> hard requirements (like "a default StorageClass must exist, or PVCs stay Pending and
+> the instance never reaches RUNNING") through the **Customer Portal onboarding
+> instructions** and the deployment overview, and prefer cell amenities for anything
+> you can install once per cell. If you need a per-instance precondition check on
+> BYOC-K8s, run a docs search for a current mechanism before assuming one exists.
 
 ### Onboarding flow
 
@@ -472,6 +498,67 @@ services:
 
 For a public endpoint Plan, use `$sys.network.externalClusterEndpoint` with
 `networkingType: PUBLIC` instead.
+
+Both examples above are copied from `docs/usecases/byoc-onprem.md` (§1 INTERNAL with
+`internalClusterEndpoint`; §3 PUBLIC with `externalClusterEndpoint`).
+
+#### HTTP/HTTPS applications on BYOC-K8s (no platform cloud LB)
+
+The `$sys.*` endpoint examples above cover TCP services. For an **HTTP/HTTPS
+application** (Harbor, GitLab, a web UI) on BYOC-K8s there is an important difference:
+**Omnistrate provisions no cloud load balancer on a customer-managed cluster** — the
+customer owns ingress, DNS, and endpoint exposure. `docs/usecases/byoc-onprem.md`:
+"The customer owns the Kubernetes cluster, nodes, storage, network routing, and
+endpoint exposure" and "The customer decides whether product endpoints are
+private-only, reachable through a corporate network, or exposed through a public IP or
+load balancer."
+
+So the plan-level `loadBalancers.https` (which expects a platform-managed cloud LB) is
+**not** the mechanism here. The pattern is:
+
+1. Set the chart's Service type to **ClusterIP** (e.g. `expose.type: clusterIP`) — the
+   chart does not try to create a cloud LB.
+2. The **customer's own ingress controller** routes to that ClusterIP (configured as a
+   deployment-cell amenity or pre-installed by the customer — see §Target-cluster
+   prerequisites).
+3. Surface the customer-facing URL as an **INTERNAL** `endpointConfiguration` on
+   `$sys.network.internalClusterEndpoint`, and expose the externally-resolvable
+   hostname the customer will use as a **customer-supplied `String` apiParameter**
+   (e.g. `externalURL`) rather than a `$sys.network.*` variable — because no `$sys.*`
+   value resolves to the customer's own ingress hostname.
+
+```yaml
+services:
+  - name: harborChart
+    apiParameters:
+      - key: externalURL
+        name: External URL
+        description: The URL customers use to reach the app via their own ingress/DNS
+        type: String
+        modifiable: true
+        required: true
+        export: true
+    network:
+      ports:
+        - 8080
+    endpointConfiguration:
+      internal:
+        host: "$sys.network.internalClusterEndpoint"
+        ports:
+          - 8080
+        primary: true
+        networkingType: INTERNAL
+    helmChartConfiguration:
+      chartValues:
+        expose:
+          type: clusterIP          # chart-specific key — no platform cloud LB on BYOC-K8s
+        externalURL: $var.externalURL
+```
+
+> The `expose.type` / `externalURL` value keys are **chart-specific** (Harbor uses
+> exactly these; other charts differ) — confirm via `helm show values`. The Omnistrate
+> side is: ClusterIP + an INTERNAL endpoint + a customer-supplied `externalURL` String
+> parameter, because the customer owns the ingress/DNS path.
 
 ### Limitations
 
@@ -598,6 +685,40 @@ service declaring `dependsOn` on it. The `pullMode` controls the transfer:
 Optionally use `autoDiscoverImagesTag` in `helmChartConfiguration` to auto-discover
 images from the chart's `Chart.yaml` annotations rather than listing them manually.
 
+**Both `internal: true` on the image-sync service AND `dependsOn` on the main service
+are required** — `internal: true` keeps the sync service out of the customer-facing
+portal (`docs/spec-guides/plan-spec.md` §Resource schema: `internal` "Defines if the
+Resource can be created by customers or is an internal resource used by other
+Resources"), and `dependsOn` guarantees images are mirrored before the chart installs.
+Minimal two-service shape:
+
+```yaml
+services:
+  - name: imageSync                    # image mirror — must be internal
+    internal: true
+    containerImagesRegistryCopyConfiguration:
+      pullMode: "{{ $var.pullMode }}"
+      pullSource:
+        registryURL: "docker.io"
+        repositoryName: "my-org"
+      pushTarget:
+        registryURL: "{{ $var.privateRegistryUrl }}"
+        repositoryName: "my-org"
+
+  - name: MyApp                         # the chart — waits for the mirror
+    dependsOn:
+      - imageSync
+    helmChartConfiguration:
+      chartName: my-app
+      chartVersion: 1.0.0
+      chartRepoName: my-repo
+      chartRepoURL: https://charts.example.com/
+```
+
+Omitting `internal: true` surfaces the image-sync service as a customer-creatable
+resource in the portal (confusing); omitting `dependsOn` lets the chart install before
+images are mirrored.
+
 ### Licensing + diagnostics in disconnected mode
 
 Air-gapped operations must account for offline updates, mirrored repositories,
@@ -718,9 +839,29 @@ features:
 Mounting: for compose, Omnistrate mounts the secret and sets env vars
 automatically. For **Helm / Operator**, the generated secret
 `service-plan-subscription-license` must be mounted at `/var/subscription/` — the
-SDKs assume the license is there. SDKs: Go
-(`omnistrate-oss/omnistrate-licensing-sdk-go`) and Java
+SDKs assume the license is there (`docs/runtime-guides/licensing-protection.md`). SDKs:
+Go (`omnistrate-oss/omnistrate-licensing-sdk-go`) and Java
 (`omnistrate-oss/omnistrate-licensing-sdk-java`).
+
+For a **Helm** chart, mount it through the chart's `extraVolumes` / `extraVolumeMounts`
+values (most charts expose these — the keys are **chart-supporting**, not a platform
+field; verify with `helm show values` and use per-role variants like `primary.extraVolumes`
+if the chart namespaces them):
+
+```yaml
+chartValues:
+  extraVolumes:
+    - name: subscription-license
+      secret:
+        secretName: service-plan-subscription-license   # per licensing-protection.md
+  extraVolumeMounts:
+    - name: subscription-license
+      mountPath: /var/subscription/                      # SDK-expected path
+      readOnly: true
+```
+
+See [HELM_ONBOARDING_REFERENCE.md § Licensing](HELM_ONBOARDING_REFERENCE.md#licensing--mounting-the-subscription-license-secret-in-a-helm-chart)
+for the same snippet with the chart-specific caveats.
 
 Validation checklist (what a single SDK `ValidateLicense` call verifies):
 
