@@ -156,9 +156,9 @@ Omnistrate runs Terraform/OpenTofu autonomously — there is **no manual `terraf
 3. **No `successCondition` ⇒ no `outputParameters`.** A task without a `successCondition` captures no live status, so referencing `$tasks.X.resource.*` in outputs fails. For the authoring rules (systemWorkflows, successCondition/outputParameters design) see `../omnistrate-operator/SKILL.md`.
 
 ### Kustomize
-Treat like Terraform/Helm rendering: read the **rendered yaml via `instance debug`** first.
-- **Substitution failures** → rendered manifests show unresolved/wrong parameter values; fix the mapping and publish a new version.
-- **Missing StorageClass / PVC** → the manifest references a StorageClass that does not exist on the target cell (common on BYOC-K8s); the pod stays Pending. Confirm the StorageClass exists (`kubectl get storageclass` via the tunnel) or add it as a deployment-cell amenity / customer prerequisite.
+Kustomize has no dedicated `instance debug` subcommand (rendered-artifact subcommands are Helm and Terraform only). Read substitution/rendering results from **workflow events** (Deployment step detail), then inspect live applied-resource state via the **cluster tunnel** (`kubectl get -o yaml`) as needed.
+- **Substitution failures** → rendered manifests show unresolved/wrong parameter values in workflow events or live objects; fix the parameter mapping and publish a new Plan version.
+- **Missing StorageClass / PVC** → the manifest references a StorageClass that does not exist on the target cell (common on BYOC-K8s); the pod stays Pending. Confirm via `kubectl get storageclass` / `kubectl get pvc` through the tunnel, then ensure the StorageClass exists as a deployment-cell amenity or customer prerequisite.
 
 ---
 
