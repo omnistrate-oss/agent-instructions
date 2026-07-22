@@ -30,7 +30,7 @@ known-good example (see Canonical Examples) or verified against docs/schema
 - Adding lifecycle verbs (stop/start, backup/restore, failover) to an existing
   operator-backed plan
 
-**Not this skill:** compose-based onboarding → `omnistrate-fde`; architecture
+**Not this skill:** compose/helm/terraform/kustomize onboarding → `omnistrate-fde` (the universal onboarding router); architecture
 design from scratch → `omnistrate-sa`; deployed-instance failure debugging →
 `omnistrate-sre`.
 
@@ -83,7 +83,7 @@ verify cloud accounts (`mcp__ctl__account_list` / `omnistrate-ctl account list`)
 
 **Phase 1 — Minimal spec.** Header (`name`, `tenancyType: CUSTOM_TENANCY`,
 `deployment.hostedDeployment` with real account values — field casing matters:
-`AWSBootstrapRoleAccountArn`), one CR service, operator install per decision 1,
+`AWSBootstrapRoleAccountArn` — deployment model selection and BYOA/BYOC/air-gapped variants: see `../omnistrate-fde/DEPLOYMENT_MODELS_REFERENCE.md`.), one CR service, operator install per decision 1,
 `systemWorkflows` with **create and delete only**. Declare only the API
 parameters the CR manifest genuinely needs — unlike compose onboarding, the CR
 is parameter-driven from day one, but keep the set minimal and hardcode
@@ -115,7 +115,7 @@ its context variables: see the reference.
 `deployment` accounts and the metering bucket (state this in a header comment
 and keep them in sync); add `metering`, `billingProviders`, per-cloud
 `instanceTypes` via `apiParam`, node-affinity pinning to Omnistrate-managed
-nodes, BYOA variants if offered.
+nodes, BYOA variants if offered — deployment model selection and BYOA/BYOC/air-gapped variants: see `../omnistrate-fde/DEPLOYMENT_MODELS_REFERENCE.md`.
 
 ## Critical Rules
 
