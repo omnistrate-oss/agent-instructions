@@ -387,8 +387,10 @@ stays **connected** to your control plane.
 BYOC-K8s is "configured as a BYOC deployment Plan" and you "set up the provider side
 the same way you would for other BYOC Plans" (`docs/usecases/byoc-onprem.md`). Its
 `byoaDeployment` block therefore still carries the provider `AwsAccountId` +
-`AWSBootstrapRoleAccountArn` (see the doc's §1 example, which uses exactly these
-fields) — even though Omnistrate provisions no AWS infra in the customer's cluster.
+`AWSBootstrapRoleAccountArn` (the doc's §1 example spells the ARN field in the
+accepted sample-variant casing `AwsBootstrapRoleAccountArn`; schema-canonical is
+`AWSBootstrapRoleAccountArn` — see the casing table at the top of this file) —
+even though Omnistrate provisions no AWS infra in the customer's cluster.
 These are the **provider-side** account values Omnistrate uses to anchor trust and host
 generated artifacts (install kit, chart/registry access); they are **required by the
 spec schema** for a BYOC plan. Use your real provider account values — do not treat the

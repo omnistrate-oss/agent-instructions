@@ -445,7 +445,8 @@ output "db_host" {
 ```
 
 `aws_db_instance.<name>.endpoint` is **`host:port`**; `.address` is **host only**
-(standard `aws_db_instance` attributes). Charts differ on which they want: a chart's
+(standard `aws_db_instance` attributes; `.address` does not appear in the local
+samples — confirm in the AWS provider docs if unsure). Charts differ on which they want: a chart's
 `externalDatabase.host` field usually expects **host only** with `port` as a separate
 field — feed it `db_host` (the `.address` output), not `db_endpoints_1`, or you get a
 malformed connection string. Consume in the Helm chart's external-database block:
