@@ -243,18 +243,91 @@ One paragraph per deployment model. Facts reused from
 
 ## Deployment overview artifact
 
-**Onboarding is not complete until this artifact exists.** At the very end of an
-onboarding, generate a `DEPLOYMENT_OVERVIEW.md` written **next to the ISV's spec
-files** (e.g. alongside `spec.yaml` or the compose file). It summarizes, for the
-ISV, what was built: the architecture, the responsibility split, and how their
-customers reach the product.
+**Onboarding is not complete until this artifact pair exists.** At the very end of
+an onboarding, write **two files next to the ISV's spec files** (e.g. alongside
+`spec.yaml` or the compose file):
 
-Fill in the template below. Keep the diagrams generic where the ISV hasn't decided
-specifics, and replace every `<...>` placeholder. The Mermaid blocks must render:
-**no parentheses inside `[ ]` node labels**, and quote any label containing special
-characters.
+1. **`DEPLOYMENT_OVERVIEW.md`** — the written summary for the ISV: what was built,
+   the responsibility split, the distribution summary, and the per-model customer
+   steps. It **embeds the diagram** with a plain image reference:
+   `![Deployment overview](deployment-overview.svg)`.
+2. **`deployment-overview.svg`** — the architecture diagram, produced by editing the
+   base SVG template (below) — a copy of this skill's base template with
+   per-use-case edits applied, not a hand-drawn diagram.
 
-### Template
+### The SVG base template
+
+A hand-authored, machine-editable base SVG ships with this skill at:
+
+```
+skills/omnistrate-fde/assets/omnistrate-architecture-base.svg
+```
+
+It depicts the architecture Omnistrate sets up **by default** (verified against the
+docs): the **Omnistrate Control Plane** runs in Omnistrate's account (API + fleet
+orchestration, the **Customer Portal** auto-deployed per environment, billing/
+metering); the data plane is a **deployment cell = a Kubernetes cluster plus its
+supporting network, system add-ons ("cell amenities": ingress, DNS, CSI, operators),
+and Omnistrate agents**, in one account + region; the agents connect **outbound
+only** (mTLS/gRPC, no inbound); customers reach the workloads through a
+platform-managed **LB / DNS / TLS** endpoint. The default boundary is
+`hostedDeployment` (data plane in your cloud account).
+
+Every logical element is a `<g>`/`<text>` with a **stable `id`**, so the diagram is
+edited by targeting ids — not by redrawing. Optional elements ship
+`display="none"` and are un-hidden per use-case.
+
+### Recipe — produce `deployment-overview.svg`
+
+1. **Copy** `skills/omnistrate-fde/assets/omnistrate-architecture-base.svg` to
+   `deployment-overview.svg` next to the spec files.
+2. **Apply the operations below**, keyed by SVG id. Only touch the ids a given
+   use-case needs; leave the rest at their defaults.
+
+| Operation | Target id(s) | What to do |
+|---|---|---|
+| Set the title | `#diagram-title` | Replace `<service name>` with the ISV's product name. |
+| Set the subtitle | `#diagram-subtitle` | Set to the deployment model(s), e.g. "Deployment model: byoaDeployment (BYOC)". |
+| Retitle the boundary (per model) | `#boundary-label` | See the per-model table below — this is THE element that changes per model. |
+| Reveal + label workloads | `#workload-slot-1…4`, `#workload-label-1…4` | Remove `display="none"` on one slot per workload/resource in the plan; set each `#workload-label-N` to the workload name (e.g. "app", "worker", "postgres"). Slot 1 is visible by default. |
+| Reveal terraform-managed dependencies | `#managed-services`, `#svc-rds` / `#svc-cache` / `#svc-s3` | Remove `display="none"` on `#managed-services` **and** on each specific `#svc-*` box that applies; relabel the box `<text>` to the actual resource (e.g. "Amazon RDS (Postgres)"). Hide the `#svc-*` boxes you don't use with `display="none"`. |
+| Air-gapped control link | `#cp-link`, `#cp-link-label`, `#airgap-note` | Set `#cp-link` **and** `#cp-link-label` to `display="none"`; remove `display="none"` from `#airgap-note`. |
+| BYOC-K8s amenities note | `#cell-amenities` | Relabel its `<text>` to note "customer-provided StorageClasses / ingress". |
+| Fill customer-facing parameters | `#param-line-1…6` | Set `#param-line-1` and un-hide/set one line per Tier-1 customer-facing parameter (`name = default`). Lines 2–6 are `display="none"` by default — remove that attribute on the ones you use. |
+
+**Per-model `#boundary-label` text:**
+
+| Model | `#boundary-label` text |
+|---|---|
+| Hosted | `Your Cloud Account — hostedDeployment` |
+| BYOC | `Customer's Cloud Account — byoaDeployment` |
+| BYOC-K8s | `Customer's Kubernetes Cluster — byoc-onprem (customer-owned infra)` |
+| Air-gapped | `Customer Air-gapped Site — onPremDeployment` |
+
+If the Plan offers multiple models, produce one diagram per model (e.g.
+`deployment-overview-hosted.svg`, `deployment-overview-byoc.svg`) or pick the
+primary model and note the others in the `.md` distribution summary.
+
+Editing tips:
+- To un-hide, delete the ` display="none"` attribute (or set it to `inline`). To
+  hide, add ` display="none"` to the element's opening tag.
+- Change only `<text>` content for labels — never convert text to paths.
+- Keep the grid layout intact; the base template spaces elements generously so
+  un-hiding the optional groups does not cause overlaps.
+
+3. **Validate + view before delivering:**
+
+```bash
+python3 -c "import xml.etree.ElementTree as ET; ET.parse('deployment-overview.svg'); print('ok')"
+```
+
+Then open `deployment-overview.svg` (or render it) and confirm no labels overlap
+and the model-specific edits are present.
+
+### `DEPLOYMENT_OVERVIEW.md` template
+
+Fill in every `<...>` placeholder. The diagram is the embedded SVG — do not
+re-draw the architecture inline as ASCII or diagram code.
 
 ````markdown
 # Deployment Overview — <Product Name>
@@ -263,28 +336,13 @@ _Generated at the end of Omnistrate onboarding. Deployment model(s): <hosted / B
 
 ## 1. Architecture
 
-```mermaid
-flowchart TB
-  CP["Omnistrate Control Plane"]
+![Deployment overview](deployment-overview.svg)
 
-  subgraph Cell["Deployment cell — <provider account / customer account / customer cluster / customer air-gapped site>"]
-    W1["<workload 1 - e.g. app>"]
-    W2["<workload 2 - e.g. worker>"]
-    DB["<in-cluster dependency if any>"]
-  end
-
-  RDS["<terraform-managed RDS - if used>"]
-  S3["<terraform-managed S3 - if used>"]
-  EP["Customer endpoint - <hostname>"]
-
-  CP -->|provisions and operates| Cell
-  W1 --> DB
-  W1 --> RDS
-  W1 --> S3
-  EP --> W1
-```
-
-_Delete the terraform-managed nodes/arrows if the chart keeps its dependencies in-cluster._
+_The diagram is `deployment-overview.svg`, derived from the Omnistrate architecture
+base template. The Omnistrate control plane (in Omnistrate's account) provisions and
+operates a deployment cell — a Kubernetes cluster plus network, cell amenities, and
+outbound-only agents — in the boundary shown; customers reach the workloads through
+the platform-managed endpoint._
 
 ## 2. Responsibility split
 
@@ -309,29 +367,24 @@ _Delete the terraform-managed nodes/arrows if the chart keeps its dependencies i
 
 ### Small filled example — "Acme Postgres"
 
-````markdown
-# Deployment Overview — Acme Postgres
+Hosted (starter/pro) + BYOC (enterprise); one workload (a Postgres StatefulSet),
+terraform-managed S3 for backups, three Tier-1 parameters.
 
-_Generated at the end of Omnistrate onboarding. Deployment model(s): Hosted (starter/pro) + BYOC (enterprise)._
+**`deployment-overview.svg`** — copy the base template, then apply these operations:
 
-## 1. Architecture
+- `#diagram-title` → "Service deployment overview — Acme Postgres".
+- `#diagram-subtitle` → "Deployment model: hostedDeployment + byoaDeployment".
+- `#boundary-label` → "Your Cloud Account — hostedDeployment" (produce a second
+  BYOC diagram with `#boundary-label` = "Customer's Cloud Account — byoaDeployment").
+- `#workload-slot-1` visible; `#workload-label-1` → "postgres (StatefulSet)".
+- `#managed-services` un-hidden; `#svc-s3` un-hidden and relabeled "S3 bucket —
+  backups"; `#svc-rds` and `#svc-cache` set `display="none"`.
+- `#param-line-1` → "instanceType = db.t3.medium"; un-hide `#param-line-2` →
+  "storageSizeGi = 100"; un-hide `#param-line-3` → "dbPassword (Password)".
+- `#cp-link` / `#airgap-note` left at defaults (not air-gapped).
 
-```mermaid
-flowchart TB
-  CP["Omnistrate Control Plane"]
-
-  subgraph Cell["Deployment cell — provider account (hosted) or customer account (BYOC)"]
-    PG["Postgres StatefulSet"]
-    EXP["metrics-exporter sidecar"]
-  end
-
-  S3["Terraform-managed S3 — backups"]
-  EP["Customer endpoint — pg.acme.example.com:5432"]
-
-  CP -->|provisions and operates| Cell
-  PG --> S3
-  EP --> PG
-```
+**`DEPLOYMENT_OVERVIEW.md`** — embeds `![Deployment overview](deployment-overview.svg)`,
+then:
 
 ## 2. Responsibility split
 
@@ -349,4 +402,3 @@ flowchart TB
 - **Steps your customers follow:**
   - Hosted: sign up, subscribe, create an instance choosing instance type, storage size, and password.
   - BYOC (enterprise): sign up, connect their AWS account via the portal, then create the instance in their account.
-````

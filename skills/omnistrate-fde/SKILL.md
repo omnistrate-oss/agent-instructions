@@ -170,10 +170,13 @@ than a running instance — see `DEPLOYMENT_MODELS_REFERENCE.md` §Air-gapped.
 (`omnistrate-ctl build ... --release-as-preferred --release-description "..."`),
 make the **prod environment Public**, configure the **Customer Portal** (custom
 domain via CNAME, SMTP sender email, SSO identity providers), and optionally add
-billing. **THEN generate `DEPLOYMENT_OVERVIEW.md`** next to the ISV's spec files
-using the template in `DISTRIBUTION_REFERENCE.md`. Onboarding is **not complete**
-until that artifact is generated and the portal path is confirmed (or, for
-air-gapped, the installer is delivered). See `DISTRIBUTION_REFERENCE.md`.
+billing. **THEN generate the artifact pair** — `DEPLOYMENT_OVERVIEW.md` +
+`deployment-overview.svg` — next to the ISV's spec files. The SVG is produced by
+copying the base template `assets/omnistrate-architecture-base.svg` and applying
+per-model, id-keyed edits (retitle the boundary, un-hide/label workloads and
+managed services, fill customer parameters); the `.md` embeds it. Onboarding is
+**not complete** until that pair is generated and the portal path is confirmed
+(or, for air-gapped, the installer is delivered). See `DISTRIBUTION_REFERENCE.md`.
 
 ## Critical Rules
 
@@ -230,7 +233,8 @@ air-gapped, the installer is delivered). See `DISTRIBUTION_REFERENCE.md`.
   `--release-as-preferred` / `--release-description`, prod env visibility, the
   Customer Portal (domain/SMTP/SSO), subscriptions, optional pricing/billing, the
   ordered go-live checklist, per-model customer experience, and the
-  `DEPLOYMENT_OVERVIEW.md` artifact template (workflow phase 7).
+  `DEPLOYMENT_OVERVIEW.md` + `deployment-overview.svg` artifact pair — the SVG
+  edit recipe over the base template in `assets/` (workflow phase 7).
 Companion skills — separate installs; this skill is fully usable without them:
 
 - **omnistrate-operator** — CRD + controller onboarding (`systemWorkflows`,
@@ -253,7 +257,8 @@ Companion skills — separate installs; this skill is fully usable without them:
   presented; approved Tier-1 parameters implemented one per build-deploy cycle).
 - The Plan is **released** and the **portal is reachable** (prod env public,
   domain/SMTP/SSO configured) — **or**, for air-gapped, the installer is delivered.
-- A **`DEPLOYMENT_OVERVIEW.md`** artifact was generated (with the architecture and
-  responsibility-split diagrams) next to the ISV's spec files.
+- The **`DEPLOYMENT_OVERVIEW.md`** + **`deployment-overview.svg`** artifact pair
+  was generated (the SVG derived from `assets/omnistrate-architecture-base.svg`)
+  next to the ISV's spec files.
 - Every shipped spec fragment is traceable to a reference, sample, or the docs —
   nothing written from memory.
