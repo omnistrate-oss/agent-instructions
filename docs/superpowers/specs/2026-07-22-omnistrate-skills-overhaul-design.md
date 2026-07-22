@@ -319,7 +319,7 @@ detail → tunnel/kubectl). Add:
    - every `omnistrate-ctl` flag against docs (no invented flags),
    - `$sys.*` paths against the system-parameters doc,
    - runtimeConfiguration field names/defaults against plan-spec.md.
-3. Skill-quality pass per `superpowers:writing-skills`: description triggers,
+3. Skill-quality pass: description triggers,
    progressive disclosure (SKILL.md lean, syntax in references), no duplicated
    content between SKILL.md and references, red-flags tables preserved.
 

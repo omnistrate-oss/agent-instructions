@@ -92,7 +92,7 @@ Ask these questions before discussing tech stack — the answers determine not j
 
 > Models are not mutually exclusive — one Plan may target both `hostedDeployment` (starter/pro tier) and `byoaDeployment` (enterprise tier). Confirm which model(s) to support before proceeding.
 >
-> Full model details, spec blocks, and account-onboarding flows: see `../omnistrate-fde/DEPLOYMENT_MODELS_REFERENCE.md`.
+> Architecture-level implications per model (networking, licensing, backup, upgrade agility) are tabulated in `SOLUTIONS_ARCHITECT_REFERENCE.md` §"Deployment Model Implications for Architecture". Spec blocks and account-onboarding flows are authored later, during onboarding — do not hand-write them at design time.
 
 **Record the chosen model(s) — you will name them explicitly in the handoff summary.**
 
@@ -307,8 +307,8 @@ taxonomy from the Phase 1 discovery table: **Hosted / BYOC-Account / BYO-VPC /
 BYOC PrivateLink / BYOC-K8s / Air-gapped**. Confirm the chosen model(s) against
 that table (§Deployment Model Discovery) before making architecture decisions.
 
-Full spec blocks, `deployment:` fields, and account-onboarding flows live in
-`../omnistrate-fde/DEPLOYMENT_MODELS_REFERENCE.md`. The architecture-level
+Spec blocks, `deployment:` fields, and account-onboarding flows are authored
+during onboarding, not at design time. The architecture-level
 constraints each model imposes (networking, licensing, backup storage, upgrade
 agility) are tabulated in `SOLUTIONS_ARCHITECT_REFERENCE.md` §"Deployment Model
 Implications for Architecture" — read it alongside this phase. The notes below
@@ -1014,7 +1014,7 @@ Before drafting the handoff, decide which artifact format the FDE skill (or oper
 | Plain containers, no existing Helm chart or Terraform | **Docker Compose** (default) | Produce a vanilla compose spec; FDE uses `COMPOSE_ONBOARDING_REFERENCE.md` |
 | Application already ships a Helm chart | **Helm ServicePlanSpec skeleton** | Recommend a `helmChartConfiguration` skeleton; FDE uses `HELM_ONBOARDING_REFERENCE.md` |
 | Cloud-managed services (RDS, CloudSQL, Azure DB) in the architecture, provisioned via Terraform/OpenTofu | **Terraform ServicePlanSpec skeleton** | Recommend a `terraformConfigurations` skeleton; FDE uses `TERRAFORM_KUSTOMIZE_REFERENCE.md` |
-| Data infrastructure managed by a Kubernetes operator (e.g., CloudNativePG, Strimzi, KubeAI) | **Operator** | Do NOT produce compose or helm; invoke the **omnistrate-operator** skill instead |
+| Data infrastructure managed by a Kubernetes operator (e.g., CloudNativePG, Strimzi, KubeAI) | **Operator** | Do NOT produce compose or helm; hand off to the **omnistrate-operator** skill (separate install) |
 | Mixed stack (e.g., Terraform infra + Helm app) | **Mixed ServicePlanSpec skeleton** | Recommend combined spec with `dependsOn`; FDE uses both `HELM_ONBOARDING_REFERENCE.md` and `TERRAFORM_KUSTOMIZE_REFERENCE.md` |
 
 **Decision rule**: if the user has containers only and no existing Helm/Terraform artifacts, default to Docker Compose — it is the quickest path to a running instance. Escalate to Helm/Terraform only when those artifacts already exist or when the architecture inherently requires cloud-managed services.
@@ -1073,10 +1073,10 @@ Route to the correct skill/path based on the output-format decision from Phase 1
 | Helm ServicePlanSpec | **omnistrate-fde** (helm path) | `HELM_ONBOARDING_REFERENCE.md` |
 | Terraform/Kustomize ServicePlanSpec | **omnistrate-fde** (terraform/kustomize path) | `TERRAFORM_KUSTOMIZE_REFERENCE.md` |
 | Mixed ServicePlanSpec | **omnistrate-fde** (mixed path) | `HELM_ONBOARDING_REFERENCE.md` + `TERRAFORM_KUSTOMIZE_REFERENCE.md` |
-| Any format, air-gapped target | **omnistrate-fde** + `../omnistrate-fde/DEPLOYMENT_MODELS_REFERENCE.md` §Air-gapped / On-prem Installer | `DEPLOYMENT_MODELS_REFERENCE.md` §Air-gapped |
+| Any format, air-gapped target | **omnistrate-fde** (air-gapped installer path) | `DEPLOYMENT_MODELS_REFERENCE.md` §Air-gapped |
 | Operator (CRDs + controller) | **omnistrate-operator** skill | (operator skill owns this path) |
 
-All paths also read `../omnistrate-fde/DEPLOYMENT_MODELS_REFERENCE.md` for the `deployment:` block that encodes the chosen model(s).
+In every path, the onboarding workflow builds the `deployment:` block that encodes the chosen model(s) — name them explicitly in the handoff so it can.
 
 #### Example Handoff Message
 ```

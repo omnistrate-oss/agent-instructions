@@ -677,8 +677,8 @@ Use the branch taxonomy (Hosted / BYOC-Account / BYO-VPC / BYOC PrivateLink /
 BYOC-K8s / Air-gapped). For the architecture-level constraints each model
 imposes (networking, licensing, backup storage, upgrade agility) see
 [Deployment Model Implications for Architecture](#deployment-model-implications-for-architecture)
-below; for spec blocks and onboarding flows see
-`../omnistrate-fde/DEPLOYMENT_MODELS_REFERENCE.md`.
+below. Spec blocks and account-onboarding flows are authored during onboarding,
+not at design time.
 
 | Factor | Hosted | BYOC (Account / BYO-VPC / PrivateLink) | BYOC-K8s | Air-gapped |
 |--------|--------|-----------------------------------------|----------|------------|
@@ -691,9 +691,9 @@ below; for spec blocks and onboarding flows see
 
 **Architecture Pattern**: a single Plan can offer multiple models by declaring
 the matching `deployment:` blocks (e.g. `hostedDeployment` for a starter tier and
-`byoaDeployment` for an enterprise tier). The exact spec syntax lives in
-`../omnistrate-fde/DEPLOYMENT_MODELS_REFERENCE.md` — do not hand-write deployment
-fields from memory.
+`byoaDeployment` for an enterprise tier). Do not hand-write deployment fields
+from memory at design time — the onboarding workflow authors them from verified
+templates (see https://docs.omnistrate.com/build-guides/deployment-models/).
 
 ### Decision 3: Storage Architecture
 
@@ -796,7 +796,7 @@ x-omnistrate-capabilities:
 
 ## Deployment Model Implications for Architecture
 
-Source: `deployment-models.md`, `byoc-overview.md`, `air-gapped-overview.md`, `licensing-protection.md` in the Omnistrate documentation. Full spec blocks and account-onboarding flows are in `../omnistrate-fde/DEPLOYMENT_MODELS_REFERENCE.md`.
+Source: `deployment-models.md`, `byoc-overview.md`, `air-gapped-overview.md`, `licensing-protection.md` in the Omnistrate documentation (https://docs.omnistrate.com). Full spec blocks and account-onboarding flows are authored during onboarding, not at design time.
 
 When designing an architecture, the chosen deployment model affects four cross-cutting concerns: networking topology, licensing enforcement, backup storage availability, and upgrade agility. The table below summarizes each model's constraints so you can factor them in during Phase 1 discovery and Phase 4 deployment-model planning.
 
@@ -1101,5 +1101,5 @@ omctl instance evaluate <instance-id> <resource-key> --expression "$sys.deployme
 - **Omnistrate Documentation**: https://docs.omnistrate.com
 - **Compose Spec Reference**: Use `mcp__ctl__docs_compose_spec_search`
 - **System Parameters**: Use `mcp__ctl__docs_system_parameters`
-- **FDE Skill**: See `../omnistrate-fde/` for onboarding workflows
-- **SRE Skill**: See `../omnistrate-sre/` for debugging workflows
+- **omnistrate-fde skill** (separate install): onboarding workflows for compose/helm/terraform/kustomize across all deployment models
+- **omnistrate-sre skill** (separate install): systematic debugging of failed instances

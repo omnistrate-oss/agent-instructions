@@ -149,7 +149,7 @@ Each entry: **symptom → evidence location → fix.** Organized by resource typ
 |---------|-------------------|-----|
 | Workflow task failed (orchestration) | `instance debug` / workflow events for the operator resource | Fix task definition/targeting (namespace, resource name) |
 | `successCondition` never met (readiness stalls) | Live CR `status.*` via tunnel; operator controller logs/events/status conditions | Confirm operator writes the referenced status path; correct the condition expression; fix the workload the CR manages |
-| Output not resolved / `$tasks.X.resource.*` fails | Task definition | A task with **no `successCondition` captures no live status ⇒ no `outputParameters`**; add a `successCondition` to the apply task (authoring rules: `../omnistrate-operator/SKILL.md`) |
+| Output not resolved / `$tasks.X.resource.*` fails | Task definition | A task with **no `successCondition` captures no live status ⇒ no `outputParameters`**; add a `successCondition` to the apply task (readiness belongs in `successCondition`; outputs read `$tasks.<task>.resource.status.*`) |
 | Controller crash-loop | Controller pod logs via tunnel | Fix operator deployment/RBAC; check CRD install |
 
 #### Kustomize

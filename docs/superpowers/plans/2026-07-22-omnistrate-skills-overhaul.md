@@ -1,6 +1,6 @@
 # Omnistrate Skills Overhaul Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** Execute this plan task-by-task, with an independent review after each task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Overhaul the Omnistrate onboarding and debugging skills so an Omnistrate-naive ISV is guided from any artifact type (compose, helm, terraform, kustomize, operator) to any deployment model (hosted, BYOC, BYOC-K8s, air-gapped) with doc-verified instructions.
 
@@ -777,4 +777,4 @@ git add -A skills/ && git commit -m "Doc-verification audit fixes" || echo "noth
 
 - [ ] **Step 4: Final review request**
 
-Run `git log --oneline main..HEAD` and `git diff --stat main..HEAD`; summarize for the user and request review (merge/PR decision is the user's — see superpowers:finishing-a-development-branch).
+Run `git log --oneline main..HEAD` and `git diff --stat main..HEAD`; summarize for the user and request review (merge/PR decision is the user's).

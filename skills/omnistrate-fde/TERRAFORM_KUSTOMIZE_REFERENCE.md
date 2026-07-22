@@ -24,7 +24,7 @@ Schema pin (add as the first line of your spec for editor validation):
 - Spec format: **ServicePlanSpec** (not Docker Compose).
 - Build flag: `--spec-type ServicePlanSpec`.
 - Tenancy handled inside your Kustomize manifests; set `tenancyType: CUSTOM_TENANCY` if required.
-- Use the `omnistrate-fde` skill; call `omnistrate-sre` when an instance stays failed.
+- When an instance stays failed, follow the debug loop in SKILL.md workflow phase 4.
 
 For the `deployment:` block (account IDs, `hostedDeployment` vs `byoaDeployment`, field casing,
 cloud-account prerequisites) see [DEPLOYMENT_MODELS_REFERENCE.md](DEPLOYMENT_MODELS_REFERENCE.md)
@@ -685,7 +685,7 @@ For local Terraform artifact sources, run `omnistrate-ctl build` from the worksp
 contains the `artifactRelativePath` target.
 
 **Debug loop:** instance describe (status) → `instance debug <id>` (terraform surfaces only; kustomize: workflow events + tunnel) → fix spec → rebuild → redeploy.
-For systematic debugging of failed Terraform or Kustomize deployments, call the `omnistrate-sre` skill.
+For the full escalating loop (workflow events → tunnel), see SKILL.md workflow phase 4; the `omnistrate-sre` skill, if installed, adds per-failure catalogs.
 
 **Restart vs new version:** modifying a running instance re-runs `terraform apply` with updated
 variable values. A spec change (new chart version, new terraform path) requires a rebuild

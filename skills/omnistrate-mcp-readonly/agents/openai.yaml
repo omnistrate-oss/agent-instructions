@@ -1,0 +1,4 @@
+interface:
+  display_name: "Omnistrate MCP Read-Only"
+  short_description: "Read-only Omnistrate MCP inspection guide"
+  default_prompt: "Use $omnistrate-mcp-readonly to list and summarize Omnistrate accounts, services, plans, instances, and deployment cells."

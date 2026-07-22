@@ -18,7 +18,7 @@ Schema pin (add as the first line of your spec for editor validation):
 - Spec format: **ServicePlanSpec** (not Docker Compose).
 - Build flag: `--spec-type ServicePlanSpec`.
 - Tenancy declared inside your chart; set `tenancyType: CUSTOM_TENANCY` if required.
-- Use the `omnistrate-fde` skill; call the `omnistrate-sre` skill when an instance stays failed.
+- When an instance stays failed, follow the debug loop in SKILL.md workflow phase 4.
 
 ---
 
@@ -588,7 +588,8 @@ omnistrate-ctl build \
 
 **Debug loop:** instance describe (deployment status) → `instance debug <id>` for Helm
 client logs and rendered values → fix spec → re-build → re-deploy.
-When systematic debugging is needed, call the `omnistrate-sre` skill.
+For the full escalating loop (workflow events → tunnel), see SKILL.md workflow
+phase 4; the `omnistrate-sre` skill, if installed, adds per-failure catalogs.
 
 ---
 

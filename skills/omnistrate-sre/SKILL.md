@@ -153,7 +153,7 @@ Omnistrate runs Terraform/OpenTofu autonomously — there is **no manual `terraf
    kubectl logs deploy/<operator-controller> -n <operator-namespace> --kubeconfig /tmp/kubeconfig
    ```
    Confirm the operator actually writes the status path the `successCondition` references, and that the workflow targets the intended namespace/resource name.
-3. **No `successCondition` ⇒ no `outputParameters`.** A task without a `successCondition` captures no live status, so referencing `$tasks.X.resource.*` in outputs fails. For the authoring rules (systemWorkflows, successCondition/outputParameters design) see `../omnistrate-operator/SKILL.md`.
+3. **No `successCondition` ⇒ no `outputParameters`.** A task without a `successCondition` captures no live status, so referencing `$tasks.X.resource.*` in outputs fails. Fix in the spec: readiness gates belong in the apply task's `successCondition` (not the deprecated `readinessConditions`), and workflow-level `outputParameters` read `$tasks.<task>.resource.status.*`.
 
 ### Kustomize
 Kustomize has no dedicated `instance debug` subcommand (rendered-artifact subcommands are Helm and Terraform only). Read substitution/rendering results from **workflow events** (Deployment step detail), then inspect live applied-resource state via the **cluster tunnel** (`kubectl get -o yaml`) as needed.
@@ -163,7 +163,7 @@ Kustomize has no dedicated `instance debug` subcommand (rendered-artifact subcom
 ---
 
 ## Branch by Deployment Model
-The resource-type branch tells you *what* failed; the deployment model tells you *where the boundary of your control is*. See `../omnistrate-fde/DEPLOYMENT_MODELS_REFERENCE.md` for the full model definitions.
+The resource-type branch tells you *what* failed; the deployment model tells you *where the boundary of your control is*. In brief: **hosted** = your cloud account, Omnistrate manages the infra; **BYOC** = the customer's cloud account, Omnistrate manages infra through an outbound agent; **BYOC-K8s** = the customer's existing Kubernetes cluster, the customer owns all infra and Omnistrate only deploys workloads via the dataplane agent; **air-gapped** = a self-contained installer with no live control-plane link.
 
 ### Hosted
 Default flow above — infra is in your (provider) account and Omnistrate controls it end to end. No extra connectivity boundary.

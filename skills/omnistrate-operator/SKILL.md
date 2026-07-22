@@ -83,7 +83,8 @@ verify cloud accounts (`mcp__ctl__account_list` / `omnistrate-ctl account list`)
 
 **Phase 1 — Minimal spec.** Header (`name`, `tenancyType: CUSTOM_TENANCY`,
 `deployment.hostedDeployment` with real account values — field casing matters:
-`AWSBootstrapRoleAccountArn` — deployment model selection and BYOA/BYOC/air-gapped variants: see `../omnistrate-fde/DEPLOYMENT_MODELS_REFERENCE.md`.), one CR service, operator install per decision 1,
+`AWSBootstrapRoleAccountArn`; for BYOC plans add a `byoaDeployment` block with
+the same fields — the two can coexist in one plan), one CR service, operator install per decision 1,
 `systemWorkflows` with **create and delete only**. Declare only the API
 parameters the CR manifest genuinely needs — unlike compose onboarding, the CR
 is parameter-driven from day one, but keep the set minimal and hardcode
@@ -99,8 +100,12 @@ omnistrate-ctl instance create --service "<name>" --plan "<plan>" \
   --resource <crResourceKey> --param '<json>' --output json
 omnistrate-ctl instance describe <instance-id> --output json
 ```
-Iterate build → deploy → fix; expect 2-3 cycles. For failures, follow
-`omnistrate-sre` (workflow events, then live CR/pod state).
+Iterate build → deploy → fix; expect 2-3 cycles. For failures: `instance
+describe <id> --deployment-status`, then `workflow list` / `workflow events`
+for the failed step, then live CR/pod state via `deployment-cell
+update-kubeconfig` + kubectl (never cloud-provider CLIs for cluster access).
+The `omnistrate-sre` skill, if installed, provides the full systematic
+debugging workflow.
 
 **Phase 3 — Add lifecycle verbs one at a time**, re-building and re-deploying
 after each: `modify` (re-apply CR with new `$var` values), `stop`/`start`
@@ -115,7 +120,9 @@ its context variables: see the reference.
 `deployment` accounts and the metering bucket (state this in a header comment
 and keep them in sync); add `metering`, `billingProviders`, per-cloud
 `instanceTypes` via `apiParam`, node-affinity pinning to Omnistrate-managed
-nodes, BYOA variants if offered — deployment model selection and BYOA/BYOC/air-gapped variants: see `../omnistrate-fde/DEPLOYMENT_MODELS_REFERENCE.md`.
+nodes, BYOA variants if offered (add `byoaDeployment` with your account values;
+onboard each customer account with `omnistrate-ctl account customer create`,
+then deploy instances with `--customer-account-id`).
 
 ## Critical Rules
 

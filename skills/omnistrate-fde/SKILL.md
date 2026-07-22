@@ -94,7 +94,7 @@ Pick the row for the user's artifact (intake Q1). The **deployment model**
 | Docker Compose | compose + `x-omnistrate-*` | `build_compose` / `omnistrate-ctl build -f <file>` | `COMPOSE_ONBOARDING_REFERENCE.md` |
 | Helm chart | ServicePlanSpec (`helmChartConfiguration`) | `omnistrate-ctl build -f spec.yaml --spec-type ServicePlanSpec` | `HELM_ONBOARDING_REFERENCE.md` |
 | Terraform / Kustomize | ServicePlanSpec (`terraformConfigurations` / `kustomizeConfiguration`) | same | `TERRAFORM_KUSTOMIZE_REFERENCE.md` |
-| Operator (CRDs + controller) | ServicePlanSpec (`systemWorkflows`) | same | → invoke **omnistrate-operator** skill |
+| Operator (CRDs + controller) | ServicePlanSpec (`systemWorkflows`) | same | → **omnistrate-operator** skill (see Companion skills below) |
 | Mixed (e.g. terraform infra + helm app) | ServicePlanSpec, multiple services with `dependsOn` | same | `HELM_ONBOARDING_REFERENCE.md` + `TERRAFORM_KUSTOMIZE_REFERENCE.md` |
 | Any artifact, air-gapped target | ServicePlanSpec with `onPremDeployment` | same | `DEPLOYMENT_MODELS_REFERENCE.md` §Air-gapped (installer packages a Helm chart; non-Helm stacks must first be bundled into a chart) |
 | Nothing yet (design first) | — | — | → hand off to **omnistrate-sa** |
@@ -131,10 +131,20 @@ day one, but still keep the parameter set minimal.*
 
 **4. Deploy one instance and debug until RUNNING.** `instance create` targeting
 the main resource, then `instance describe`. Expect **2–3 iterations** — do not
-stop at the first failure. Delegate failure analysis to **omnistrate-sre**
-(workflow events, then `instance debug <id>` for rendered helm values /
-terraform apply logs / operator CR status, then live pod state; kustomize:
-workflow events + tunnel — no `instance debug` rendered-artifact view).
+stop at the first failure. Debug loop, in escalating order:
+   1. `omnistrate-ctl instance describe <id> --deployment-status --output json`
+      — find the failing resource.
+   2. `omnistrate-ctl workflow list --instance-id <id>` then
+      `omnistrate-ctl workflow events <workflow-id>` — locate the failed step;
+      add `--resource-key` / `--detail` only for that step.
+   3. `omnistrate-ctl instance debug <id>` — rendered helm values / terraform
+      apply logs / operator CR status (kustomize has no rendered-artifact view:
+      use workflow events + the tunnel).
+   4. `omnistrate-ctl deployment-cell update-kubeconfig <cell-id> --kubeconfig
+      /tmp/kc` + `kubectl logs` / `kubectl get` — live pod state. Never use
+      aws/gcloud/az CLIs for cluster access; only the Omnistrate tunnel.
+   The **omnistrate-sre** skill, if installed, extends this loop with
+   per-resource-type and per-model failure catalogs.
 
 **5. Add parameters / lifecycle one at a time.** Rebuild + redeploy after
 *each* change — never batch. One variable, one build-deploy cycle.
@@ -195,11 +205,14 @@ than a running instance — see `DEPLOYMENT_MODELS_REFERENCE.md` §Air-gapped.
   operational flows for hosted / BYOC (BYO-VPC, PrivateLink) / BYOC-K8s /
   air-gapped, plus customer-account onboarding, tenancy, and the ISV-phrasing
   FAQ. Read this for **every** onboarding path.
-- **omnistrate-operator** skill — CRD + controller onboarding
-  (`systemWorkflows`, lifecycle verbs); invoke it for the operator row.
-- **omnistrate-sre** skill — systematic debugging of failed instances (workflow
-  events, `instance debug`, per-resource-type and per-model failure surfaces).
-  Delegate to it in workflow phase 4.
+Companion skills — separate installs; this skill is fully usable without them:
+
+- **omnistrate-operator** — CRD + controller onboarding (`systemWorkflows`,
+  lifecycle verbs); covers the operator row of the decision matrix. Without it,
+  start from the public template:
+  https://github.com/omnistrate-community/operator-spec-template.
+- **omnistrate-sre** — extends the phase-4 debug loop with per-resource-type
+  and per-model failure catalogs.
 
 ## Success Criteria
 

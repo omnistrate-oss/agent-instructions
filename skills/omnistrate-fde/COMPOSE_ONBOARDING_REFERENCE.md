@@ -2,7 +2,7 @@
 
 Complete reference for transforming Docker Compose applications to Omnistrate service definitions.
 
-**Note**: This reference covers Docker Compose-based onboarding only. Other onboarding methods have their own reference files: [HELM_ONBOARDING_REFERENCE.md](HELM_ONBOARDING_REFERENCE.md), [TERRAFORM_KUSTOMIZE_REFERENCE.md](TERRAFORM_KUSTOMIZE_REFERENCE.md), and (Kubernetes Operators) the `omnistrate-operator` skill. Deployment models (hosted/BYOC/BYOC-K8s/air-gapped) for every method are in [DEPLOYMENT_MODELS_REFERENCE.md](DEPLOYMENT_MODELS_REFERENCE.md).
+**Note**: This reference covers Docker Compose-based onboarding only. Other onboarding methods have their own reference files: [HELM_ONBOARDING_REFERENCE.md](HELM_ONBOARDING_REFERENCE.md), [TERRAFORM_KUSTOMIZE_REFERENCE.md](TERRAFORM_KUSTOMIZE_REFERENCE.md), and (Kubernetes Operators) the `omnistrate-operator` skill (separate install). Deployment models (hosted/BYOC/BYOC-K8s/air-gapped) for every method are in [DEPLOYMENT_MODELS_REFERENCE.md](DEPLOYMENT_MODELS_REFERENCE.md).
 
 ## Table of Contents
 1. [Prerequisites and Setup](#prerequisites-and-setup)
@@ -816,7 +816,9 @@ mcp__ctl__workflow_events \
 ## Debugging Workflow
 
 ### Systematic Approach
-Refer to `../omnistrate-sre/SKILL.md` for complete debugging workflow.
+Follow the debug loop in this skill's SKILL.md (workflow phase 4): deployment
+status → workflow events → `instance debug` → live pod state via the tunnel.
+The `omnistrate-sre` skill, if installed, extends it with full failure catalogs.
 
 **Quick reference**:
 1. Get deployment status with `--deployment-status` flag
