@@ -28,8 +28,9 @@ Copied and adapted from `resource-spec-samples/service-spec-helm.yaml`.
 
 For the `deployment:` block (account IDs, `hostedDeployment` vs `byoaDeployment`, field casing,
 cloud-account prerequisites) see [DEPLOYMENT_MODELS_REFERENCE.md](DEPLOYMENT_MODELS_REFERENCE.md)
-([choosing a model](#choosing-a-deployment-model), [hosted](#hosted),
-[BYOC customer account](#byoc-customer-cloud-account)).
+([choosing a model](DEPLOYMENT_MODELS_REFERENCE.md#choosing-a-deployment-model),
+[hosted](DEPLOYMENT_MODELS_REFERENCE.md#hosted),
+[BYOC customer account](DEPLOYMENT_MODELS_REFERENCE.md#byoc-customer-cloud-account)).
 
 ```yaml
 name: Redis Server

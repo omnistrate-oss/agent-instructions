@@ -49,7 +49,7 @@ Always verify `$sys.*` variable paths against current schema before use.
 
 Model selection, account setup, BYOC/BYOC-K8s/air-gapped flows: see `DEPLOYMENT_MODELS_REFERENCE.md`.
 
-**Default**: Always use `hostedDeployment` (your SaaS service runs in your provider account). Only switch to `byoaDeployment` if you want to offer BYOC to customers, or `onPremDeployment` for on-premise.
+Build the `deployment:` block for the model(s) chosen in intake Q2 (see `SKILL.md` Phase 0) — never silently default. `hostedDeployment` is shown below only as the example syntax; `byoaDeployment` (BYOC / BYO-VPC / PrivateLink / BYOC-K8s) and `onPremDeployment` (air-gapped) are documented in `DEPLOYMENT_MODELS_REFERENCE.md`.
 
 Compose spec syntax (lowerCamel fields — see `DEPLOYMENT_MODELS_REFERENCE.md` for the full field reference and casing rules):
 
@@ -928,12 +928,13 @@ x-internal-integrations:
 
 ## Complete Example
 
-See COMPOSE-ONBOARDING.md for complete multi-service example with:
-- Synthetic root service
-- API parameters with dual definition
-- Cross-service references
-- Compute/storage configuration
-- Backup capabilities
-- Load balancers
-- Custom metrics
-- ActionHooks
+A full multi-service compose spec is assembled from the sections above. Compose
+them in this order:
+- Synthetic root service — [Multi-Service Application](#multi-service-application)
+- API parameters with dual definition — [API Parameters and Flow](#api-parameters-and-flow)
+- Cross-service references — [Environment Variable Transformation](#environment-variable-transformation)
+- Compute/storage configuration — [Compute and Storage Configuration](#compute-and-storage-configuration)
+- Backup capabilities — [Capabilities and Features](#capabilities-and-features)
+- Load balancers — [Load Balancers](#load-balancers)
+- Custom metrics — [Custom Metrics](#custom-metrics)
+- ActionHooks — [ActionHooks](#actionhooks)

@@ -1,6 +1,6 @@
 ## Skill Routing Guide
 
-Use the table below to select the right skill for each request. All four deployment models — **hosted** (provider cloud), **BYOC** including BYO-VPC and PrivateLink (customer cloud accounts), **BYOC-K8s** (customer-managed Kubernetes / `byoc-onprem`), and **air-gapped** (`onPremDeployment` installer) — are supported across all artifact types.
+Use the table below to select the right skill for each request. All four deployment models — **hosted** (provider cloud), **BYOC** including BYO-VPC and PrivateLink (customer cloud accounts), **BYOC-K8s** (customer-managed Kubernetes / `byoc-onprem`), and **air-gapped** (`onPremDeployment` installer) — are supported across all artifact types (the air-gapped installer packages a Helm chart, so non-Helm stacks must first be bundled into a chart).
 
 | Request shape | Skill |
 |---------------|-------|
@@ -42,7 +42,7 @@ Guide users through designing application architectures from scratch for SaaS de
 - SLA-driven availability design (99.9% to 99.999% uptime)
 - Iterative Docker Compose spec development and validation
 - Container image registry setup (convert build contexts to image references)
-- Private registry authentication configuration (`x-omnistrate-image-registry-attributes`)
+- Private registry auth needs: identify and collect requirements for FDE (FDE configures `x-omnistrate-image-registry-attributes` and the Omnistrate secrets)
 - Output-format decision: compose vs Helm vs Terraform skeleton vs operator handoff
 - Omnistrate-aware design decisions (autoscaling, backups, multi-zone readiness)
 
@@ -120,6 +120,6 @@ Systematically debug failed Omnistrate instance deployments using a progressive 
 - Per-resource-type branches: Compose / Helm / Terraform / Operator / Kustomize
 - Per-deployment-model branches: hosted / BYOC / BYOC-K8s / air-gapped
 - Pod-level investigation with kubectl via Omnistrate remote tunneling (no cloud-provider CLI)
-- Rendered-artifact inspection: chart values, `.tf` files, CR status, kustomize YAML
+- Rendered-artifact inspection via `instance debug`: chart values, `.tf` files, CR status (kustomize: workflow events + tunnel, no rendered-artifact view)
 - Common failure-pattern recognition (infrastructure, container lifecycle, probe, per-model)
 

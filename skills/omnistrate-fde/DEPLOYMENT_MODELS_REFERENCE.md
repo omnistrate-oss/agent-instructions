@@ -12,13 +12,22 @@ docs / spec templates. When something here conflicts with the live schema or a d
 search, trust the schema/docs and update this file.
 
 **Field-casing rule (load-bearing):** the *same* fields are cased differently by
-context. Always know which context a fragment belongs to:
+context. The **schema-canonical** casing (the live
+`service-spec-schema.json` `$defs.Deployment` and `$defs.OnPremDeployment`) is
+what the editor validator enforces — use it in new specs so validation passes:
 
-| Context | Deployment block lives at | Field casing | Example |
-|---------|---------------------------|--------------|---------|
+| Context | Deployment block lives at | Schema-canonical casing | Example |
+|---------|---------------------------|-------------------------|---------|
 | Compose (`x-omnistrate-service-plan`) | `x-omnistrate-service-plan.deployment` | lowerCamel | `awsAccountId`, `awsBootstrapRoleAccountArn` |
-| ServicePlanSpec (helm/terraform/kustomize/operator) | root `deployment` | UpperCamel (with `AWS` acronym uppercased in the ARN field) | `AwsAccountId`, `AWSBootstrapRoleAccountArn` |
-| Air-gapped ServicePlanSpec (`onPremDeployment`) | root `deployment.onPremDeployment` | UpperCamel (`Aws` prefix on *both* fields) | `AwsAccountId`, `AwsBootstrapRoleAccountArn` |
+| ServicePlanSpec — `hostedDeployment` / `byoaDeployment` | root `deployment` | UpperCamel with `AWS` acronym fully uppercased in the ARN field | `AwsAccountId`, `AWSBootstrapRoleAccountArn` |
+| ServicePlanSpec — air-gapped `onPremDeployment` | root `deployment.onPremDeployment` | Same as above: `AwsAccountId` + `AWSBootstrapRoleAccountArn` | `AwsAccountId`, `AWSBootstrapRoleAccountArn` |
+
+> Official samples and docs vary in casing (e.g. `AwsBootstrapRoleAccountArn`
+> in the helm/kustomize `resource-spec-samples` and the air-gapped doc pages,
+> and lowerCamel in some BYOC doc pages) and the parser accepts those variants —
+> but **new specs should use the schema-canonical form above** so the in-editor
+> validator does not flag them. Where a skeleton below is copied verbatim from a
+> sample, it is labeled as such and left as-is.
 
 ---
 
@@ -126,11 +135,14 @@ deployment:
     AWSBootstrapRoleAccountArn: "arn:aws:iam::<AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role"
 ```
 
-> **Casing warning:** the ARN field is `AWSBootstrapRoleAccountArn` (acronym
-> `AWS` fully uppercased), while the account-ID field is `AwsAccountId`. This is
-> exactly as it appears in the operator spec template — do not "normalize" it.
-> Note this differs from the air-gapped `onPremDeployment` block, which uses
-> `AwsBootstrapRoleAccountArn` (see [Air-gapped](#air-gapped--on-prem-installer)).
+> **Casing warning:** schema-canonically the ARN field is
+> `AWSBootstrapRoleAccountArn` (acronym `AWS` fully uppercased) while the
+> account-ID field is `AwsAccountId` — this is the form in the operator spec
+> template and in the live schema, and it is what the editor validator expects.
+> The `onPremDeployment` block uses the **same** canonical casing (see
+> [Air-gapped](#air-gapped--on-prem-installer)). Some published samples spell the
+> ARN field `AwsBootstrapRoleAccountArn`; the parser accepts it, but do not copy
+> that variant into a new spec.
 
 ### Tenancy interaction
 
@@ -191,13 +203,16 @@ x-omnistrate-service-plan:
       awsBootstrapRoleAccountArn: arn:aws:iam::<AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role
 ```
 
-ServicePlanSpec / Plan-spec context, root-level. The Omnistrate BYOC-deployment
-guide shows this block with **lowerCamel** fields (`awsAccountId`,
-`awsBootstrapRoleAccountArn`) — matching the compose block, and unlike the
-UpperCamel `hostedDeployment` in the operator spec template. Copy each block from
-the source for the spec type you are authoring rather than assuming a global rule:
+ServicePlanSpec / Plan-spec context, root-level. The block below is **copied
+verbatim from the Omnistrate `byoc-deployment.md` doc page**, which shows
+**lowerCamel** fields (`awsAccountId`, `awsBootstrapRoleAccountArn`) — the parser
+accepts this. Schema-canonical UpperCamel (`AwsAccountId` +
+`AWSBootstrapRoleAccountArn`, as in `hostedDeployment`) **also works and is what
+the editor validator expects**, so prefer it when authoring a fresh spec:
 
 ```yaml
+# Copied from byoc-deployment.md (lowerCamel; parser-accepted). Schema-canonical
+# form: AwsAccountId / AWSBootstrapRoleAccountArn.
 name: My Product - BYOC
 deployment:
   byoaDeployment:
@@ -484,11 +499,16 @@ and **one image registry** per Plan; bundle multiple charts into an umbrella cha
 
 ### Spec syntax (`requirements.k8sVersion`, `onPremDeployment` fields)
 
-Source: `air-gapped-helm-charts.md`. The `onPremDeployment` block uses UpperCamel
-with an `Aws` prefix on **both** fields (note: `AwsBootstrapRoleAccountArn`, *not*
-`AWSBootstrapRoleAccountArn` — this differs from the hosted ServicePlanSpec block):
+Source: `air-gapped-helm-charts.md`. Schema-canonically `onPremDeployment` uses
+the **same** casing as `hostedDeployment` — `AwsAccountId` +
+`AWSBootstrapRoleAccountArn`. The block below is copied verbatim from the doc
+page, which spells the ARN field `AwsBootstrapRoleAccountArn`; the parser accepts
+that variant, but the editor validator expects `AWSBootstrapRoleAccountArn`, so
+prefer the canonical form in a fresh spec:
 
 ```yaml
+# Copied from air-gapped-helm-charts.md (AwsBootstrapRoleAccountArn; parser-
+# accepted). Schema-canonical form: AWSBootstrapRoleAccountArn.
 name: My Application
 deployment:
   requirements:

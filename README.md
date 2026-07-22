@@ -95,7 +95,7 @@ Use this table to pick the right skill for a request:
 | Kubernetes operator (CRDs + controller) | hosted / BYOC / BYOC-K8s | **omnistrate-operator** |
 | Instance showing FAILED / DEPLOYING / probe errors | hosted / BYOC / BYOC-K8s / air-gapped | **omnistrate-sre** |
 
-**Deployment model quick-map** (all models available for all artifact types via the FDE skill):
+**Deployment model quick-map** (all models available for all artifact types via the FDE skill; the air-gapped installer packages a Helm chart, so non-Helm stacks must first be bundled into a chart):
 
 | Where instances run | Model name | Spec block |
 |---------------------|------------|------------|

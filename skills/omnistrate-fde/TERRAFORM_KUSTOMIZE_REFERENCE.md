@@ -28,8 +28,9 @@ Schema pin (add as the first line of your spec for editor validation):
 
 For the `deployment:` block (account IDs, `hostedDeployment` vs `byoaDeployment`, field casing,
 cloud-account prerequisites) see [DEPLOYMENT_MODELS_REFERENCE.md](DEPLOYMENT_MODELS_REFERENCE.md)
-([choosing a model](#choosing-a-deployment-model), [hosted](#hosted),
-[BYOC customer account](#byoc-customer-cloud-account)).
+([choosing a model](DEPLOYMENT_MODELS_REFERENCE.md#choosing-a-deployment-model),
+[hosted](DEPLOYMENT_MODELS_REFERENCE.md#hosted),
+[BYOC customer account](DEPLOYMENT_MODELS_REFERENCE.md#byoc-customer-cloud-account)).
 
 ---
 
@@ -676,14 +677,14 @@ omnistrate-ctl instance stop <instance-id> --output json
 omnistrate-ctl instance start <instance-id> --output json
 omnistrate-ctl instance delete <instance-id> --output json
 
-# Debug a failing instance
+# Debug a failing instance (terraform surfaces only; kustomize: workflow events + tunnel)
 omnistrate-ctl instance debug <instance-id>
 ```
 
 For local Terraform artifact sources, run `omnistrate-ctl build` from the workspace root that
 contains the `artifactRelativePath` target.
 
-**Debug loop:** instance describe (status) → `instance debug <id>` → fix spec → rebuild → redeploy.
+**Debug loop:** instance describe (status) → `instance debug <id>` (terraform surfaces only; kustomize: workflow events + tunnel) → fix spec → rebuild → redeploy.
 For systematic debugging of failed Terraform or Kustomize deployments, call the `omnistrate-sre` skill.
 
 **Restart vs new version:** modifying a running instance re-runs `terraform apply` with updated

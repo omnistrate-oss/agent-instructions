@@ -96,7 +96,7 @@ Pick the row for the user's artifact (intake Q1). The **deployment model**
 | Terraform / Kustomize | ServicePlanSpec (`terraformConfigurations` / `kustomizeConfiguration`) | same | `TERRAFORM_KUSTOMIZE_REFERENCE.md` |
 | Operator (CRDs + controller) | ServicePlanSpec (`systemWorkflows`) | same | → invoke **omnistrate-operator** skill |
 | Mixed (e.g. terraform infra + helm app) | ServicePlanSpec, multiple services with `dependsOn` | same | `HELM_ONBOARDING_REFERENCE.md` + `TERRAFORM_KUSTOMIZE_REFERENCE.md` |
-| Any artifact, air-gapped target | ServicePlanSpec with `onPremDeployment` | same | `DEPLOYMENT_MODELS_REFERENCE.md` §Air-gapped |
+| Any artifact, air-gapped target | ServicePlanSpec with `onPremDeployment` | same | `DEPLOYMENT_MODELS_REFERENCE.md` §Air-gapped (installer packages a Helm chart; non-Helm stacks must first be bundled into a chart) |
 | Nothing yet (design first) | — | — | → hand off to **omnistrate-sa** |
 
 ServicePlanSpec builds all share `--spec-type ServicePlanSpec`; the compose path
@@ -133,8 +133,8 @@ day one, but still keep the parameter set minimal.*
 the main resource, then `instance describe`. Expect **2–3 iterations** — do not
 stop at the first failure. Delegate failure analysis to **omnistrate-sre**
 (workflow events, then `instance debug <id>` for rendered helm values /
-terraform apply logs / kustomize YAML / operator CR status, then live pod
-state).
+terraform apply logs / operator CR status, then live pod state; kustomize:
+workflow events + tunnel — no `instance debug` rendered-artifact view).
 
 **5. Add parameters / lifecycle one at a time.** Rebuild + redeploy after
 *each* change — never batch. One variable, one build-deploy cycle.

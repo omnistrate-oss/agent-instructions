@@ -673,24 +673,27 @@ services:
 
 ### Decision 2: Deployment Model Selection
 
-| Factor | SaaS Provider | BYOC | BYOC Copilot | On-Premise |
-|--------|---------------|------|--------------|------------|
-| **Security** | Medium | High | Highest | Highest |
-| **Customer Control** | Low | High | High | Highest |
-| **Management Burden** | Provider | Provider | Provider | Customer |
-| **Setup Complexity** | Low | Medium | Medium | High |
-| **Cost Model** | Subscription | Subscription | Subscription | License |
-| **Use Case** | Most SaaS | Enterprise | Max Security | Regulated |
+Use the branch taxonomy (Hosted / BYOC-Account / BYO-VPC / BYOC PrivateLink /
+BYOC-K8s / Air-gapped). For the architecture-level constraints each model
+imposes (networking, licensing, backup storage, upgrade agility) see
+[Deployment Model Implications for Architecture](#deployment-model-implications-for-architecture)
+below; for spec blocks and onboarding flows see
+`../omnistrate-fde/DEPLOYMENT_MODELS_REFERENCE.md`.
 
-**Architecture Pattern**: Support multiple models in same service
-```yaml
-x-omnistrate-integrations:
-  - servicePlans:
-      - planName: starter
-        deploymentModel: saas
-      - planName: enterprise
-        deploymentModel: byoc
-```
+| Factor | Hosted | BYOC (Account / BYO-VPC / PrivateLink) | BYOC-K8s | Air-gapped |
+|--------|--------|-----------------------------------------|----------|------------|
+| **Security** | Medium | High (PrivateLink: highest — zero public exposure) | High | Highest (disconnected) |
+| **Customer Control** | Low | High (customer owns the account) | High (customer owns the cluster) | Highest (customer runs the installer) |
+| **Management Burden** | Provider | Provider operates; customer owns account | Provider operates workloads; customer owns cluster | Customer runs and operates |
+| **Setup Complexity** | Low | Medium (account onboarding) | Medium (cluster prerequisites) | High (installer packaging) |
+| **Cost Model** | Subscription | Subscription | Subscription | License / installer |
+| **Use Case** | Most SaaS | Enterprise / data sovereignty | Customers standardized on their own K8s | Regulated / defense / disconnected |
+
+**Architecture Pattern**: a single Plan can offer multiple models by declaring
+the matching `deployment:` blocks (e.g. `hostedDeployment` for a starter tier and
+`byoaDeployment` for an enterprise tier). The exact spec syntax lives in
+`../omnistrate-fde/DEPLOYMENT_MODELS_REFERENCE.md` — do not hand-write deployment
+fields from memory.
 
 ### Decision 3: Storage Architecture
 
