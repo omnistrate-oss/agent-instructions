@@ -278,15 +278,15 @@ x-omnistrate-image-registry-attributes:
   docker.io:          # Include ONLY if using private docker.io images
     auth:
       username: mycompany                       # Hardcoded OR {{ $secret.NAME }}
-      password: "{{ $secret.DOCKERHUB_PASSWORD }}"
+      password: {{ $secret.DOCKERHUB_PASSWORD }}
   ghcr.io:            # Include ONLY if using private ghcr.io images
     auth:
-      username: "{{ $secret.GITHUB_USERNAME }}"
-      password: "{{ $secret.GITHUB_TOKEN }}"
+      username: {{ $secret.GITHUB_USERNAME }}
+      password: {{ $secret.GITHUB_TOKEN }}
   registry.company.com:  # Include ONLY if using a custom private registry
     auth:
       username: registryuser
-      password: "{{ $secret.PRIVATE_REGISTRY_PASSWORD }}"
+      password: {{ $secret.PRIVATE_REGISTRY_PASSWORD }}
 
 services: [...]
 ```
@@ -571,14 +571,14 @@ x-omnistrate-capabilities:
 
 ### Autoscaling
 
-**Conflict rule**: `replicaCountAPIParam` and `autoscalingConfig` cannot be used together on the same service — they are mutually exclusive. Remove `replicaCountAPIParam` from `x-omnistrate-compute` before adding autoscaling.
+**Conflict rule**: `replicaCountAPIParam` and `autoscaling` cannot be used together on the same service — they are mutually exclusive. Remove `replicaCountAPIParam` from `x-omnistrate-compute` before adding autoscaling.
 
 ```yaml
 # ❌ Wrong — causes build error
 x-omnistrate-compute:
   replicaCountAPIParam: replicas
 x-omnistrate-capabilities:
-  autoscalingConfig:
+  autoscaling:
     minReplicas: 2
     maxReplicas: 10
 
@@ -588,7 +588,7 @@ x-omnistrate-compute:
     - cloudProvider: aws
       name: t3.xlarge
 x-omnistrate-capabilities:
-  autoscalingConfig:
+  autoscaling:
     minReplicas: 2
     maxReplicas: 10
     targetCPUUtilization: 75
