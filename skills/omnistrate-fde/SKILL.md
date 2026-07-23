@@ -5,6 +5,8 @@ description: Guide users through onboarding any application onto the Omnistrate 
 
 # Onboarding Services to Omnistrate
 
+All commands use the `omnistrate-ctl` CLI (alias `omctl`) — install and authenticate with `omnistrate-ctl login` first. An Omnistrate MCP server exposes equivalent tools (`mcp__ctl__*`); use those only if the user explicitly asks to work through MCP.
+
 ## Overview
 
 Omnistrate is a control plane that turns your existing artifact — a Docker
@@ -23,9 +25,11 @@ per-topic reference files in this directory.
 **Core principle: never write Omnistrate spec YAML, field names, or CLI flags
 from memory.** Untrained-knowledge Omnistrate specs are reliably wrong while
 looking plausible. Every fragment must be copied from a reference file in this
-directory or verified against docs
-(`mcp__ctl__docs_*`) and the JSON schema
+directory or verified against the Omnistrate docs
+(https://docs.omnistrate.com) and the JSON schema
 (`https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json`).
+The MCP docs-search tools (`mcp__ctl__docs_*`) are an optional alternative only
+when the user has asked to work through MCP.
 
 ## Phase 0 — Intake (ALWAYS start here for new onboarding)
 
@@ -110,8 +114,8 @@ Same six phases for every artifact and model. Per-phase commands are named
 generically; copy the exact syntax from the format's reference.
 
 **1. Verify accounts / prerequisites.** Confirm the *provider* cloud account is
-READY before anything else: `account_list` / `account_describe` (MCP) or
-`omnistrate-ctl account list` / `account describe`. Extract account IDs,
+READY before anything else: `omnistrate-ctl account list` /
+`omnistrate-ctl account describe <account-name>`. Extract account IDs,
 bootstrap role ARNs, project IDs for the `deployment:` block. For BYOC and
 BYOC-K8s, explain that *customer* accounts are onboarded later, at deploy time —
 see `DEPLOYMENT_MODELS_REFERENCE.md` (§BYOC, §BYOC-K8s) for the customer
@@ -181,10 +185,11 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
 ## Critical Rules
 
 1. **Never write spec YAML, field names, or CLI flags from memory.** Copy from
-   the reference files' verified fragments or a docs search
-   (`mcp__ctl__docs_*`) / the JSON schema
+   the reference files' verified fragments or verify against the Omnistrate docs
+   (https://docs.omnistrate.com) / the JSON schema
    (`https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json`).
-   Search docs before every extension or field you add.
+   Check the docs before every extension or field you add. (The MCP docs-search
+   tools `mcp__ctl__docs_*` are an optional alternative only on user request.)
 2. **Zero-parameterization first** (compose / helm / terraform / kustomize).
    Hardcode everything, get to RUNNING, then parameterize. *Operator-CR
    exception:* CR specs are parameter-driven from day one, set kept minimal.

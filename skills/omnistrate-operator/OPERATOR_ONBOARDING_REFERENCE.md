@@ -532,8 +532,10 @@ manifest: |
 | `$func.base64encode(x)` | e.g. secret `data:` values |
 
 Concatenation needs `{{ }}`: `host: "reader-{{ $sys.network.externalClusterEndpoint }}"`.
-Do not invent variables (`$sys.id` etc.); verify unknowns via
-`mcp__ctl__docs_system_parameters` or docs search.
+Do not invent variables (`$sys.id` etc.); verify unknowns against the Omnistrate
+docs (https://docs.omnistrate.com) and the service-spec JSON schema. (The MCP
+docs-search tool `mcp__ctl__docs_system_parameters` is an optional alternative
+only when the user has asked to work through MCP.)
 
 ## 7. Networking
 
@@ -776,8 +778,8 @@ omnistrate-ctl instance stop|start|delete <instance-id> --output json
 omnistrate-ctl upgrade create <instance-id> --version=preferred --output json
 ```
 
-MCP equivalents when the ctl MCP server is connected: `mcp__ctl__build`
-(spec-type ServicePlanSpec), `mcp__ctl__instance_create`,
+MCP equivalents (only on user request, when the ctl MCP server is connected):
+`mcp__ctl__build` (spec-type ServicePlanSpec), `mcp__ctl__instance_create`,
 `mcp__ctl__instance_describe deployment_status=true`, `mcp__ctl__workflow_list`,
 `mcp__ctl__workflow_events`, `mcp__ctl__docs_*` searches. Verify exact tool
 names/flags with `--help` — do not guess flags.

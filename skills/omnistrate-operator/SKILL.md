@@ -5,6 +5,8 @@ description: Use when onboarding a Kubernetes operator-based service (CRDs + con
 
 # Onboarding Kubernetes Operators to Omnistrate
 
+All commands use the `omnistrate-ctl` CLI (alias `omctl`) — install and authenticate with `omnistrate-ctl login` first. An Omnistrate MCP server exposes equivalent tools (`mcp__ctl__*`); use those only if the user explicitly asks to work through MCP.
+
 ## Overview
 
 An operator integration is a **ServicePlanSpec** (NOT a Docker-Compose spec — no
@@ -17,9 +19,11 @@ expressed as Argo-workflow DAGs under `systemWorkflows`.
 **Core principle: never write spec YAML from memory.** Untrained-knowledge
 Omnistrate specs are reliably wrong in structure, field names, and variable
 syntax while looking plausible. Every block you write must be copied from a
-known-good example (see Canonical Examples) or verified against docs/schema
-(`https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json`,
-`mcp__ctl__docs_*` search tools when available).
+known-good example (see Canonical Examples) or verified against the Omnistrate
+docs (https://docs.omnistrate.com) and the JSON schema
+(`https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json`).
+The MCP docs-search tools (`mcp__ctl__docs_*`) are an optional alternative only
+when the user has asked to work through MCP.
 
 ## When to Use
 
@@ -79,7 +83,7 @@ their workflow anatomy, not their install method.
 operator actually writes (get a live CR or read its API reference); Helm chart
 coordinates; operator scoping (question 1 above); the operator-native
 quiesce mechanism for stop/start (e.g. CNPG `cnpg.io/hibernation` annotation);
-verify cloud accounts (`mcp__ctl__account_list` / `omnistrate-ctl account list`).
+verify cloud accounts (`omnistrate-ctl account list` / `omnistrate-ctl account describe <account-name>`).
 
 **Phase 1 — Minimal spec.** Header (`name`, `tenancyType: CUSTOM_TENANCY`,
 `deployment.hostedDeployment` with real account values — field casing matters:
@@ -199,8 +203,8 @@ Public sources to verify against:
   still installs CNPG via the deprecated `helmChartDependencies`; copy its
   workflow anatomy, not its install method.
 - Service-spec JSON schema (URL above) and the Omnistrate docs
-  (https://docs.omnistrate.com/), or `mcp__ctl__docs_*` search when the ctl
-  MCP server is connected.
+  (https://docs.omnistrate.com/). The MCP docs-search tools (`mcp__ctl__docs_*`)
+  are an optional alternative only when the user has asked to work through MCP.
 
 ## Success Criteria
 

@@ -5,6 +5,8 @@ description: Guide users through designing application architectures from scratc
 
 # Omnistrate Solutions Architect
 
+Any Omnistrate commands referenced here or in the reference use the `omnistrate-ctl` CLI (alias `omctl`) — install and authenticate with `omnistrate-ctl login` first. An Omnistrate MCP server exposes equivalent tools (`mcp__ctl__*`); use those only if the user explicitly asks to work through MCP.
+
 ## When to Use This Skill
 
 **Use this skill when**:

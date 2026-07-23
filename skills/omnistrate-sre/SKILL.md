@@ -5,6 +5,8 @@ description: Systematically debug failed or stuck Omnistrate instance deployment
 
 # Debugging Omnistrate Deployments
 
+All commands use the `omnistrate-ctl` CLI (alias `omctl`) — install and authenticate with `omnistrate-ctl login` first. An Omnistrate MCP server exposes equivalent tools (`mcp__omnistrate-platform__omnistrate-ctl_*` / `mcp__ctl__*`); use those only if the user explicitly asks to work through MCP.
+
 ## When to Use This Skill
 - Instance deployments showing FAILED or DEPLOYING (stuck) status
 - Resources with unhealthy pod statuses or deployment errors
@@ -30,8 +32,8 @@ If the workflow UI and `instance debug` disagree, trust `instance debug` for res
 ## Progressive Debugging Workflow
 
 ### 1. Get Deployment Status
-**Tool**: `mcp__omnistrate-platform__omnistrate-ctl_instance_describe`
-**Flags**: `--deployment-status --output json`
+**Command**: `omnistrate-ctl instance describe <instance-id> --deployment-status --output json`
+(MCP equivalent, only on user request: `mcp__omnistrate-platform__omnistrate-ctl_instance_describe`.)
 
 Extract:
 - Overall instance status
@@ -41,8 +43,8 @@ Extract:
 **Key Benefit**: Returns concise status, significantly reduces token usage vs full describe.
 
 ### 2. Identify Workflows and Analyze Events (Two-Phase)
-**Tool**: `mcp__omnistrate-platform__omnistrate-ctl_workflow_list`
-**Flags**: `--instance-id <id> --output json` — extract workflow IDs, types, start/end times for failed deployments.
+**Command**: `omnistrate-ctl workflow list --instance-id <id> --output json` — extract workflow IDs, types, start/end times for failed deployments.
+(MCP equivalent, only on user request: `mcp__omnistrate-platform__omnistrate-ctl_workflow_list`.)
 
 **Phase 1 - Summary (Always Start Here)**:
 ```bash
@@ -102,7 +104,8 @@ If you only need metrics dashboard metadata: `omnistrate-ctl instance dashboard 
 ### 4. Live Cluster Access (Omnistrate Remote Tunneling)
 **When**: Resource DEPLOYING with probe failures; containers Running but not Ready; the previous step's response is too large; or no conclusive evidence yet.
 
-**Tool**: `mcp__omnistrate-platform__omnistrate-ctl_deployment-cell_update-kubeconfig` + kubectl
+**Command**: `omnistrate-ctl deployment-cell update-kubeconfig <cell-id>` + kubectl
+(MCP equivalent, only on user request: `mcp__omnistrate-platform__omnistrate-ctl_deployment-cell_update-kubeconfig`.)
 
 ```bash
 omctl deployment-cell update-kubeconfig <cell-id> --kubeconfig /tmp/kubeconfig

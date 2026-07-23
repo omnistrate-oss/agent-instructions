@@ -1,3 +1,7 @@
+## Tooling
+
+All skills default to the `omnistrate-ctl` CLI (alias `omctl`) — install it and run `omnistrate-ctl login` first (see https://docs.omnistrate.com/getting-started/installing-ctl/). An Omnistrate MCP server exposes equivalent tools (`mcp__ctl__*`); use those only if the user explicitly asks to work through MCP. Nothing here requires the MCP server.
+
 ## Skill Routing Guide
 
 Use the table below to select the right skill for each request. All four deployment models — **hosted** (provider cloud), **BYOC** including BYO-VPC and PrivateLink (customer cloud accounts), **BYOC-K8s** (customer-managed Kubernetes / `byoc-onprem`), and **air-gapped** (`onPremDeployment` installer) — are supported across all artifact types (the air-gapped installer packages a Helm chart, so non-Helm stacks must first be bundled into a chart).

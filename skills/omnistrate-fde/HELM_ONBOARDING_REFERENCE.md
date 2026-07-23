@@ -1,8 +1,9 @@
 # Helm Chart Onboarding Reference
 
-Based on the Omnistrate documentation (https://docs.omnistrate.com, searchable via
-`mcp__ctl__docs_*`). When this file conflicts with the live schema or a docs search,
-trust the schema/docs.
+Based on the Omnistrate documentation (https://docs.omnistrate.com; the MCP
+docs-search tools `mcp__ctl__docs_*` are an optional alternative when the user
+has asked to work through MCP). When this file conflicts with the live schema or
+the docs, trust the schema/docs.
 
 Schema pin (add as the first line of your spec for editor validation):
 
@@ -1151,8 +1152,8 @@ services:
 deploy, iterate section), but **what stop/start does to a Helm-deployed workload
 (scale StatefulSet to 0? suspend the release? snapshot PVCs?) is not documented in the
 Helm reference or the docs surface reviewed here.** Do not assert a specific mechanism.
-If an ISV needs defined stop/start semantics for a stateful chart, run a docs search
-(`mcp__ctl__docs_*`) to confirm current behavior, or consider the operator path — the
+If an ISV needs defined stop/start semantics for a stateful chart, check the Omnistrate
+docs (https://docs.omnistrate.com) to confirm current behavior, or consider the operator path — the
 `omnistrate-operator` skill documents an operator-native quiesce mechanism for stop/start
 (e.g. a hibernation annotation) that a plain Helm chart does not have.
 
