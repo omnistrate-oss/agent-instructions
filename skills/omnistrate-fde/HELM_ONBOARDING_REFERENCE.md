@@ -1174,6 +1174,11 @@ omnistrate-ctl build \
   --environment-type Dev \
   --release-as-preferred
 
+# PIT-STOP: after a successful build, surface the service/plan and Customer
+# Portal links from the build output and have the user review the generated
+# architecture (provider side) and their customers' UX (portal side) BEFORE
+# creating an instance — see SKILL.md workflow phase 3.
+
 # Create instance (target the main resource; pass params as JSON)
 omnistrate-ctl instance create \
   --service "RedisHelm" \

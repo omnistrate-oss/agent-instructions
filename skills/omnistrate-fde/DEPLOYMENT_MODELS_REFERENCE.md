@@ -234,47 +234,82 @@ x-omnistrate-service-plan:
 
 ### Onboarding a customer account — assisted CLI (aws/gcp/azure flag sets)
 
-Customers can self-serve via the portal, or you can onboard on their behalf. The
-assisted CLI flow differs only by the cloud-provider flag set:
+Customers can self-serve via the portal, or you can onboard on their behalf.
+**Before running anything, confirm the target environment with the user — prod
+(a real customer) or dev (testing the BYOC flow yourself):**
+
+| Target | What to ask the user for | Subscription |
+|---|---|---|
+| **Prod** | The customer's cloud-account details (per-cloud list below) **and the end-customer email** | Pass `--customer-email=<end-customer>` (or `--subscription-id`) so the account is onboarded on the customer's subscription |
+| **Dev** | Only the cloud-account details of the test account | Omit `--customer-email` — the command uses the **calling (logged-in) user's subscription** by default |
+
+Cloud-account details to collect, per provider:
+
+| Cloud | Details |
+|---|---|
+| AWS | account ID |
+| GCP | project ID + project number |
+| Azure | subscription ID + tenant ID |
+
+The create command differs only by the cloud-provider flag set. Use
+`--skip-wait` — the customer-side bootstrap must run before the account can
+become `READY`. Append `--customer-email=<end-customer@example.com>` in prod,
+and `--private-link` for PrivateLink accounts:
 
 ```bash
 # AWS
 omnistrate-ctl account customer create \
   --service=<service-name> --environment=<environment-name> \
-  --plan=<plan-name> --customer-email=<customer@example.com> \
-  --aws-account-id=<CUSTOMER_AWS_ACCOUNT_ID>
+  --plan=<plan-name> \
+  --aws-account-id=<CUSTOMER_AWS_ACCOUNT_ID> \
+  --skip-wait
 
-# GCP: --gcp-project-id / --gcp-project-number
-# Azure: --azure-subscription-id / --azure-tenant-id
-# PrivateLink: append --private-link
-```
-
-Full flag sets per provider:
-
-```bash
 # GCP account
 omnistrate-ctl account customer create \
   --service=<service-name> --environment=<environment-name> \
-  --plan=<plan-name> --customer-email=<customer@example.com> \
+  --plan=<plan-name> \
   --gcp-project-id=<CUSTOMER_GCP_PROJECT_ID> \
-  --gcp-project-number=<CUSTOMER_GCP_PROJECT_NUMBER>
+  --gcp-project-number=<CUSTOMER_GCP_PROJECT_NUMBER> \
+  --skip-wait
 
 # Azure account
 omnistrate-ctl account customer create \
   --service=<service-name> --environment=<environment-name> \
-  --plan=<plan-name> --customer-email=<customer@example.com> \
+  --plan=<plan-name> \
   --azure-subscription-id=<CUSTOMER_AZURE_SUBSCRIPTION_ID> \
-  --azure-tenant-id=<CUSTOMER_AZURE_TENANT_ID>
+  --azure-tenant-id=<CUSTOMER_AZURE_TENANT_ID> \
+  --skip-wait
 ```
 
-For AWS the customer-facing bootstrap (CloudFormation) must run in the customer
-account before the backing account config becomes `READY`; use `--skip-wait` on
-create, then find the backing config and complete bootstrap:
+### Presenting the per-cloud onboarding instructions (`account describe`)
+
+The bootstrap instructions the customer (prod) or you (dev) must execute live
+in the backing account config. Surface them **from the command output — never
+from memory**:
 
 ```bash
 omnistrate-ctl account customer describe <customer-account-instance-id> -o json
 # copy summary.accountConfigID, then:
-omnistrate-ctl account describe <account-config-id>   # Actions -> Bootstrap
+omnistrate-ctl account describe <account-config-id>
+```
+
+In the account TUI select **Actions -> Bootstrap**, then relay the instructions
+per cloud:
+
+- **AWS** — open (`o`) or copy (`c`) the CloudFormation URL and run the stack in
+  the customer account. A **Bootstrap (No LB)** entry exists for the alternate
+  flow without the load-balancer policy.
+- **GCP** — copy the Cloud Shell command and run it in the target customer
+  project.
+- **Azure** — copy the Azure Cloud Shell command and run it in the target
+  customer subscription.
+
+In prod, send these instructions to the end customer and wait for them to
+complete the bootstrap; in dev, execute them yourself against the test account.
+Then poll until the account reaches `READY`:
+
+```bash
+omnistrate-ctl account customer describe <customer-account-instance-id>
 ```
 
 Common BYOA lifecycle commands:

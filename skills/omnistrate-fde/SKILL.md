@@ -52,6 +52,12 @@ nothing yet.
 - *Your cloud account* → **hosted** deployment.
 - *Your customers' cloud accounts* → **BYOC** (`byoaDeployment`). Probe for VPC
   constraints and no-public-egress requirements → **BYO-VPC** / **PrivateLink**.
+  Then confirm **prod or dev**: *prod* → ask for the customer's cloud-account
+  details (AWS account ID / GCP project ID + number / Azure subscription +
+  tenant ID) **and the end-customer email**; *dev* → ask only for the
+  cloud-account details — the subscription defaults to your logged-in user.
+  Account onboarding flow + per-cloud bootstrap instructions:
+  `DEPLOYMENT_MODELS_REFERENCE.md` §BYOC.
 - *Your customers' existing Kubernetes clusters, you do NOT provision infra* →
   **BYOC-K8s** (deploys via a dataplane agent; customer owns the cluster).
 - *Fully disconnected / no connectivity back to you* → **air-gapped installer**
@@ -95,7 +101,7 @@ Pick the row for the user's artifact (intake Q1). The **deployment model**
 
 | Artifact | Spec format | Build command | Guide |
 |---|---|---|---|
-| Docker Compose | compose + `x-omnistrate-*` | `build_compose` / `omnistrate-ctl build -f <file>` | `COMPOSE_ONBOARDING_REFERENCE.md` |
+| Docker Compose | compose + `x-omnistrate-*` | `omnistrate-ctl build --file <compose-file>` | `COMPOSE_ONBOARDING_REFERENCE.md` |
 | Helm chart | ServicePlanSpec (`helmChartConfiguration`) | `omnistrate-ctl build -f spec.yaml --spec-type ServicePlanSpec` | `HELM_ONBOARDING_REFERENCE.md` |
 | Terraform / Kustomize | ServicePlanSpec (`terraformConfigurations` / `kustomizeConfiguration`) | same | `TERRAFORM_KUSTOMIZE_REFERENCE.md` |
 | Operator (CRDs + controller) | ServicePlanSpec (`systemWorkflows`) | same | → **omnistrate-operator** skill (see Companion skills below) |
@@ -104,7 +110,7 @@ Pick the row for the user's artifact (intake Q1). The **deployment model**
 | Nothing yet (design first) | — | — | → hand off to **omnistrate-sa** |
 
 ServicePlanSpec builds all share `--spec-type ServicePlanSpec`; the compose path
-is the exception (`build_compose` / plain `omnistrate-ctl build -f <file>`).
+is the exception (plain `omnistrate-ctl build --file <compose-file>`, no `--spec-type`).
 Exact flags and skeletons live in the per-format references — do not reconstruct
 them here.
 
@@ -129,12 +135,25 @@ body from the format's reference.
 *Exception (from the operator skill): CR-driven specs are parameter-driven from
 day one, but still keep the parameter set minimal.*
 
-**3. Build.** Must succeed before anything is added.
-- Compose: `build_compose` / `omnistrate-ctl build -f <compose-file>`.
+**3. Build — then a review pit-stop.** The build must succeed before anything
+is added.
+- Compose: `omnistrate-ctl build --file <compose-file>`.
 - Helm/Terraform/Kustomize/mixed: `omnistrate-ctl build -f spec.yaml --spec-type ServicePlanSpec ...`.
+- **Pit-stop (required): review before deploying.** The build output prints
+  links to the generated product — surface them from the actual output and
+  STOP. Have the user review both sides: (a) the **service/plan page**
+  (provider side) to sanity-check the generated architecture — resources,
+  parameters, endpoints; and (b) the **Customer Portal** ("Access SaaS
+  Product") to preview the exact UX their customers will get, including the
+  exposed parameters. (`--interactive` builds prompt for Customer Portal
+  access directly.) Proceed only after the user confirms, or adjust the spec
+  and rebuild.
 
 **4. Deploy one instance and debug until RUNNING.** `instance create` targeting
-the main resource, then `instance describe`. Expect **2–3 iterations** — do not
+the main resource, then `instance describe`. For BYOC targets the customer
+account must be onboarded and `READY` first — see
+`DEPLOYMENT_MODELS_REFERENCE.md` §BYOC — then deploy with
+`--customer-account-id`. Expect **2–3 iterations** — do not
 stop at the first failure. Debug loop, in escalating order:
    1. `omnistrate-ctl instance describe <id> --deployment-status --output json`
       — find the failing resource.

@@ -792,6 +792,12 @@ omnistrate-ctl build \
   --description "Service description"
 ```
 
+**Pit-stop after a successful build**: surface the service/plan and Customer
+Portal links from the build output and have the user review the generated
+architecture (provider side) and their customers' UX (portal side) before
+creating an instance — see SKILL.md workflow phase 3. (`--interactive` builds
+prompt for Customer Portal access directly.)
+
 ### List Service Plan Versions
 ```bash
 omnistrate-ctl service-plan list-versions --service-id <service-id> --plan-id <plan-id>
