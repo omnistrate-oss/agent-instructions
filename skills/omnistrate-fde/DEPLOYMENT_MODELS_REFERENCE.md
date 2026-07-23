@@ -7,9 +7,10 @@ sibling references: `COMPOSE_ONBOARDING_REFERENCE.md`, `HELM_ONBOARDING_REFERENC
 `TERRAFORM_KUSTOMIZE_REFERENCE.md`, and (in the operator skill)
 `OPERATOR_ONBOARDING_REFERENCE.md`.
 
-Every YAML field, CLI flag, and `$sys.*` path below is copied from the Omnistrate
-docs / spec templates. When something here conflicts with the live schema or a docs
-search, trust the schema/docs and update this file.
+Every YAML field, CLI flag, and `$sys.*` path below is drawn from the Omnistrate
+documentation (https://docs.omnistrate.com, searchable via `mcp__ctl__docs_*`). When
+something here conflicts with the live schema or a docs search, trust the schema/docs
+and update this file.
 
 **Field-casing rule (load-bearing):** the *same* fields are cased differently by
 context. The **schema-canonical** casing (the live
@@ -22,12 +23,10 @@ what the editor validator enforces — use it in new specs so validation passes:
 | ServicePlanSpec — `hostedDeployment` / `byoaDeployment` | root `deployment` | UpperCamel with `AWS` acronym fully uppercased in the ARN field | `AwsAccountId`, `AWSBootstrapRoleAccountArn` |
 | ServicePlanSpec — air-gapped `onPremDeployment` | root `deployment.onPremDeployment` | Same as above: `AwsAccountId` + `AWSBootstrapRoleAccountArn` | `AwsAccountId`, `AWSBootstrapRoleAccountArn` |
 
-> Official samples and docs vary in casing (e.g. `AwsBootstrapRoleAccountArn`
-> in the helm/kustomize `resource-spec-samples` and the air-gapped doc pages,
-> and lowerCamel in some BYOC doc pages) and the parser accepts those variants —
+> Official examples vary in casing (`AwsBootstrapRoleAccountArn` also appears, as
+> does lowerCamel in some contexts) and the parser accepts those variants —
 > but **new specs should use the schema-canonical form above** so the in-editor
-> validator does not flag them. Where a skeleton below is copied verbatim from a
-> sample, it is labeled as such and left as-is.
+> validator does not flag them.
 
 ---
 
@@ -105,7 +104,7 @@ across supported AWS regions; pick the region at deploy time with `--region`.
 
 ### Spec syntax — compose context (lowerCamel fields)
 
-Source: `x-omnistrate-service-plan.deployment.hostedDeployment` in the compose spec.
+The deployment block lives under `x-omnistrate-service-plan.deployment.hostedDeployment`:
 
 ```yaml
 x-omnistrate-service-plan:
@@ -125,7 +124,7 @@ in compose specs — use a ServicePlanSpec with `CUSTOM_TENANCY` for OCI.
 
 ### Spec syntax — ServicePlanSpec context (UpperCamel fields + casing warning)
 
-Source: `operator-spec-template/spec.yaml` header. The deployment block is at the
+In a ServicePlanSpec the deployment block is at the
 **root** (not under `x-omnistrate-service-plan`) and fields are UpperCamel:
 
 ```yaml
@@ -137,12 +136,12 @@ deployment:
 
 > **Casing warning:** schema-canonically the ARN field is
 > `AWSBootstrapRoleAccountArn` (acronym `AWS` fully uppercased) while the
-> account-ID field is `AwsAccountId` — this is the form in the operator spec
-> template and in the live schema, and it is what the editor validator expects.
+> account-ID field is `AwsAccountId` — this is the form in the live schema, and it
+> is what the editor validator expects.
 > The `onPremDeployment` block uses the **same** canonical casing (see
-> [Air-gapped](#air-gapped--on-prem-installer)). Some published samples spell the
-> ARN field `AwsBootstrapRoleAccountArn`; the parser accepts it, but do not copy
-> that variant into a new spec.
+> [Air-gapped](#air-gapped--on-prem-installer)). Official examples also spell the
+> ARN field `AwsBootstrapRoleAccountArn`; the parser accepts it, but do not use
+> that variant in a new spec.
 
 ### Tenancy interaction
 
@@ -203,15 +202,14 @@ x-omnistrate-service-plan:
       awsBootstrapRoleAccountArn: arn:aws:iam::<AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role
 ```
 
-ServicePlanSpec / Plan-spec context, root-level. The block below is **copied
-verbatim from the Omnistrate `byoc-deployment.md` doc page**, which shows
+ServicePlanSpec / Plan-spec context, root-level. The block below uses
 **lowerCamel** fields (`awsAccountId`, `awsBootstrapRoleAccountArn`) — the parser
 accepts this. Schema-canonical UpperCamel (`AwsAccountId` +
 `AWSBootstrapRoleAccountArn`, as in `hostedDeployment`) **also works and is what
 the editor validator expects**, so prefer it when authoring a fresh spec:
 
 ```yaml
-# Copied from byoc-deployment.md (lowerCamel; parser-accepted). Schema-canonical
+# lowerCamel form (parser-accepted). Schema-canonical
 # form: AwsAccountId / AWSBootstrapRoleAccountArn.
 name: My Product - BYOC
 deployment:
@@ -384,19 +382,18 @@ stays **connected** to your control plane.
 
 #### `byoaDeployment` account fields for a pure BYOC-K8s plan
 
-BYOC-K8s is "configured as a BYOC deployment Plan" and you "set up the provider side
-the same way you would for other BYOC Plans" (`docs/usecases/byoc-onprem.md`). Its
+BYOC-K8s is configured as a BYOC deployment Plan, and you set up the provider side
+the same way you would for other BYOC Plans. Its
 `byoaDeployment` block therefore still carries the provider `AwsAccountId` +
-`AWSBootstrapRoleAccountArn` (the doc's §1 example spells the ARN field in the
-accepted sample-variant casing `AwsBootstrapRoleAccountArn`; schema-canonical is
+`AWSBootstrapRoleAccountArn` (official examples also spell the ARN field in the
+accepted variant casing `AwsBootstrapRoleAccountArn`; schema-canonical is
 `AWSBootstrapRoleAccountArn` — see the casing table at the top of this file) —
 even though Omnistrate provisions no AWS infra in the customer's cluster.
 These are the **provider-side** account values Omnistrate uses to anchor trust and host
 generated artifacts (install kit, chart/registry access); they are **required by the
 spec schema** for a BYOC plan. Use your real provider account values — do not treat the
-block as a throwaway placeholder. (The docs describe the provider-side setup but do not
-spell out every internal use of the ARN for the no-infra case; if you need that detail,
-run a docs search.)
+block as a throwaway placeholder. (If you need detail on every internal use of the ARN
+for the no-infra case, run a docs search.)
 
 ### Target-cluster prerequisites
 
@@ -501,19 +498,18 @@ services:
 For a public endpoint Plan, use `$sys.network.externalClusterEndpoint` with
 `networkingType: PUBLIC` instead.
 
-Both examples above are copied from `docs/usecases/byoc-onprem.md` (§1 INTERNAL with
-`internalClusterEndpoint`; §3 PUBLIC with `externalClusterEndpoint`).
+Both examples above follow the same pattern (INTERNAL with
+`internalClusterEndpoint`; PUBLIC with `externalClusterEndpoint`).
 
 #### HTTP/HTTPS applications on BYOC-K8s (no platform cloud LB)
 
 The `$sys.*` endpoint examples above cover TCP services. For an **HTTP/HTTPS
 application** (Harbor, GitLab, a web UI) on BYOC-K8s there is an important difference:
 **Omnistrate provisions no cloud load balancer on a customer-managed cluster** — the
-customer owns ingress, DNS, and endpoint exposure. `docs/usecases/byoc-onprem.md`:
-"The customer owns the Kubernetes cluster, nodes, storage, network routing, and
-endpoint exposure" and "The customer decides whether product endpoints are
-private-only, reachable through a corporate network, or exposed through a public IP or
-load balancer."
+customer owns ingress, DNS, and endpoint exposure. The customer owns the Kubernetes
+cluster, nodes, storage, network routing, and endpoint exposure, and decides whether
+product endpoints are private-only, reachable through a corporate network, or exposed
+through a public IP or load balancer.
 
 So the plan-level `loadBalancers.https` (which expects a platform-managed cloud LB) is
 **not** the mechanism here. The pattern is:
@@ -588,16 +584,16 @@ and **one image registry** per Plan; bundle multiple charts into an umbrella cha
 
 ### Spec syntax (`requirements.k8sVersion`, `onPremDeployment` fields)
 
-Source: `air-gapped-helm-charts.md`. Schema-canonically `onPremDeployment` uses
+Schema-canonically `onPremDeployment` uses
 the **same** casing as `hostedDeployment` — `AwsAccountId` +
-`AWSBootstrapRoleAccountArn`. The block below is copied verbatim from the doc
-page, which spells the ARN field `AwsBootstrapRoleAccountArn`; the parser accepts
+`AWSBootstrapRoleAccountArn`. The block below spells the ARN field
+`AwsBootstrapRoleAccountArn`; the parser accepts
 that variant, but the editor validator expects `AWSBootstrapRoleAccountArn`, so
 prefer the canonical form in a fresh spec:
 
 ```yaml
-# Copied from air-gapped-helm-charts.md (AwsBootstrapRoleAccountArn; parser-
-# accepted). Schema-canonical form: AWSBootstrapRoleAccountArn.
+# variant casing AwsBootstrapRoleAccountArn (parser-accepted).
+# Schema-canonical form: AWSBootstrapRoleAccountArn.
 name: My Application
 deployment:
   requirements:
@@ -689,9 +685,9 @@ images from the chart's `Chart.yaml` annotations rather than listing them manual
 
 **Both `internal: true` on the image-sync service AND `dependsOn` on the main service
 are required** — `internal: true` keeps the sync service out of the customer-facing
-portal (`docs/spec-guides/plan-spec.md` §Resource schema: `internal` "Defines if the
-Resource can be created by customers or is an internal resource used by other
-Resources"), and `dependsOn` guarantees images are mirrored before the chart installs.
+portal (`internal` defines whether the Resource can be created by customers or is an
+internal resource used by other Resources), and `dependsOn` guarantees images are
+mirrored before the chart installs.
 Minimal two-service shape:
 
 ```yaml
@@ -841,7 +837,7 @@ features:
 Mounting: for compose, Omnistrate mounts the secret and sets env vars
 automatically. For **Helm / Operator**, the generated secret
 `service-plan-subscription-license` must be mounted at `/var/subscription/` — the
-SDKs assume the license is there (`docs/runtime-guides/licensing-protection.md`). SDKs:
+SDKs assume the license is there. SDKs:
 Go (`omnistrate-oss/omnistrate-licensing-sdk-go`) and Java
 (`omnistrate-oss/omnistrate-licensing-sdk-java`).
 
@@ -855,7 +851,7 @@ chartValues:
   extraVolumes:
     - name: subscription-license
       secret:
-        secretName: service-plan-subscription-license   # per licensing-protection.md
+        secretName: service-plan-subscription-license   # platform-generated license secret name
   extraVolumeMounts:
     - name: subscription-license
       mountPath: /var/subscription/                      # SDK-expected path

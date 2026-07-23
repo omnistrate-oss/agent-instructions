@@ -5,10 +5,8 @@ produced) and turn it into a distributable SaaS: release the version, make it
 reachable, configure the Customer Portal, optionally add billing, and generate a
 `DEPLOYMENT_OVERVIEW.md` artifact for the ISV.
 
-Verified against the Omnistrate docs under `/documentation/docs/`:
-`tenant-management/customer-portal.md`, `tenant-management/subscription-management.md`,
-`dev-ops-guides/environments.md`, `dev-ops-guides/upgrades.md`, `fin-ops-guides/billing.md`,
-`spec-guides/plan-spec.md`, `getting-started/getting-started-with-ctl.md`. When this file
+Based on the Omnistrate documentation (https://docs.omnistrate.com, searchable via
+`mcp__ctl__docs_*`). When this file
 conflicts with the live docs or CLI `--help`, trust the docs/CLI.
 
 Per-model customer experiences below reuse facts from
@@ -19,8 +17,8 @@ re-deriving them.
 
 ## 1. Release the plan
 
-Every change to your SaaS is **versioned and immutable once released**. Source:
-`dev-ops-guides/upgrades.md`. A version is in one of these states:
+Every change to your SaaS is **versioned and immutable once released**.
+A version is in one of these states:
 
 | State | Meaning |
 |-------|---------|
@@ -30,8 +28,7 @@ Every change to your SaaS is **versioned and immutable once released**. Source:
 | **Deprecated** | No longer valid; by definition no customer instances may reference it. |
 
 By default a new version is released as **Active** — you may test before promoting
-it to Preferred (the default your customers get). Release with the build command
-(source: `getting-started/getting-started-with-ctl.md`):
+it to Preferred (the default your customers get). Release with the build command:
 
 ```bash
 # Release as Active (available to create instances, not yet the default)
@@ -57,8 +54,6 @@ you explicitly need a new released version for identical inputs.
 
 ## 2. Make it reachable — environment visibility
 
-Source: `dev-ops-guides/environments.md`, `tenant-management/customer-portal.md`.
-
 - **Non-production environments are always private** — accessible only to your
   organization members. Use Dev/Staging portals to test Plans, pricing, and portal
   configuration before customers see them.
@@ -73,8 +68,6 @@ Source: `dev-ops-guides/environments.md`, `tenant-management/customer-portal.md`
 ---
 
 ## 3. The Customer Portal
-
-Source: `tenant-management/customer-portal.md`.
 
 **What it is.** A ready-to-use, no-code web UI that Omnistrate **auto-deploys per
 environment** the first time you create that environment. Open it from the Build
@@ -108,8 +101,6 @@ IdP settings.
 
 ## 4. Subscriptions
 
-Source: `tenant-management/subscription-management.md`, `tenant-management/customer-portal.md`.
-
 A **subscription** is the agreement granting a customer access to a Plan — access
 rights, resource allocation, service level, and billing terms. Approval mode is
 configurable:
@@ -134,14 +125,12 @@ fine-grained roles.
 
 ## 5. Pricing & billing (optional)
 
-Source: `fin-ops-guides/billing.md`, `spec-guides/plan-spec.md`.
-
 **No billing configured = free tier.** Billing is opt-in. To enable it: enable
 Tenant Billing at the account level (FinOps Center > Tenant Billing), connect a
 billing provider (Stripe via Stripe Connect, or bring your own), then configure
 pricing and providers on the Plan.
 
-**Pricing** — usage-based, over pre-set dimensions. Copied from `fin-ops-guides/billing.md`
+**Pricing** — usage-based, over pre-set dimensions
 (also settable in the plan spec's `pricing` block):
 
 ```yaml
@@ -166,7 +155,7 @@ pricing:
   price: 0.10
 ```
 
-**Billing providers** — copied from `fin-ops-guides/billing.md`:
+**Billing providers:**
 
 ```yaml
 billingProviders:
@@ -185,7 +174,7 @@ billingProviders:
 - `enablePaywall` — (Stripe only) `true` requires a valid payment method before a
   customer can create instances; `false` (default) does not.
 
-**Quota** — cap instances per subscription (copied from `fin-ops-guides/billing.md`):
+**Quota** — cap instances per subscription:
 
 ```yaml
 maxNumberOfInstancesAllowed: 5

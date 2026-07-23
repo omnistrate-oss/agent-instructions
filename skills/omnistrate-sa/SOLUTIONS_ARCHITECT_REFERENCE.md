@@ -796,7 +796,7 @@ x-omnistrate-capabilities:
 
 ## Deployment Model Implications for Architecture
 
-Source: `deployment-models.md`, `byoc-overview.md`, `air-gapped-overview.md`, `licensing-protection.md` in the Omnistrate documentation (https://docs.omnistrate.com). Full spec blocks and account-onboarding flows are authored during onboarding, not at design time.
+Source: the Omnistrate documentation (https://docs.omnistrate.com). Full spec blocks and account-onboarding flows are authored during onboarding, not at design time.
 
 When designing an architecture, the chosen deployment model affects four cross-cutting concerns: networking topology, licensing enforcement, backup storage availability, and upgrade agility. The table below summarizes each model's constraints so you can factor them in during Phase 1 discovery and Phase 4 deployment-model planning.
 

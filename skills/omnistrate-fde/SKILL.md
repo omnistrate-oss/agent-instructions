@@ -23,7 +23,7 @@ per-topic reference files in this directory.
 **Core principle: never write Omnistrate spec YAML, field names, or CLI flags
 from memory.** Untrained-knowledge Omnistrate specs are reliably wrong while
 looking plausible. Every fragment must be copied from a reference file in this
-directory, a sample/template, or verified against docs
+directory or verified against docs
 (`mcp__ctl__docs_*`) and the JSON schema
 (`https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json`).
 
@@ -181,7 +181,7 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
 ## Critical Rules
 
 1. **Never write spec YAML, field names, or CLI flags from memory.** Copy from
-   the reference files, samples/templates, or a docs search
+   the reference files' verified fragments or a docs search
    (`mcp__ctl__docs_*`) / the JSON schema
    (`https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json`).
    Search docs before every extension or field you add.
@@ -207,7 +207,7 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
 | "Helm / Terraform / Kustomize isn't supported by this skill." | It is. Use `HELM_ONBOARDING_REFERENCE.md` / `TERRAFORM_KUSTOMIZE_REFERENCE.md`. |
 | "This is an operator, I'll write the workflows here." | Hand off to **omnistrate-operator** — it owns `systemWorkflows`. |
 | "I'll default to `hostedDeployment`." | Ask intake Q2 first. The model is a decision, not a default. |
-| "I remember the field name / that ctl flag exists." | Grep the reference or sample; verify flags with `--help` or docs search. |
+| "I remember the field name / that ctl flag exists." | Grep the reference files; verify flags with `--help` or docs search. |
 | "Air-gapped needs an always-on agent phoning home." | No. Air-gapped is a self-contained *installer* artifact — no live control-plane link (`onPremDeployment`). |
 | "BYOC-K8s will provision the customer's nodes." | It won't. The customer owns the cluster and infra; Omnistrate only deploys workloads via the dataplane agent. |
 | "I'll add all the parameters, then build once." | One change per build-deploy cycle. Batching hides which change broke it. |

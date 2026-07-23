@@ -1,8 +1,8 @@
 # Helm Chart Onboarding Reference
 
-Verified against `resource-spec-samples/service-spec-helm.yaml` and the Omnistrate
-documentation under `docs/build-guides/helm-charts-*` and `docs/getting-started/build-from-helm.md`.
-When this file conflicts with the live schema or a docs search, trust the schema/docs.
+Based on the Omnistrate documentation (https://docs.omnistrate.com, searchable via
+`mcp__ctl__docs_*`). When this file conflicts with the live schema or a docs search,
+trust the schema/docs.
 
 Schema pin (add as the first line of your spec for editor validation):
 
@@ -23,8 +23,6 @@ Schema pin (add as the first line of your spec for editor validation):
 ---
 
 ## Minimal working skeleton
-
-Copied and adapted from `resource-spec-samples/service-spec-helm.yaml`.
 
 For the `deployment:` block (account IDs, `hostedDeployment` vs `byoaDeployment`, field casing,
 cloud-account prerequisites) see [DEPLOYMENT_MODELS_REFERENCE.md](DEPLOYMENT_MODELS_REFERENCE.md)
@@ -104,8 +102,6 @@ services:
 
 ## helmChartConfiguration fields
 
-Source: `docs/spec-guides/plan-spec.md` helm chart configuration schema section.
-
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `chartName` | string | Yes (repo-backed) | Name of the Helm chart. For local artifacts, read from `Chart.yaml`. |
@@ -152,7 +148,6 @@ Run `omnistrate-ctl build` from the workspace root that contains the artifact pa
 ## runtimeConfiguration
 
 Nested under `helmChartConfiguration.runtimeConfiguration`. All fields optional with sensible defaults.
-Source: `docs/build-guides/helm-charts-runtime-configuration.md`.
 
 | Field | Type | Default | Helm flag equivalent | When to use |
 |-------|------|---------|----------------------|-------------|
@@ -199,7 +194,7 @@ helmChartConfiguration:
 **In `chartValues`**, `$var.*` and `$sys.*` appear **bare** (no `{{ }}`).
 **Concatenation and `layeredChartValues` scopes** require `{{ }}`.
 
-This is exactly how they appear in `resource-spec-samples/service-spec-helm.yaml`:
+This is exactly how they must appear:
 
 ```yaml
 # Bare — correct in chartValues
@@ -246,7 +241,7 @@ chartValues:
 
 ### `$sys.*` — system parameters
 
-Common `$sys.*` paths used in the sample and docs:
+Common `$sys.*` paths:
 
 | Path | Value |
 |------|-------|
@@ -261,7 +256,6 @@ Common `$sys.*` paths used in the sample and docs:
 ### `$secret.*` vs customer `Password` parameters (credential wiring)
 
 There are **two distinct credential mechanisms** — pick based on *who owns the value*.
-Source: `docs/dev-ops-guides/secrets.md`.
 
 **`$secret.<name>` — ISV / environment-level secrets.** A `$secret.<name>` value is a
 name/value pair the ISV defines **per environment type** (Dev/Stage/Prod) in the
@@ -282,8 +276,7 @@ chartValues:
 When the *customer* supplies the credential at instance-create time, declare a
 `type: Password` apiParameter and reference it as `$var.<key>` in `chartValues`.
 Password-typed values are stored securely and masked in outputs
-(`docs/dev-ops-guides/secrets.md` §Best Practices: "Use the `password` API param
-type for any user-facing sensitive inputs"):
+(use the `password` API param type for any user-facing sensitive inputs):
 
 ```yaml
 # $var.<key> — customer-supplied, collected at create time
@@ -311,7 +304,6 @@ not `$secret.<name>`.
 
 Use `{{ $<terraformServiceName>.out.<key> }}` (with `{{ }}`) to reference outputs from a sibling Terraform service.
 The variable root is the **Terraform service name** (camelCased, spaces dropped) as declared in `dependsOn`.
-Source: `docs/build-guides/helm-charts-terraform.md`.
 
 ```yaml
 chartValues:
@@ -372,14 +364,14 @@ Do NOT try to expose everything — most chart values stay hardcoded.
 ### 3. Per-parameter mapping guidance
 
 For each Tier-1 value, choose the right `apiParameters` properties. Property
-semantics are copied from `docs/build-guides/api-params.md`:
+semantics:
 
 | Property | Type | Use it for |
 |----------|------|-----------|
 | `key` | string | Unique key referenced as `$var.<key>` in `chartValues` (same service) |
 | `name` | string | Display name shown in the Customer Portal |
 | `description` | string | Customer-facing explanation |
-| `type` | string | `String`, `Float64`, `Boolean`, `Password`, `Json` (see api-params types) |
+| `type` | string | `String`, `Float64`, `Boolean`, `Password`, `Json` (see valid `type` values below) |
 | `required` | boolean | If `false`, `defaultValue` is **mandatory** |
 | `defaultValue` | string | Always a **quoted string**, even for numeric/boolean types |
 | `export` | boolean | If `true`, returned on the describe call (customer can read it back) |
@@ -403,10 +395,10 @@ Concrete choices:
   usernames) — never for passwords.
 - Order with `tabIndex` so the most important parameter appears first.
 
-**Valid `type` values** (source: `docs/build-guides/api-params.md` §Parameter types):
+**Valid `type` values:**
 `boolean`, `string`, `password`, `float64`, `bytes`, `json`, `any`, `resource`. The
-samples and the tables above use title-case (`String`, `Float64`, `Password`, `Json`)
-and the parser accepts both; match the casing of whichever reference you copy from.
+tables above use title-case (`String`, `Float64`, `Password`, `Json`)
+and the parser accepts both; keep casing consistent within a spec.
 
 #### Kubernetes resource-quantity values (`8Gi`, `500m`, `2`)
 
@@ -439,7 +431,7 @@ chartValues:
       size: $var.storageSize   # bare; the whole "8Gi" flows through
 ```
 
-`options` applies to number, string, and JSON types (`docs/build-guides/api-params.md`).
+`options` applies to number, string, and JSON types.
 
 #### Storage-size parameters on PVC-backed charts → `modifiable: false`
 
@@ -453,14 +445,13 @@ verify chart-native resize support in the chart README before relaxing this.)
 
 #### Structured / JSON parameters (`type: json`)
 
-`type: json` is **a JSON-formatted string** (`docs/build-guides/api-params.md`
-§Parameter types: "`json`: A JSON formatted string"). The customer supplies JSON text;
+`type: json` is **a JSON-formatted string** (a `json` value is a JSON formatted
+string). The customer supplies JSON text;
 it is not a YAML block. A config blob that is authored as YAML (e.g. a Jenkins JCasC
 block) must be **pre-serialized to JSON** by the customer to be passed through a
-`type: json` parameter. A `type: json` value used in `helm-chart-layered-values.md`:
+`type: json` parameter. A `type: json` parameter:
 
 ```yaml
-# copied shape from docs/build-guides/helm-chart-layered-values.md
 apiParameters:
   - key: extraConfig
     name: Extra Config
@@ -474,16 +465,15 @@ apiParameters:
 > **Limitation note (not platform-documented):** there is no worked example of a
 > `type: json` value injected into a nested `chartValues` object, nor of accepting
 > verbatim YAML. Advanced JSON-schema-driven UI validation for `json` parameters is
-> explicitly **not supported** today (`docs/build-guides/api-params.md` §Current
-> capability boundaries). If a chart needs a large structured config blob, prefer
+> explicitly **not supported** today. If a chart needs a large structured config blob, prefer
 > hardcoding it in `chartValues`; expose it as `type: json` only if the customer
 > genuinely must override it, and verify the injection behavior at build time.
 
 #### `$var.*` inside YAML list items
 
-The bare-form rule ("`$var.*` appears bare in `chartValues`") is documented for scalar
-values. **No sample or doc shows `$var.<key>` used as a YAML *list element*** (e.g.
-`users: [ $var.username ]`). Treat this as unverified: **verify at build** by rendering
+The bare-form rule ("`$var.*` appears bare in `chartValues`") applies to scalar
+values. **`$var.<key>` used as a YAML *list element*** (e.g.
+`users: [ $var.username ]`) is not an established pattern. Treat this as unverified: **verify at build** by rendering
 `instance debug` and checking the value resolves in the list, or side-step it by
 passing the list as a single `type: json` value, or by pre-creating the resource the
 chart references (e.g. `existingSecret`) — do not assume list-element interpolation
@@ -541,7 +531,7 @@ Option B (terraform-managed cloud services) is **not** available on every model:
 |------------------|--------------------------------------------------|------------|
 | **Hosted** | Yes — terraform runs in your provider account | A or B (B for prod tiers) |
 | **BYOC (account)** | Yes — terraform runs in the customer's cloud account (their cost) | A or B |
-| **BYOC-K8s** (`byoc-onprem`) | **No** — there is no ISV cloud account for terraform to target; Omnistrate provisions no cloud infra (`docs/usecases/byoc-onprem.md`) | **Option A** (chart-bundled in-cluster) is the right call. If the customer wants a managed DB, that is the *customer's own* affair outside the plan. |
+| **BYOC-K8s** (`byoc-onprem`) | **No** — there is no ISV cloud account for terraform to target; Omnistrate provisions no cloud infra | **Option A** (chart-bundled in-cluster) is the right call. If the customer wants a managed DB, that is the *customer's own* affair outside the plan. |
 | **Air-gapped** (`onPremDeployment`) | **No** — no cloud services are reachable in a disconnected site | **Option A is mandatory.** State this so the ISV doesn't waste time evaluating B. |
 
 ### Umbrella charts — subchart-disable mechanisms and multiple replacements
@@ -579,8 +569,8 @@ namespace before `helm install` runs, rather than accepting the credential inlin
   This avoids the pre-create problem entirely and is the first thing to look for.
 - If the chart **strictly requires a pre-existing Secret**, Omnistrate can deploy
   `Secret` objects to a cell via **cell amenities** (`customAmenities` of
-  `type: KubernetesManifest`, `docs/dev-ops-guides/secrets.md` §Kubernetes Secrets as
-  Cell Amenities) — but that installs **once per deployment cell**, not per instance,
+  `type: KubernetesManifest`, i.e. Kubernetes Secrets as
+  cell amenities) — but that installs **once per deployment cell**, not per instance,
   so it fits shared/static secrets, not per-instance customer credentials.
 
 > **Limitation note (no per-instance pre-install-secret primitive documented):**
@@ -646,9 +636,7 @@ sibling terraform service (as an RDS master password, say), declare a `type: Pas
 apiParameter on the **customer-facing Helm service** and thread it into the terraform
 service with `parameterDependencyMap`. This is the documented direction — the
 consuming (parent) service declares the parameter and maps it onto the dependency; the
-terraform service consumes it via `{{ $var.<key> }}` in `variablesValuesFileOverride`.
-Copied from `docs/build-guides/terraform-params-outputs.md` §API Parameters as
-Terraform Inputs:
+terraform service consumes it via `{{ $var.<key> }}` in `variablesValuesFileOverride`:
 
 ```yaml
 services:
@@ -694,7 +682,7 @@ services:
 The customer supplies `dbPassword` once (on the App service); `parameterDependencyMap`
 threads it to `dbInfra` so the RDS master password and the chart's `externalDatabase.password`
 are guaranteed to match. Note only the parent can reference the child's parameters
-(`docs/build-guides/api-params.md`: "Only parent resources can refer to child resources").
+(only parent resources can refer to child resources).
 
 ---
 
@@ -704,9 +692,8 @@ Licensing (BYOC / air-gapped enforcement) is configured and explained in
 [DEPLOYMENT_MODELS_REFERENCE.md § Licensing protection](DEPLOYMENT_MODELS_REFERENCE.md#licensing-protection).
 For **Helm** services the platform does **not** auto-mount the license: the generated
 secret `service-plan-subscription-license` must be mounted at `/var/subscription/`
-inside the workload, because the validation SDKs assume it there
-(`docs/runtime-guides/licensing-protection.md`: "Omnistrate SDKs assume the secret is
-mounted under `/var/subscription/`").
+inside the workload, because the validation SDKs assume the secret is
+mounted under `/var/subscription/`.
 
 Most charts expose generic `extraVolumes` / `extraVolumeMounts` values (or per-role
 variants like `primary.extraVolumes`) to add a volume without editing templates. The
@@ -718,7 +705,7 @@ chartValues:
   extraVolumes:
     - name: subscription-license
       secret:
-        secretName: service-plan-subscription-license   # secret name per licensing-protection.md
+        secretName: service-plan-subscription-license   # platform-generated license secret name
   extraVolumeMounts:
     - name: subscription-license
       mountPath: /var/subscription/                      # SDK-expected mount path
@@ -730,8 +717,7 @@ chartValues:
 > `controller.*`) is **chart-specific**. Confirm the chart exposes them via
 > `helm show values <repo>/<chart>`; if a chart offers no extra-volume value, mounting
 > the license requires a chart change. Verify the secret name
-> (`service-plan-subscription-license`) and mount path (`/var/subscription/`) against
-> `docs/runtime-guides/licensing-protection.md` before shipping.
+> (`service-plan-subscription-license`) and mount path (`/var/subscription/`) before shipping.
 
 ---
 
@@ -774,7 +760,7 @@ and `omnistrate.com/schedule-mode: exclusive` pod label.
 ### Option B: Manual affinity (disable injection; full control)
 
 Disable injection and specify affinity rules directly in `chartValues`.
-Copied verbatim from `resource-spec-samples/service-spec-helm.yaml`:
+Known-good example:
 
 ```yaml
 helmChartConfiguration:
@@ -834,7 +820,7 @@ Labels and their purpose:
 ## Multi-service plans
 
 When one service depends on another, use `dependsOn` (ordering) and
-`parameterDependencyMap` (parameter threading). Copied from `resource-spec-samples/service-spec-helm.yaml`
+`parameterDependencyMap` (parameter threading). Known-good example
 (Redis → Postgres pattern):
 
 ```yaml
@@ -957,15 +943,15 @@ Kubernetes resources are provisioned and the host/IP is resolvable.
 | `PUBLIC` | Reachable over the public internet via a platform-managed LB/DNS | `$sys.network.externalClusterEndpoint` |
 | `INTERNAL` | Reachable only inside the deployment cell / cluster network (no public exposure) | `$sys.network.internalClusterEndpoint` |
 
-Source: `docs/usecases/byoc-onprem.md` (INTERNAL with `internalClusterEndpoint`;
-PUBLIC with `externalClusterEndpoint`). Choose `INTERNAL` for operator/admin ports
+INTERNAL uses `internalClusterEndpoint`; PUBLIC uses `externalClusterEndpoint`.
+Choose `INTERNAL` for operator/admin ports
 (e.g. a management UI) and any endpoint that should not be internet-reachable;
 `PUBLIC` for the client-facing endpoint. (`PRIVATE` appears in some examples as a
-synonym for internal-only exposure; prefer `INTERNAL`, which is the doc-traced value,
+synonym for internal-only exposure; prefer `INTERNAL`,
 and confirm with a docs search if a chart or plan needs another value.)
 
-**`network.ports` semantics.** `services[].network.ports` is "a list of ports and
-port ranges" (`docs/spec-guides/plan-spec.md` §Network schema) that the platform opens
+**`network.ports` semantics.** `services[].network.ports` is a list of ports and
+port ranges that the platform opens
 for the service. List the ports the service must actually serve/expose; do **not** list
 purely cluster-internal ports (e.g. Erlang distribution/epmd, inter-broker ports) that
 should never be externally reachable. `endpointConfiguration` then surfaces the
@@ -990,16 +976,12 @@ loadBalancers:
           backendPort: 6379
 ```
 
-Source: `docs/spec-guides/plan-spec.md` L7 Load Balancer Path Configuration schema.
-
 ### Plan-level L4 TCP load balancer (`loadBalancers.tcp`)
 
 For **TCP** services (Kafka 9092, PostgreSQL 5432, Redis 6379, RabbitMQ AMQP 5672) an
 L7 HTTPS LB does not apply — use `loadBalancers.tcp`. Each entry has a `name`,
 `description`, and a `ports` list; each port maps an external `ingressPort` to a
-`backendPort` on the resource(s) named in `associatedResourceKeys`. Schema from
-`docs/spec-guides/plan-spec.md` §L4 Load Balancer Configuration schema / §L4 Load
-Balancer Port Configuration schema:
+`backendPort` on the resource(s) named in `associatedResourceKeys`:
 
 ```yaml
 loadBalancers:
@@ -1102,17 +1084,16 @@ narrower than for compose/operator services — be honest about the boundary.
 
 `capabilities.backupConfiguration` (`backupRetentionInDays`, `backupPeriodInHours`,
 `snapshotBeforeDeletion`) is a sibling of `helmChartConfiguration` on a service in the
-schema, so the **field is accepted** on a Helm service. But the docs only demonstrate
-and describe its behavior for **Docker Compose** (`docs/build-guides/compose-spec.md`
-§`x-omnistrate-capabilities.backupConfiguration`) and **operators**
-(`docs/build-guides/operators.md`, which pairs it with `systemWorkflows`). There is
-**no Omnistrate doc describing volume-snapshot backup behavior for a plain Helm
+schema, so the **field is accepted** on a Helm service. But its behavior is only
+demonstrated and described for **Docker Compose**
+(`x-omnistrate-capabilities.backupConfiguration`) and **operators**
+(where it pairs with `systemWorkflows`). There is
+**no documented volume-snapshot backup behavior for a plain Helm
 chart's PVCs.** Do not promise Omnistrate-managed PVC snapshots for a Helm service
 without confirming via a docs search / a live test — treat platform-managed backup for
 plain Helm as **unverified**.
 
-Schema-accepted shape (compose/operator-documented fields; source:
-`docs/build-guides/operators.md` + `docs/build-guides/compose-spec.md`):
+Schema-accepted shape (compose/operator-documented fields):
 
 ```yaml
 services:

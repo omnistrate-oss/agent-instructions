@@ -1,5 +1,5 @@
 # RDS PostgreSQL for Keycloak — Omnistrate managed-service module
-# Adapted from resource-spec-samples/e2etestv2/original/aws/terraform/main.tf
+# Follows the Omnistrate managed-service module pattern for chart dependencies
 # (see TERRAFORM_KUSTOMIZE_REFERENCE.md § Managed-service modules for chart dependencies)
 # All {{ $sys.* }} and {{ $var.* }} are rendered by Omnistrate at deploy time.
 

@@ -1,6 +1,6 @@
 # GitLab managed infrastructure — RDS PostgreSQL + ElastiCache Redis + S3 buckets
-# Adapted from resource-spec-samples managed-service module patterns
-# (TERRAFORM_KUSTOMIZE_REFERENCE.md § Managed-service modules for chart dependencies).
+# Follows the Omnistrate managed-service module pattern for chart dependencies
+# (see TERRAFORM_KUSTOMIZE_REFERENCE.md § Managed-service modules for chart dependencies).
 #
 # Omnistrate manages state automatically; do NOT author a backend block.
 # ${{ $sys.* }} references are rendered by Omnistrate at plan time.

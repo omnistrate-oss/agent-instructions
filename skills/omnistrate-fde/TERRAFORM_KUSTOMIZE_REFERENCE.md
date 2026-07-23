@@ -1,11 +1,7 @@
 # Terraform & Kustomize Onboarding Reference
 
-Verified against `resource-spec-samples/service-spec-kustomize-terraform.yaml`,
-`resource-spec-samples/terraform-spec/`, `resource-spec-samples/terraform-private-module-spec/main.tf`,
-`resource-spec-samples/e2etestv2/original/kustomize/kustomization.yaml`,
-`resource-spec-samples/e2etest/kustomize/kustomization.yaml`, and the Omnistrate docs under
-`docs/build-guides/terraform-*.md`, `docs/getting-started/build-from-terraform.md`, and
-`docs/getting-started/build-from-kustomize.md`. When this file conflicts with the live schema
+Based on the Omnistrate documentation (https://docs.omnistrate.com, searchable via
+`mcp__ctl__docs_*`). When this file conflicts with the live schema
 or a docs search, trust the schema/docs.
 
 Schema pin (add as the first line of your spec for editor validation):
@@ -39,7 +35,7 @@ cloud-account prerequisites) see [DEPLOYMENT_MODELS_REFERENCE.md](DEPLOYMENT_MOD
 ### Minimal skeleton
 
 Terraform services are almost always marked `internal: true` — they are infrastructure dependencies,
-not customer-facing endpoints. Copied and adapted from `resource-spec-samples/service-spec-kustomize-terraform.yaml`.
+not customer-facing endpoints.
 
 ```yaml
 name: Multiple Resources
@@ -57,14 +53,14 @@ services:
     terraformConfigurations:
       configurationPerCloudProvider:
         aws:
-          terraformPath: /e2etestv2/original/terraform
+          terraformPath: /terraform
           gitConfiguration:
             reference: refs/tags/v3.7.1
             repositoryUrl: https://github.com/your-org/infra-repo.git
             accessToken: <GITHUB_PAT>
           terraformExecutionIdentity: "arn:aws:iam::<AWS_ACCOUNT_ID>:role/omnistrate-custom-terraform-execution-role"
         gcp:
-          terraformPath: /e2etestv2/original/terraform
+          terraformPath: /terraform
           gitConfiguration:
             reference: refs/tags/v3.7.1
             repositoryUrl: https://github.com/your-org/infra-repo.git
@@ -181,8 +177,7 @@ Lifecycle mapping:
 
 ### Templating inside .tf files
 
-Wrap Omnistrate parameters in `{{ }}` directly inside `.tf` files. Copied from
-`resource-spec-samples/terraform-spec/main.tf` and `docs/build-guides/terraform-params-outputs.md`:
+Wrap Omnistrate parameters in `{{ }}` directly inside `.tf` files:
 
 ```hcl
 provider "aws" {
@@ -224,7 +219,7 @@ Common system parameters in Terraform templates:
 For API parameters, use `$var.<key>` inside `{{ }}` in `.tf` files or in `variablesValuesFileOverride`.
 
 **`variablesValuesFileOverride`** — inject `.tfvars`-format content directly from the Plan spec
-(no separate `.tfvars` file needed in the repo). Copied from `docs/build-guides/terraform-params-outputs.md`:
+(no separate `.tfvars` file needed in the repo):
 
 ```yaml
 services:
@@ -257,8 +252,7 @@ services:
             repositoryUrl: https://github.com/your-org/infra-repo.git
 ```
 
-Alternatively, declare the variable's default directly in `variables.tf`. Copied from
-`resource-spec-samples/terraform-spec/variables.tf`:
+Alternatively, declare the variable's default directly in `variables.tf`:
 
 ```hcl
 variable "region" {
@@ -273,8 +267,7 @@ variable "region" {
 ### Private modules
 
 Use the `$sys.deployment.terraformPrivateModuleGitAccessTokens.token` system parameter to inject
-a Git access token into private module sources. Copied verbatim from
-`resource-spec-samples/terraform-private-module-spec/main.tf`:
+a Git access token into private module sources:
 
 ```hcl
 module "ec2_instance" {
@@ -292,8 +285,7 @@ at plan time.
 ### Outputs
 
 Terraform outputs are automatically captured after every `apply`. All outputs are available to
-dependent resources via `{{ $<serviceName>.out.<key> }}`. Copied from
-`docs/getting-started/build-from-terraform.md`:
+dependent resources via `{{ $<serviceName>.out.<key> }}`:
 
 ```hcl
 # outputs.tf
@@ -322,10 +314,10 @@ Consumed in a dependent resource (the service name is the root):
 ```
 
 The `<serviceName>` root matches the `name:` field of the Terraform service in the Plan spec.
-Copied from `resource-spec-samples/e2etest/kustomize/kustomization.yaml` — note nested field:
+Note the nested field:
 
 ```yaml
-# e2etest pattern
+# consuming a Terraform output with a nested field
 - s3Bucket={{ $terraformChild.out.bucket_url.arn }}     # bucket_url is the output, .arn is the nested field
 ```
 
@@ -371,8 +363,7 @@ names identical** across clouds so the consuming chart needs no cloud-specific b
 
 ### RDS (PostgreSQL / MySQL)
 
-Copied and adapted from `resource-spec-samples/e2etestv2/original/aws/terraform/main.tf`
-(`{{ $sys.* }}` templating kept exactly as the sample uses it):
+Known-good example (`{{ $sys.* }}` templating kept exactly as it must appear):
 
 ```hcl
 provider "aws" {
@@ -445,8 +436,8 @@ output "db_host" {
 ```
 
 `aws_db_instance.<name>.endpoint` is **`host:port`**; `.address` is **host only**
-(standard `aws_db_instance` attributes; `.address` does not appear in the local
-samples — confirm in the AWS provider docs if unsure). Charts differ on which they want: a chart's
+(standard `aws_db_instance` attributes; confirm attribute names in the AWS provider
+docs if unsure). Charts differ on which they want: a chart's
 `externalDatabase.host` field usually expects **host only** with `port` as a separate
 field — feed it `db_host` (the `.address` output), not `db_endpoints_1`, or you get a
 malformed connection string. Consume in the Helm chart's external-database block:
@@ -460,7 +451,7 @@ malformed connection string. Consume in the Helm chart's external-database block
 
 ### ElastiCache (Redis / Memcached)
 
-Copied and adapted from `resource-spec-samples/e2etestv2/original/aws/terraform2/main.tf`:
+Known-good example:
 
 ```hcl
 provider "aws" {
@@ -521,8 +512,7 @@ Consume in the Helm chart:
 
 ### S3 (object storage)
 
-Copied and adapted from `resource-spec-samples/e2edr/terraform/aws/storage/main.tf` +
-`resource-spec-samples/e2edr/terraform/aws/storage/outputs.tf`:
+Known-good example:
 
 ```hcl
 provider "aws" {
@@ -713,8 +703,6 @@ output "database_endpoint" { value = azurerm_postgresql_flexible_server.main.fqd
 
 ### Minimal skeleton
 
-Copied and adapted from `resource-spec-samples/service-spec-kustomize-terraform.yaml`.
-
 ```yaml
 services:
   - name: kustomizeRoot
@@ -729,7 +717,7 @@ services:
       ports:
         - 3306
     kustomizeConfiguration:
-      kustomizePath: /e2etestv2/original/kustomize
+      kustomizePath: /kustomize
       gitConfiguration:
         reference: refs/tags/v3.7.1
         repositoryUrl: https://github.com/your-org/infra-repo.git
@@ -768,13 +756,13 @@ Key fields:
 ### Templating kustomization.yaml
 
 Omnistrate renders `kustomization.yaml` with the same `{{ }}` template syntax as Terraform.
-Copied verbatim from `resource-spec-samples/e2etestv2/original/kustomize/kustomization.yaml`:
+Known-good example:
 
 ```yaml
 resources:
   - pg.yaml
   - hpa.yaml
-  - https://github.com/omnistrate/resource-spec-samples//e2etestv2/original/kustomize/config?ref=v3.7.23
+  - https://github.com/your-org/infra-repo//kustomize/config?ref=v3.7.23
 
 namespace: "{{ $sys.id }}"
 
@@ -804,7 +792,7 @@ Notes:
 - Remote bases: pin with `?ref=<tag>` (e.g. `?ref=v3.7.23`) — never leave a remote base unpinned in prod.
 - `$terraformChild.out.*` roots use the **service name** from `dependsOn` (e.g. `terraformChild`, `terraformChild2`).
 
-From `resource-spec-samples/e2etest/kustomize/kustomization.yaml` — example of a nested output field:
+Example of a nested output field:
 
 ```yaml
 configMapGenerator:
@@ -817,8 +805,7 @@ configMapGenerator:
 
 ### Workload manifests
 
-Pods created by Kustomize manifests require node affinity to land on Omnistrate-managed nodes.
-Copied from `docs/getting-started/build-from-kustomize.md`:
+Pods created by Kustomize manifests require node affinity to land on Omnistrate-managed nodes:
 
 ```yaml
 # pg.yaml (excerpt)
@@ -862,8 +849,7 @@ spec:
 ## Combining Terraform + Kustomize (or Helm)
 
 The canonical pattern: Terraform provisions cloud infra (internal), Kustomize (or Helm) consumes
-its outputs. Use `dependsOn` to declare the ordering. Copied from
-`resource-spec-samples/service-spec-kustomize-terraform.yaml`:
+its outputs. Use `dependsOn` to declare the ordering:
 
 ```yaml
 services:
@@ -872,7 +858,7 @@ services:
     terraformConfigurations:
       configurationPerCloudProvider:
         aws:
-          terraformPath: /e2etestv2/original/terraform
+          terraformPath: /terraform
           gitConfiguration:
             reference: refs/tags/v3.7.1
             repositoryUrl: https://github.com/your-org/infra-repo.git
@@ -882,7 +868,7 @@ services:
     terraformConfigurations:
       configurationPerCloudProvider:
         aws:
-          terraformPath: /e2etestv2/original/terraform2
+          terraformPath: /terraform2
           gitConfiguration:
             reference: refs/tags/v3.7.1
             repositoryUrl: https://github.com/your-org/infra-repo.git
@@ -900,7 +886,7 @@ services:
       ports:
         - 3306
     kustomizeConfiguration:
-      kustomizePath: /e2etestv2/original/kustomize
+      kustomizePath: /kustomize
       gitConfiguration:
         reference: refs/tags/v3.7.1
         repositoryUrl: https://github.com/your-org/infra-repo.git
