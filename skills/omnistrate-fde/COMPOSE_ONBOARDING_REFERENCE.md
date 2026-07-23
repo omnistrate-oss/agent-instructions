@@ -2,6 +2,8 @@
 
 Complete reference for transforming Docker Compose applications to Omnistrate service definitions.
 
+All commands use the `omnistrate-ctl` CLI (alias `omctl`) — install and authenticate with `omnistrate-ctl login` first. An Omnistrate MCP server exposes equivalent tools (`mcp__ctl__*`); use those only if the user explicitly asks to work through MCP.
+
 **Note**: This reference covers Docker Compose-based onboarding only. Other onboarding methods have their own reference files: [HELM_ONBOARDING_REFERENCE.md](HELM_ONBOARDING_REFERENCE.md), [TERRAFORM_KUSTOMIZE_REFERENCE.md](TERRAFORM_KUSTOMIZE_REFERENCE.md), and (Kubernetes Operators) the `omnistrate-operator` skill (separate install). Deployment models (hosted/BYOC/BYOC-K8s/air-gapped) for every method are in [DEPLOYMENT_MODELS_REFERENCE.md](DEPLOYMENT_MODELS_REFERENCE.md).
 
 ## Table of Contents
@@ -26,10 +28,10 @@ Complete reference for transforming Docker Compose applications to Omnistrate se
 ### Cloud Accounts
 ```bash
 # List available accounts
-mcp__ctl__account_list
+omnistrate-ctl account list
 
 # Get account details for service plan
-mcp__ctl__account_describe account-name="<account-name>"
+omnistrate-ctl account describe <account-name>
 ```
 
 Extract from account describe:
@@ -38,12 +40,14 @@ Extract from account describe:
 - **Azure**: SubscriptionId, TenantId
 
 ### System Parameters
-```bash
-# Get current system parameter schema
-mcp__ctl__docs_system_parameters
-```
 
-Always verify `$sys.*` variable paths against current schema before use.
+Verify the current system-parameter schema against the Omnistrate docs
+(https://docs.omnistrate.com) and the service-spec JSON schema
+(`https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json`).
+(The MCP docs-search tool `mcp__ctl__docs_system_parameters` is an optional
+alternative only when the user has asked to work through MCP.)
+
+Always verify `$sys.*` variable paths against the current schema before use.
 
 ## Deployment Model
 
@@ -68,7 +72,7 @@ x-omnistrate-service-plan:
       azureTenantId: "<AZURE_TENANT_ID>"
 ```
 
-Configure only the cloud providers you plan to support. Obtain values from `mcp__ctl__account_describe`.
+Configure only the cloud providers you plan to support. Obtain values from `omnistrate-ctl account describe <account-name>`.
 
 ## Service Architecture Patterns
 
@@ -286,7 +290,7 @@ Wait for confirmation that secrets have been created before building.
 
 ### `x-omnistrate-image-registry-attributes` Block
 
-Search docs first: `mcp__ctl__docs_compose_spec_search query="x-omnistrate-image-registry-attributes"`
+Verify against the Omnistrate docs first (https://docs.omnistrate.com — search for `x-omnistrate-image-registry-attributes`; MCP docs-search `mcp__ctl__docs_compose_spec_search` is an optional alternative only on user request).
 
 Add at the **top level** of the compose file (same level as `version:` and `services:`):
 
@@ -424,7 +428,7 @@ environment:
 ```
 
 #### 2. System Variables: `$sys.*`
-**Always verify paths** using `mcp__ctl__docs_system_parameters`
+**Always verify paths** against the Omnistrate docs (https://docs.omnistrate.com) and the JSON schema (MCP docs-search `mcp__ctl__docs_system_parameters` is an optional alternative only on user request)
 
 Common patterns:
 ```yaml
@@ -782,47 +786,45 @@ services:
 
 ### Build Service
 ```bash
-mcp__ctl__build_compose \
-  file="docker-compose-omnistrate.yaml" \
-  service_name="my-service" \
-  description="Service description"
+omnistrate-ctl build \
+  --file docker-compose-omnistrate.yaml \
+  --product-name "my-service" \
+  --description "Service description"
 ```
 
-### List Service Plans
+### List Service Plan Versions
 ```bash
-mcp__ctl__service_plan_list service_name="my-service"
-mcp__ctl__service_plan_describe service_name="my-service" plan_name="<plan>"
+omnistrate-ctl service-plan list-versions --service-id <service-id> --plan-id <plan-id>
 ```
 
 ### Create Instance
 ```bash
-mcp__ctl__instance_create \
-  service_name="my-service" \
-  plan_name="default" \
-  environment="prod" \
-  cloud_provider="gcp" \
-  region="us-central1" \
-  instance_name="customer-instance-1"
+omnistrate-ctl instance create \
+  --service "my-service" \
+  --environment prod \
+  --plan default \
+  --resource <resource> \
+  --cloud-provider gcp \
+  --region us-central1 \
+  --param-file ./params.json
 ```
 
 ### Monitor Deployment
 ```bash
 # Check status
-mcp__ctl__instance_describe \
-  service_name="my-service" \
-  instance_id="<id>" \
-  deployment_status=true
+omnistrate-ctl instance describe <instance-id> --deployment-status --output json
 
-# List workflows
-mcp__ctl__workflow_list \
-  service_name="my-service" \
-  instance_id="<id>"
+# List workflows for the instance
+omnistrate-ctl workflow list --instance-id <instance-id> --output json
 
 # Get workflow events
-mcp__ctl__workflow_events \
-  service_name="my-service" \
-  workflow_id="<id>"
+omnistrate-ctl workflow events <workflow-id> --output json
 ```
+
+(MCP equivalents, only on user request: `mcp__ctl__build_compose`,
+`mcp__ctl__service_plan_list`, `mcp__ctl__instance_create`,
+`mcp__ctl__instance_describe`, `mcp__ctl__workflow_list`,
+`mcp__ctl__workflow_events`.)
 
 ## Debugging Workflow
 
@@ -890,12 +892,12 @@ Fix: Add depends_on: [database] to service
 ## Troubleshooting
 
 ### Validation Errors
-```bash
-# Get JSON schema for validation
-mcp__ctl__docs_compose_spec_search \
-  query="x-omnistrate-compute" \
-  json_schema_only=true
-```
+Validate fields against the service-spec JSON schema
+(`https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json`)
+and the Omnistrate docs (https://docs.omnistrate.com — search for the extension,
+e.g. `x-omnistrate-compute`). The MCP docs-search tool
+`mcp__ctl__docs_compose_spec_search` is an optional alternative only on user
+request.
 
 ### Parameter Not Found
 ```
@@ -906,7 +908,7 @@ Fix: Ensure parameter defined in x-omnistrate-api-params
 ### Cloud Account Issues
 ```
 Error: invalid cloud account
-Fix: Re-run mcp__ctl__account_describe and copy exact values
+Fix: Re-run omnistrate-ctl account describe <account-name> and copy exact values
 ```
 
 ### Storage Mount Failed
@@ -916,10 +918,9 @@ Fix: Verify storage type valid for cloud/instance type
 ```
 
 ### Build Failures
-Search documentation for extension causing error:
-```bash
-mcp__ctl__docs_compose_spec_search query="<problematic-extension>"
-```
+Search the Omnistrate docs (https://docs.omnistrate.com) for the extension
+causing the error. (The MCP docs-search tool `mcp__ctl__docs_compose_spec_search`
+is an optional alternative only on user request.)
 
 ## Integration Configuration
 

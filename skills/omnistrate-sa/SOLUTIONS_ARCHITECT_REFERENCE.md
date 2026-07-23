@@ -2,6 +2,8 @@
 
 This document provides detailed reference material for architecting SaaS solutions on Omnistrate.
 
+Verify every field and extension below against the Omnistrate docs (https://docs.omnistrate.com) and the service-spec JSON schema (`https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json`). Any command uses the `omnistrate-ctl` CLI (alias `omctl`, authenticate with `omnistrate-ctl login`); an Omnistrate MCP server exposes equivalent tools (`mcp__ctl__*`, including the `mcp__ctl__docs_*` search tools) — use those only if the user explicitly asks to work through MCP.
+
 ## Table of Contents
 1. [Compose Spec Extensions Reference](#compose-spec-extensions-reference)
 2. [API Parameter Types & Configuration](#api-parameter-types--configuration)
@@ -58,7 +60,7 @@ services:
 #### x-omnistrate-api-params
 **Purpose**: Define customer-facing configuration parameters
 **Location**: Service level (typically on root service)
-**Documentation**: Always search with `mcp__ctl__docs_compose_spec_search query="x-omnistrate-api-params"`
+**Documentation**: Verify against the Omnistrate docs (https://docs.omnistrate.com — search for `x-omnistrate-api-params`)
 
 ```yaml
 x-omnistrate-api-params:
@@ -98,7 +100,7 @@ x-omnistrate-api-params:
 #### x-omnistrate-compute
 **Purpose**: Configure compute resources (instance types, replicas)
 **Location**: Service level
-**Documentation**: `mcp__ctl__docs_compose_spec_search query="x-omnistrate-compute"`
+**Documentation**: Verify against the Omnistrate docs (https://docs.omnistrate.com — search for `x-omnistrate-compute`)
 
 ```yaml
 x-omnistrate-compute:
@@ -130,7 +132,7 @@ x-omnistrate-compute:
 #### x-omnistrate-storage
 **Purpose**: Configure persistent volumes
 **Location**: Service level (on services needing storage)
-**Documentation**: `mcp__ctl__docs_compose_spec_search query="x-omnistrate-storage"`
+**Documentation**: Verify against the Omnistrate docs (https://docs.omnistrate.com — search for `x-omnistrate-storage`)
 
 ```yaml
 x-omnistrate-storage:
@@ -159,7 +161,7 @@ x-omnistrate-storage:
 #### x-omnistrate-capabilities
 **Purpose**: Enable advanced features (backups, autoscaling, HA)
 **Location**: Service level (only on root services)
-**Documentation**: `mcp__ctl__docs_compose_spec_search query="x-omnistrate-capabilities"`
+**Documentation**: Verify against the Omnistrate docs (https://docs.omnistrate.com — search for `x-omnistrate-capabilities`)
 
 ```yaml
 x-omnistrate-capabilities:
@@ -192,7 +194,7 @@ x-omnistrate-capabilities:
 #### x-omnistrate-actionhooks
 **Purpose**: Custom logic at lifecycle events
 **Location**: Service level
-**Documentation**: `mcp__ctl__docs_compose_spec_search query="x-omnistrate-actionhooks"`
+**Documentation**: Verify against the Omnistrate docs (https://docs.omnistrate.com — search for `x-omnistrate-actionhooks`)
 
 ```yaml
 x-omnistrate-actionhooks:
@@ -409,7 +411,7 @@ services:
 
 ## System Parameters Catalog
 
-**Always verify with**: `mcp__ctl__docs_system_parameters`
+**Always verify with**: the Omnistrate docs (https://docs.omnistrate.com) and the service-spec JSON schema
 
 ### Network Parameters
 
@@ -1049,49 +1051,53 @@ services:
 
 ## Quick Reference Commands
 
-### Documentation Search
-```bash
-# Search compose spec extensions
-mcp__ctl__docs_compose_spec_search query="x-omnistrate-compute"
-
-# List system parameters
-mcp__ctl__docs_system_parameters
-```
+### Documentation
+Verify compose-spec extensions and system parameters against the Omnistrate docs
+(https://docs.omnistrate.com) and the service-spec JSON schema
+(`https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json`).
 
 ### Account Management
 ```bash
 # List cloud accounts
-mcp__ctl__account_list
+omnistrate-ctl account list
 
 # Get account details
-mcp__ctl__account_describe account-name="my-aws-account"
+omnistrate-ctl account describe my-aws-account
 ```
 
 ### Service Lifecycle
 ```bash
 # Build from compose
-mcp__ctl__build_compose file="docker-compose-omnistrate.yaml" service_name="myservice"
+omnistrate-ctl build --file docker-compose-omnistrate.yaml --product-name "myservice"
 
-# List service plans
-mcp__ctl__service_plan_list service_name="myservice"
+# List service plan versions
+omnistrate-ctl service-plan list-versions --service-id <service-id> --plan-id <plan-id>
 
 # Create instance
-mcp__ctl__instance_create service_name="myservice" plan_name="pro" ...
+omnistrate-ctl instance create --service myservice --environment prod --plan pro \
+  --resource <resource> --cloud-provider aws --region us-east-1 --param-file ./params.json
 
 # Check status
-mcp__ctl__instance_describe service_name="myservice" instance_id="xxx" deployment_status=true
+omnistrate-ctl instance describe <instance-id> --deployment-status --output json
 
 # Get workflows
-mcp__ctl__workflow_list service_name="myservice" instance_id="xxx"
+omnistrate-ctl workflow list --instance-id <instance-id> --output json
 
 # Analyze workflow events
-mcp__ctl__workflow_events service_name="myservice" workflow_id="yyy"
+omnistrate-ctl workflow events <workflow-id> --output json
 ```
+
+MCP equivalents, only on user request: `mcp__ctl__docs_compose_spec_search` /
+`mcp__ctl__docs_system_parameters` (docs), `mcp__ctl__account_list` /
+`mcp__ctl__account_describe`, `mcp__ctl__build_compose`,
+`mcp__ctl__service_plan_list`, `mcp__ctl__instance_create`,
+`mcp__ctl__instance_describe`, `mcp__ctl__workflow_list`,
+`mcp__ctl__workflow_events`.
 
 ### Testing Expressions
 ```bash
 # Test evaluate expressions
-omctl instance evaluate <instance-id> <resource-key> --expression "$sys.deploymentCell.cloudProviderName"
+omnistrate-ctl instance evaluate <instance-id> <resource-key> --expression "$sys.deploymentCell.cloudProviderName"
 ```
 
 ---
@@ -1099,7 +1105,7 @@ omctl instance evaluate <instance-id> <resource-key> --expression "$sys.deployme
 ## Additional Resources
 
 - **Omnistrate Documentation**: https://docs.omnistrate.com
-- **Compose Spec Reference**: Use `mcp__ctl__docs_compose_spec_search`
-- **System Parameters**: Use `mcp__ctl__docs_system_parameters`
+- **Compose Spec Reference**: https://docs.omnistrate.com (search for the extension; MCP `mcp__ctl__docs_compose_spec_search` is an optional alternative only on user request)
+- **System Parameters**: https://docs.omnistrate.com and the service-spec JSON schema (MCP `mcp__ctl__docs_system_parameters` is an optional alternative only on user request)
 - **omnistrate-fde skill** (separate install): onboarding workflows for compose/helm/terraform/kustomize across all deployment models
 - **omnistrate-sre skill** (separate install): systematic debugging of failed instances

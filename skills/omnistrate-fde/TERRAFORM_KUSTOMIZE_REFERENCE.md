@@ -1,8 +1,9 @@
 # Terraform & Kustomize Onboarding Reference
 
-Based on the Omnistrate documentation (https://docs.omnistrate.com, searchable via
-`mcp__ctl__docs_*`). When this file conflicts with the live schema
-or a docs search, trust the schema/docs.
+Based on the Omnistrate documentation (https://docs.omnistrate.com; the MCP
+docs-search tools `mcp__ctl__docs_*` are an optional alternative when the user
+has asked to work through MCP). When this file conflicts with the live schema
+or the docs, trust the schema/docs.
 
 Schema pin (add as the first line of your spec for editor validation):
 

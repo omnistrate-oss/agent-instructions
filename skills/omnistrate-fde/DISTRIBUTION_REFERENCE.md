@@ -5,9 +5,10 @@ produced) and turn it into a distributable SaaS: release the version, make it
 reachable, configure the Customer Portal, optionally add billing, and generate a
 `DEPLOYMENT_OVERVIEW.md` artifact for the ISV.
 
-Based on the Omnistrate documentation (https://docs.omnistrate.com, searchable via
-`mcp__ctl__docs_*`). When this file
-conflicts with the live docs or CLI `--help`, trust the docs/CLI.
+Based on the Omnistrate documentation (https://docs.omnistrate.com; the MCP
+docs-search tools `mcp__ctl__docs_*` are an optional alternative when the user
+has asked to work through MCP). When this file conflicts with the live docs or
+CLI `--help`, trust the docs/CLI.
 
 Per-model customer experiences below reuse facts from
 [DEPLOYMENT_MODELS_REFERENCE.md](DEPLOYMENT_MODELS_REFERENCE.md) (same-skill link) rather than

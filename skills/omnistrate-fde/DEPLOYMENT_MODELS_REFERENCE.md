@@ -8,9 +8,10 @@ sibling references: `COMPOSE_ONBOARDING_REFERENCE.md`, `HELM_ONBOARDING_REFERENC
 `OPERATOR_ONBOARDING_REFERENCE.md`.
 
 Every YAML field, CLI flag, and `$sys.*` path below is drawn from the Omnistrate
-documentation (https://docs.omnistrate.com, searchable via `mcp__ctl__docs_*`). When
-something here conflicts with the live schema or a docs search, trust the schema/docs
-and update this file.
+documentation (https://docs.omnistrate.com; the MCP docs-search tools
+`mcp__ctl__docs_*` are an optional alternative when the user has asked to work
+through MCP). When something here conflicts with the live schema or the docs,
+trust the schema/docs and update this file.
 
 **Field-casing rule (load-bearing):** the *same* fields are cased differently by
 context. The **schema-canonical** casing (the live

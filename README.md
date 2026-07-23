@@ -1,10 +1,19 @@
 # Agent Instructions for Omnistrate
 
-This repository contains comprehensive instructions and configurations for using AI agents to interact with Omnistrate. It enables seamless integration between popular AI coding assistants and the Omnistrate platform through the Model Context Protocol (MCP).
+This repository contains agent skills for onboarding, operating, and debugging services on the Omnistrate platform. The skills drive the [`omnistrate-ctl`](https://docs.omnistrate.com/getting-started/installing-ctl/) command line tool by default, so any coding assistant that can run shell commands can use them.
+
+## Prerequisite
+
+Install and authenticate the Omnistrate CLI before using any skill:
+
+1. Install `omnistrate-ctl` — see the [installation guide](https://ctl.omnistrate.cloud/install/) and the [CTL command reference](https://ctl.omnistrate.cloud/omnistrate-ctl/).
+2. Log in: `omnistrate-ctl login` (the CLI is also aliased as `omctl`).
+
+That is all the skills require. An Omnistrate MCP server is an optional add-on (see [Optional: MCP server](#optional-mcp-server)); use it only if you explicitly want an agent to work through MCP instead of the CLI.
 
 ## Supported Agents
 
-This repository provides instructions and MCP server configurations for the following AI agents:
+Any assistant that can run `omnistrate-ctl` can use these skills, including:
 
 - Claude Code
 - Claude.ai and Claude for Desktop
@@ -14,18 +23,15 @@ This repository provides instructions and MCP server configurations for the foll
 - Windsurf
 - Gemini Code Assist
 - Gemini CLI
-- Any MCP-capable agent
 
-## What is MCP?
-
-The [Model Context Protocol (MCP)](https://modelcontextprotocol.io) is an open standard that allows AI agents to securely interact with external tools and services. This repository leverages MCP to enable agents to communicate with Omnistrate's APIs and services.
+The same agents can optionally connect the Omnistrate MCP server if they prefer MCP tools over direct CLI calls.
 
 ## Repository Structure
 
 ### Agent Configuration Files
 
 - **[CLAUDE.md](./CLAUDE.md)** - Claude Code skill configuration
-- **[AGENTS.md](./AGENTS.md)** - Generic agent instructions for all MCP-capable agents
+- **[AGENTS.md](./AGENTS.md)** - Generic agent instructions for any CLI-capable agent
 
 ### Skills
 
@@ -115,7 +121,7 @@ Claude Code automatically discovers and uses skills defined in [CLAUDE.md](./CLA
 1. Read [AGENTS.md](./AGENTS.md) to understand available skills
 2. Browse `skills/*/SKILL.md` files for workflow guidance
 3. Consult `skills/*/*_REFERENCE.md` files for detailed syntax and examples
-4. Configure your agent with the Omnistrate MCP server
+4. Ensure `omnistrate-ctl` is installed and logged in (see [Prerequisite](#prerequisite)); optionally connect the MCP server if you prefer working through MCP
 
 ### Quick Start
 
@@ -145,16 +151,25 @@ Claude Code automatically discovers and uses skills defined in [CLAUDE.md](./CLA
 3. Follow the progressive workflow (status → events → instance debug → live cluster access)
 4. Skill branches by resource type (Compose / Helm / Terraform / Operator / Kustomize) and deployment model (hosted / BYOC / BYOC-K8s / air-gapped)
 
-## MCP Tools Required
+## Optional: MCP server
 
-All skills require the Omnistrate MCP server providing:
-- `mcp__ctl__account_*` - Cloud account management
-- `mcp__ctl__docs_*` - Documentation search
-- `mcp__ctl__build_compose` - Service builds
-- `mcp__ctl__service_plan_*` - Plan management
-- `mcp__ctl__instance_*` - Instance operations
-- `mcp__ctl__workflow_*` - Workflow analysis
-- `mcp__ctl__deployment-cell_*` - Kubernetes access
+The skills default to the `omnistrate-ctl` CLI and need nothing beyond it. If you
+prefer to have an agent work through the [Model Context Protocol](https://modelcontextprotocol.io)
+instead of running CLI commands, you can connect the Omnistrate MCP server, which
+exposes tools equivalent to the CLI subcommands. Set this up only if you
+explicitly want MCP; it is never required.
+
+Per-agent MCP configuration for read-only access lives in the
+`skills/omnistrate-mcp-readonly/` skill. When connected, the server provides
+tools that map to the same operations the CLI performs:
+
+- `mcp__ctl__account_*` - Cloud account management (CLI: `omnistrate-ctl account ...`)
+- `mcp__ctl__docs_*` - Documentation search (CLI default: the [docs site](https://docs.omnistrate.com))
+- `mcp__ctl__build_compose` - Service builds (CLI: `omnistrate-ctl build ...`)
+- `mcp__ctl__service_plan_*` - Plan management (CLI: `omnistrate-ctl service-plan ...`)
+- `mcp__ctl__instance_*` - Instance operations (CLI: `omnistrate-ctl instance ...`)
+- `mcp__ctl__workflow_*` - Workflow analysis (CLI: `omnistrate-ctl workflow ...`)
+- `mcp__ctl__deployment-cell_*` - Kubernetes access (CLI: `omnistrate-ctl deployment-cell ...`)
 
 ## Contributing
 
