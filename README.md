@@ -110,11 +110,63 @@ Use this table to pick the right skill for a request:
 | Customer's own Kubernetes cluster | BYOC-K8s (`byoc-onprem`) | `byoaDeployment` |
 | Fully disconnected / no internet | Air-gapped | `onPremDeployment` |
 
+## Installing the Skills
+
+Each skill is a self-contained directory under `skills/<skill-name>/` (SKILL.md + reference files + assets) in the open [Agent Skills](https://agentskills.io) format. Install the ones you need — `omnistrate-fde`, `omnistrate-operator`, `omnistrate-sre`, `omnistrate-sa`.
+
+### Cross-agent (one command)
+
+The [`skills` CLI](https://github.com/vercel-labs/skills) auto-detects your installed agents and places the skills in the right directories:
+
+```bash
+# All skills, all detected agents (add -g for personal/global scope)
+npx skills add omnistrate-oss/agent-instructions
+
+# A single skill for a specific agent
+npx skills add omnistrate-oss/agent-instructions -s omnistrate-fde --agent claude-code
+```
+
+### Claude Code
+
+Skills load from `~/.claude/skills/` (personal, all projects) or `.claude/skills/` (per project):
+
+```bash
+git clone https://github.com/omnistrate-oss/agent-instructions /tmp/agent-instructions
+mkdir -p ~/.claude/skills
+for s in omnistrate-fde omnistrate-operator omnistrate-sre omnistrate-sa; do
+  cp -r "/tmp/agent-instructions/skills/$s" ~/.claude/skills/
+done
+```
+
+### OpenAI Codex
+
+Codex CLI supports the same SKILL.md format from `~/.agents/skills/` (personal) or `.agents/skills/` (per project):
+
+```bash
+git clone https://github.com/omnistrate-oss/agent-instructions /tmp/agent-instructions
+mkdir -p ~/.agents/skills
+for s in omnistrate-fde omnistrate-operator omnistrate-sre omnistrate-sa; do
+  cp -r "/tmp/agent-instructions/skills/$s" ~/.agents/skills/
+done
+```
+
+### GitHub Copilot
+
+Copilot (coding agent, CLI, and VS Code agent mode) supports agent skills; install with the GitHub CLI (v2.90.0+):
+
+```bash
+gh skill install omnistrate-oss/agent-instructions omnistrate-fde
+gh skill install omnistrate-oss/agent-instructions omnistrate-operator
+gh skill install omnistrate-oss/agent-instructions omnistrate-sre
+gh skill install omnistrate-oss/agent-instructions omnistrate-sa
+# add --scope user for personal scope; project installs land in .github/skills/
+```
+
 ## How to Use
 
 ### For Claude Code Users
 
-Claude Code automatically discovers and uses skills defined in [CLAUDE.md](./CLAUDE.md). Simply start working with Omnistrate and Claude will invoke the appropriate skill based on your intent.
+Once installed (see [Installing the Skills](#installing-the-skills)), Claude Code discovers the skills automatically. Simply start working with Omnistrate and Claude will invoke the appropriate skill based on your intent; [CLAUDE.md](./CLAUDE.md) describes the routing between skills.
 
 ### For Other Agent Users
 
