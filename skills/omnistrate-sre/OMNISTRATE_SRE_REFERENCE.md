@@ -4,9 +4,12 @@ This document provides detailed reference information for debugging Omnistrate d
 
 ## Table of Contents
 1. [Tool Parameter Reference](#tool-parameter-reference)
-2. [Failure Analysis Template](#failure-analysis-template)
-3. [Complete Examples](#complete-examples)
-4. [Tool Alternatives](#tool-alternatives)
+2. [`instance debug` Output Anatomy](#instance-debug-output-anatomy)
+3. [Failure-Pattern Catalog](#failure-pattern-catalog)
+4. [BYOC / BYOC-K8s Connectivity Checklist](#byoc--byoc-k8s-connectivity-checklist)
+5. [Failure Analysis Template](#failure-analysis-template)
+6. [Complete Examples](#complete-examples)
+7. [Tool Alternatives](#tool-alternatives)
 
 ## Tool Parameter Reference
 
@@ -67,14 +70,142 @@ omctl operations events [flags]
 - `--end-date <RFC3339>`: End time window
 - `--event-source-types <types>`: Filter event sources (comma-separated)
 
+### instance debug
+```bash
+omnistrate-ctl instance debug <instance-id> [flags]
+```
+**Purpose**: Default starting point for Helm, Terraform, Compose, and Operator troubleshooting. Opens the instance resource dependency graph and surfaces resource-specific runtime detail (rendered artifacts, execution/apply logs, parameters, outputs, operation history, metrics metadata).
+**Key Flags**:
+- `--output json`: Non-interactive JSON output for automation (interactive TUI otherwise)
+
+Related: `omnistrate-ctl instance dashboard <instance-id>` returns only the metrics dashboard metadata. If logs/metrics are absent, the relevant integration is not enabled (Compose: `x-customer-integrations`/`x-internal-integrations`; Helm/Terraform/Operator: `features.CUSTOMER`/`features.INTERNAL`).
+
+### account customer describe
+```bash
+omnistrate-ctl account customer describe <customer-account-instance-id> [flags]
+```
+**Purpose**: Inspect a BYOC customer onboarding instance / account-config status. Continue deploying only when `account_status` is `READY`.
+**Key Flags**:
+- `-o json` / `--output json`: JSON output; `summary.accountConfigID` links to the backing account config used with `account describe <account-config-id>` (Actions -> Bootstrap for AWS CloudFormation).
+
 ### deployment-cell update-kubeconfig
 ```bash
 omctl deployment-cell update-kubeconfig <cell-id> [flags]
 ```
+**Purpose**: Secure mTLS reverse-tunnel access to ANY deployment cell (yours, a customer's, cross-cloud, cross-region). Replaces `aws eks update-kubeconfig` / `gcloud container clusters get-credentials` / `az aks get-credentials` — never use those. Standard tooling (kubectl, k9s, helm) works over the tunnel.
 **Key Flags**:
 - `--kubeconfig <path>`: Output path (default: /tmp/kubeconfig)
 - `--role <role>`: Access role (default: cluster-reader, use cluster-admin for helm)
-- `--customer-email <email>`: Filter by customer (optional)
+- `--customer-email <email>`: Required when the cell belongs to a customer (BYOC / BYOC-K8s)
+
+## `instance debug` Output Anatomy
+
+`omnistrate-ctl instance debug <instance-id>` shows the instance resource dependency graph; selecting a resource exposes different surfaces depending on its type. Use this table to know exactly which surface holds the evidence for a given failure.
+
+| Resource type | Surfaces exposed | Use for |
+|---------------|------------------|---------|
+| **Compose** | App logs; deployment API parameters; deployment output parameters; workflow events | Container startup/health/dependency errors; confirming API params resolved to expected runtime values; confirming output params other resources expect |
+| **Helm** | Helm install/upgrade **client logs**; app logs; **rendered chart values**; deployment API/output parameters; workflow events | Template rendering errors; hook/timeout/K8s-API validation failures; verifying rendered values match expected API/system params/defaults |
+| **Terraform / OpenTofu** | **Progress**; **rendered `.tf` files** (post variable-substitution + param mapping); captured **`terraform plan` preview**; live **apply logs**; **Terraform output**; **operation history**; app logs; workflow events | Confirming rendered artifacts + intended plan; classifying apply errors; confirming outputs feed downstream resources; reviewing prior attempts/errors |
+| **Operator** | App logs; deployment API parameters; deployment output parameters; **Operator CRD outputs**; workflow events | Confirming API params resolved to expected CR inputs; inspecting CRD outputs / exported output params; separating orchestration from reconciliation errors |
+| **Kustomize** | No dedicated `instance debug` subcommand (rendered-artifact subcommands are Helm and Terraform only). Read substitution/rendering results from workflow events, and inspect **live rendered manifests via the cluster tunnel** (`kubectl get -o yaml`) | Substitution failures; wrong/missing values before touching the cluster |
+
+Notes:
+- **Terraform execution has no manual `plan` approval gate** — Omnistrate applies autonomously. The plan preview is captured for inspection, not approval.
+- The **Metrics** tab (or `omnistrate-ctl instance dashboard <instance-id>`) shows Grafana dashboard metadata when metrics are enabled.
+- If a surface is empty, the corresponding integration is likely disabled (see `instance debug` in the Tool Parameter Reference).
+
+---
+
+## Failure-Pattern Catalog
+
+Each entry: **symptom → evidence location → fix.** Organized by resource type first, then by deployment model.
+
+### By Resource Type
+
+#### Helm
+| Symptom | Evidence location | Fix |
+|---------|-------------------|-----|
+| Wrong app config / missing values | `instance debug` → rendered chart values | Correct API/system-parameter mapping; **publish a new Plan version** (restart re-uses old renders) |
+| Hook / job failure, install timeout | `instance debug` → Helm client logs; live `Jobs`/hooks/`Services`/LB status via tunnel | Fix chart hook/job; tune `wait`/`waitForJobs`/`disableHooks`/`timeoutNanos` in `runtimeConfiguration` |
+| Repeated create/upgrade/delete failures; stuck delete | Debug events + client logs (first-install failures auto-clean, so NOT in `helm list`); look for leftover CRDs/finalizers/namespaced resources | Remove stuck finalizers/CRDs; adjust `skipCRDs`/`upgradeCRDs`; republish if chart inputs changed |
+| Platform shows DEPLOYING but release is fine | `helm status <release>` via `--role cluster-admin` tunnel | Often non-critical background jobs; confirm app is actually serving |
+
+#### Terraform / OpenTofu
+| Symptom | Evidence location | Fix |
+|---------|-------------------|-----|
+| Rendered `.tf` missing/wrong params, secrets, dependency outputs | `instance debug` → rendered Terraform files | Fix Plan spec / `parameterDependencyMap` / Git ref; **publish new Plan version** |
+| Plan does not match intended resources | `instance debug` → `terraform plan` preview | Correct source/params; republish |
+| Apply fails: IAM permission gap | `instance debug` → apply logs (permission/AccessDenied) | Grant permission on the execution identity; **restart workflow** (same artifacts still valid) |
+| Apply fails: quota exceeded | apply logs (quota/limit) | Raise cloud quota; restart |
+| Apply fails: SKU/region unavailable | apply logs (unavailable region/SKU) | Change SKU/region in params; if spec changed, republish |
+| Apply fails: resource-name conflict | apply logs (already exists) | Resolve naming collision; restart or republish depending on whether the name is spec-driven |
+| Provider auth failure (BYOC / control-plane / Nebius SA) | apply logs + provider config in `instance debug` | Fix provider credentials/config; retry |
+
+**Restart vs publish rule:** transient/cloud-side with the *same* released artifacts still valid → **restart**. Changed Plan spec, `parameterDependencyMap`, Git branch/tag/commit, or any re-rendered artifact → **publish a new version**. A restart re-uses captured artifacts; only a moving branch head re-resolves on restart (pin to tag/commit for determinism).
+
+#### Operator
+| Symptom | Evidence location | Fix |
+|---------|-------------------|-----|
+| Workflow task failed (orchestration) | `instance debug` / workflow events for the operator resource | Fix task definition/targeting (namespace, resource name) |
+| `successCondition` never met (readiness stalls) | Live CR `status.*` via tunnel; operator controller logs/events/status conditions | Confirm operator writes the referenced status path; correct the condition expression; fix the workload the CR manages |
+| Output not resolved / `$tasks.X.resource.*` fails | Task definition | A task with **no `successCondition` captures no live status ⇒ no `outputParameters`**; add a `successCondition` to the apply task (readiness belongs in `successCondition`; outputs read `$tasks.<task>.resource.status.*`) |
+| Controller crash-loop | Controller pod logs via tunnel | Fix operator deployment/RBAC; check CRD install |
+
+#### Kustomize
+| Symptom | Evidence location | Fix |
+|---------|-------------------|-----|
+| Substitution failure / unresolved values | Workflow events; live rendered yaml via tunnel (`kubectl get -o yaml`) | Fix parameter mapping; republish |
+| Pod Pending: missing StorageClass/PVC | Rendered yaml + `kubectl get storageclass`/`get pvc` via tunnel | Ensure StorageClass exists on the cell (amenity or customer prerequisite) |
+
+### By Deployment Model
+
+#### Hosted
+| Symptom | Evidence location | Fix |
+|---------|-------------------|-----|
+| Standard infra/app failure | Full progressive workflow (status → events → `instance debug` → tunnel) | Per resource-type branch — no extra connectivity boundary |
+
+#### BYOC (customer cloud account)
+| Symptom | Evidence location | Fix |
+|---------|-------------------|-----|
+| Customer account not `READY` | `account customer describe <id>` → `account_status`; `account describe <account-config-id>` | Complete cloud bootstrap (AWS CloudFormation via Actions -> Bootstrap) before deploying |
+| BYO-VPC violations (nodes/pods can't start or pull) | Deployment-cell bootstrap debug events; VPC config | Enable DNS hostnames+resolution; add NAT gateway + private-subnet routes; subnet tags `kubernetes.io/role/internal-elb=1` (private) / `kubernetes.io/role/elb=1` (public) |
+| PrivateLink connectivity failure | Bootstrap events; VPC endpoint + SG | Interface VPC endpoint to the Omnistrate PrivateLink service name; SG inbound TCP **8443–8506** from VPC CIDR; `--service-region` for cross-region (no private DNS) |
+
+#### BYOC-K8s (customer-managed Kubernetes, `byoc-onprem`/`on-prem`)
+| Symptom | Evidence location | Fix |
+|---------|-------------------|-----|
+| Instance never progresses; agent not connected | `kubectl -n dataplane-agent get deploy/dp-agent` via tunnel/customer context | Re-run install kit (`./install.sh --non-interactive`) or `account customer install-kit`; ensure agent Available |
+| Image-pull / agent-connect failures | Pod events + agent logs | Open outbound egress to control-plane endpoints + image/Helm registries |
+| Pod Pending: missing StorageClass | `kubectl get storageclass` via tunnel | Customer/amenity must pre-create required StorageClasses |
+| Endpoint unreachable but instance healthy | `instance list-endpoints <id>` + customer network | **Customer-side**: ingress/LB/firewall/DNS routing — not a platform failure |
+
+#### Air-gapped (on-prem installer)
+| Symptom | Evidence location | Fix |
+|---------|-------------------|-----|
+| Install/validation failure | Action-hook logs (`VALIDATE`/`PRE_INSTALL`/`POST_INSTALL`/`BACKUP`, scope `CLUSTER`); `./install.sh` output | Fix the failing hook / cluster prerequisite (no live control-plane link — no `instance debug`/tunnel) |
+| Need provider troubleshooting | Diagnostic bundle uploaded to provider; customer-granted temporary access | Analyze bundle; use temporary-access grant for remote support |
+| Product stops working over time | License state | Disconnected licenses are **not rotated** and expire at their expiration date; images embedded via `INSTALLER_EMBED` |
+
+---
+
+## BYOC / BYOC-K8s Connectivity Checklist
+
+Run these before deep-diving a BYOC or BYOC-K8s failure — most "stuck" instances are a connectivity/prereq gap, not an application bug.
+
+**BYOC (customer cloud account):**
+1. `account customer describe <customer-account-instance-id>` → `account_status` is `READY`. If not, the cloud bootstrap (CloudFormation for AWS; Cloud Shell/Terraform for GCP/Azure) has not completed in the customer account.
+2. For BYO-VPC: DNS hostnames + resolution enabled; NAT gateway present with private-subnet routes; subnet tags correct (`internal-elb=1` private, `elb=1` public); public subnets auto-assign public IPv4.
+3. For PrivateLink: interface VPC endpoint to the Omnistrate PrivateLink service name; SG inbound TCP `8443–8506` from the VPC CIDR; if the account is PrivateLink and you need K8s debug access, confirm `K8sDebugAccessEnabled` (removes the `block-k8s-api-proxy` NetworkPolicy in the `dataplane-agent` namespace).
+
+**BYOC-K8s (customer-managed Kubernetes):**
+1. Dataplane agent Available: `kubectl -n dataplane-agent get deploy/dp-agent` (installed as `deployment/dp-agent` in namespace `dataplane-agent`).
+2. Outbound egress from cluster: control-plane endpoints reachable + image and Helm-chart registries reachable (no inbound to the cluster is required — the agent dials out over mTLS/gRPC).
+3. Required StorageClasses exist if the Plan uses persistent volumes.
+4. Cluster-level components (ingress controllers, cert-manager, monitoring) present as deployment-cell amenities or customer-installed prerequisites.
+5. Endpoint path (ingress/LB/firewall/DNS) matches the endpoint exposure the Plan defines — this is **customer-owned**; a healthy instance with an unreachable endpoint is a customer-side routing issue.
+
+---
 
 ## Failure Analysis Template
 
@@ -224,7 +355,7 @@ Result: Helm shows "deployed", but background jobs failing (non-critical)
 |-------------|---------------------|-------------|-----------|
 | `workflow_events` (full) | `workflow_events` (summary + targeted detail) | Always | Summary safe, detail only when needed |
 | `workflow_events` (any) | `operations_events` with filters | workflow_events exceeds tokens | Broader events, may need more filtering |
-| `instance_debug` | `instance_describe --deployment-status` | debug output too large | More targeted, less comprehensive |
+| `instance describe --deployment-status` | `instance debug <id>` | Need rendered artifacts / apply logs / CRD outputs, not just status | `instance debug` is richer per-resource; scope with `--output json` to manage tokens |
 | Large time ranges | Multiple smaller time windows | Date ranges return too much data | More API calls but manageable data |
 | Direct pod inspection | workflow/operations events | kubectl not available | Less direct, but still informative |
 

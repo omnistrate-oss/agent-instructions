@@ -784,7 +784,8 @@ names/flags with `--help` — do not guess flags.
 
 Debug loop: instance describe (deployment status) → workflow list/events for
 the failed verb → live CR status + operator logs (kubectl) → fix spec →
-re-build → re-deploy. Follow `omnistrate-sre` for the systematic version.
+re-build → re-deploy. The `omnistrate-sre` skill, if installed, provides the
+systematic version.
 
 ## 10. Troubleshooting
 

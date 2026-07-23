@@ -205,7 +205,7 @@ x-omnistrate-actionhooks:
   - scope: NODE
     type: POST_START  # After node starts
     commandTemplate: |
-      curl -X POST http://control-plane/register?node=$sys.compute.node.nodeId
+      curl -X POST http://control-plane/register?node=$sys.compute.node.name
 
   - scope: CLUSTER
     type: HEALTH_CHECK  # Custom health check
@@ -435,10 +435,10 @@ environment:
 ### Deployment Cell Parameters
 
 ```yaml
-$sys.deploymentCell.cloudProviderName  # aws, gcp, azure
-$sys.deploymentCell.region             # us-west-2, us-central1, etc.
-$sys.deploymentCell.accountId          # Cloud account ID
-$sys.deploymentCell.oidcIssuerID       # For IRSA/Workload Identity
+$sys.deploymentCell.cloudProviderName        # aws, gcp, azure
+$sys.deploymentCell.region                   # us-west-2, us-central1, etc.
+$sys.deploymentCell.cloudProviderAccountID   # Cloud account ID
+$sys.deploymentCell.oidcIssuerID             # For IRSA/Workload Identity
 ```
 
 **Usage**:
@@ -451,25 +451,24 @@ environment:
 ### Compute Parameters
 
 ```yaml
-$sys.compute.node.nodeId        # Unique node identifier
-$sys.compute.node.nodeName      # Node name in cluster
-$sys.compute.instanceType       # Actual instance type deployed
+$sys.compute.node.name          # Name of the current service node
+$sys.compute.node.index         # Index of the current node in the instance
+$sys.compute.node.instanceType  # Actual instance type deployed
 ```
 
 ### Storage Parameters
 
 ```yaml
-$sys.storage.volumeId           # Cloud volume identifier
-$sys.storage.bucket.name        # Object storage bucket name
+$sys.storage.volumes[i].id      # Cloud volume identifier (volume i)
+$sys.storage.volumes[i].size    # Volume size in GB (volume i)
 ```
 
-### Instance Parameters
+### Instance / Deployment Parameters
 
 ```yaml
-$sys.instance.id                # Omnistrate instance ID
-$sys.instance.name              # User-provided instance name
-$sys.resource.id                # Resource ID
-$sys.resource.key               # Resource key
+$sys.id                         # Omnistrate service instance ID
+$sys.deployment.resourceID      # Resource ID
+$sys.deployment.resourceAlias   # Resource alias
 ```
 
 ---
@@ -674,24 +673,27 @@ services:
 
 ### Decision 2: Deployment Model Selection
 
-| Factor | SaaS Provider | BYOC | BYOC Copilot | On-Premise |
-|--------|---------------|------|--------------|------------|
-| **Security** | Medium | High | Highest | Highest |
-| **Customer Control** | Low | High | High | Highest |
-| **Management Burden** | Provider | Provider | Provider | Customer |
-| **Setup Complexity** | Low | Medium | Medium | High |
-| **Cost Model** | Subscription | Subscription | Subscription | License |
-| **Use Case** | Most SaaS | Enterprise | Max Security | Regulated |
+Use the branch taxonomy (Hosted / BYOC-Account / BYO-VPC / BYOC PrivateLink /
+BYOC-K8s / Air-gapped). For the architecture-level constraints each model
+imposes (networking, licensing, backup storage, upgrade agility) see
+[Deployment Model Implications for Architecture](#deployment-model-implications-for-architecture)
+below. Spec blocks and account-onboarding flows are authored during onboarding,
+not at design time.
 
-**Architecture Pattern**: Support multiple models in same service
-```yaml
-x-omnistrate-integrations:
-  - servicePlans:
-      - planName: starter
-        deploymentModel: saas
-      - planName: enterprise
-        deploymentModel: byoc
-```
+| Factor | Hosted | BYOC (Account / BYO-VPC / PrivateLink) | BYOC-K8s | Air-gapped |
+|--------|--------|-----------------------------------------|----------|------------|
+| **Security** | Medium | High (PrivateLink: highest — zero public exposure) | High | Highest (disconnected) |
+| **Customer Control** | Low | High (customer owns the account) | High (customer owns the cluster) | Highest (customer runs the installer) |
+| **Management Burden** | Provider | Provider operates; customer owns account | Provider operates workloads; customer owns cluster | Customer runs and operates |
+| **Setup Complexity** | Low | Medium (account onboarding) | Medium (cluster prerequisites) | High (installer packaging) |
+| **Cost Model** | Subscription | Subscription | Subscription | License / installer |
+| **Use Case** | Most SaaS | Enterprise / data sovereignty | Customers standardized on their own K8s | Regulated / defense / disconnected |
+
+**Architecture Pattern**: a single Plan can offer multiple models by declaring
+the matching `deployment:` blocks (e.g. `hostedDeployment` for a starter tier and
+`byoaDeployment` for an enterprise tier). Do not hand-write deployment fields
+from memory at design time — the onboarding workflow authors them from verified
+templates (see https://docs.omnistrate.com/build-guides/deployment-models/).
 
 ### Decision 3: Storage Architecture
 
@@ -789,6 +791,49 @@ x-omnistrate-capabilities:
 - Enterprise tier
 - Critical data
 - Compliance requirements
+
+---
+
+## Deployment Model Implications for Architecture
+
+Source: the Omnistrate documentation (https://docs.omnistrate.com). Full spec blocks and account-onboarding flows are authored during onboarding, not at design time.
+
+When designing an architecture, the chosen deployment model affects four cross-cutting concerns: networking topology, licensing enforcement, backup storage availability, and upgrade agility. The table below summarizes each model's constraints so you can factor them in during Phase 1 discovery and Phase 4 deployment-model planning.
+
+### Per-Model Implications
+
+| Dimension | Hosted | BYOC-Account / BYO-VPC / PrivateLink | BYOC-K8s | Air-gapped |
+|-----------|--------|--------------------------------------|-----------|------------|
+| **Networking** | Standard public endpoints; optional Customer Networks for per-customer VPC isolation (hosted-only feature) | Control traffic over encrypted reverse channel (TLS/OAuth/mTLS); no inbound to customer account. BYO-VPC: customer-controlled routes and egress. PrivateLink: zero public exposure — all control traffic over AWS PrivateLink | Internal cluster endpoints (`$sys.network.internalClusterEndpoint`); no Omnistrate-provisioned infra — customer owns nodes, DNS, firewall, load balancer | No live control-plane connection; endpoints are installer-defined; no remote telemetry or debugging |
+| **Licensing** | Not required — software runs in your account | **Required** for BYOC-Account and BYO-VPC: software runs in a customer account you cannot control; 7-day signed license auto-renewed while subscription is active. PrivateLink: same requirement | **Required** — same as BYOC-Account; software runs outside your account | **Required** — license enforced offline via Omnistrate SDK (Let's Encrypt CA baked in); license expires at its expiration date and **will not auto-rotate** in a fully disconnected deployment |
+| **Backup storage** | Cloud object storage (S3/GCS/Azure Blob) in your account — fully managed by Omnistrate | Customer-account object storage used; customer must have S3/GCS/Blob available and bootstrap role must have access | Customer cluster must provide StorageClasses for persistent volumes; backup strategy depends on what the customer has installed (CSI snapshots, Velero, etc.) | No Omnistrate-managed backup automation; backup action hooks must write to a registry or storage the customer controls locally; no S3-style object store assumed |
+| **Upgrade agility** | Fleet-managed: Omnistrate can push upgrades across all instances centrally | Customer-approved: BYOC upgrades flow through the same control plane, but the customer account must accept the deployment cell changes; operator-assisted for enterprise | Customer-approved at cluster level; the customer controls when the dataplane agent is updated and when workloads are restarted | Installer-shipped: each new version is a new installer artifact; customers receive, scan, approve, and apply it manually; no automated rollout |
+
+### Design Guidance per Model
+
+**Hosted:**
+- Use standard Omnistrate public endpoints; no special endpoint configuration required.
+- Licensing is optional but can be added if you anticipate future BYOC expansion.
+- Backups and upgrades are fully automated.
+
+**BYOC-Account / BYO-VPC / BYOC PrivateLink:**
+- Enable licensing (`x-customer-integrations.licensing` in compose, or `features.CUSTOMER.licensing` in ServicePlanSpec) — software runs outside your perimeter.
+- Minimize cross-account dependencies; use customer IAM roles via the bootstrap role.
+- Design endpoints for private or restricted access; for PrivateLink plans, use INTERNAL `networkingType` and expose only what the customer VPC can reach.
+- Backup configuration must assume customer-account object storage; confirm the bootstrap role has write access to S3/GCS/Blob before enabling backup.
+
+**BYOC-K8s:**
+- Expose services via `$sys.network.internalClusterEndpoint` with `networkingType: INTERNAL` (default); use `externalClusterEndpoint` with `networkingType: PUBLIC` only if the customer cluster has a working load balancer.
+- The customer owns the cluster's storage classes, ingress controllers, and DNS — validate these prerequisites during onboarding.
+- Enable licensing — same enforcement need as BYOC-Account.
+- Upgrade timing is partially customer-controlled (they control the cluster and the agent).
+
+**Air-gapped:**
+- Enable licensing (`onPremDeployment`-based specs use `features.CUSTOMER.licensing`); use `INSTALLER_EMBED` pull mode so images are bundled into the artifact and no internet access is needed at install time.
+- Do not design architecture components that assume live internet connectivity, remote telemetry, or automatic image pulls.
+- Backup action hooks must write to customer-local storage; S3-compatible object store availability is not guaranteed — parameterize the backup target or make it optional.
+- Design upgrade paths as discrete installer artifacts; each release is a self-contained package. Build in `BACKUP` action hooks so the customer can snapshot before upgrading.
+- The license will **not** auto-rotate in a disconnected environment; plan for a license refresh workflow as part of the upgrade cycle.
 
 ---
 
@@ -1056,5 +1101,5 @@ omctl instance evaluate <instance-id> <resource-key> --expression "$sys.deployme
 - **Omnistrate Documentation**: https://docs.omnistrate.com
 - **Compose Spec Reference**: Use `mcp__ctl__docs_compose_spec_search`
 - **System Parameters**: Use `mcp__ctl__docs_system_parameters`
-- **FDE Skill**: See `../omnistrate-fde/` for onboarding workflows
-- **SRE Skill**: See `../omnistrate-sre/` for debugging workflows
+- **omnistrate-fde skill** (separate install): onboarding workflows for compose/helm/terraform/kustomize across all deployment models
+- **omnistrate-sre skill** (separate install): systematic debugging of failed instances
