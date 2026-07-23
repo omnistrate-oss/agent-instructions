@@ -8,7 +8,7 @@ _Generated at the end of Omnistrate onboarding. Deployment model(s): hostedDeplo
 
 _The diagram is `deployment-overview.svg`, derived from the Omnistrate architecture base template
 (`skills/omnistrate-fde/assets/omnistrate-architecture-base.svg`).
-The Omnistrate control plane (in Omnistrate's account) provisions and operates a deployment cell —
+The Omnistrate generated control plane (in your ISV account) provisions and operates a deployment cell —
 a Kubernetes cluster plus network, cell amenities, and outbound-only agents — in your (provider)
 AWS account. Keycloak runs as a Helm-managed workload inside the cell. An Amazon RDS PostgreSQL
 instance is provisioned by a sibling terraform service (`keycloakDb`) inside the same account and

@@ -11,7 +11,7 @@ Chart: `bitnami/redis` version `27.0.15` (appVersion `8.8.0`)
 ![Deployment overview](deployment-overview.svg)
 
 _The diagram is `deployment-overview.svg`, derived from the Omnistrate architecture
-base template. The Omnistrate control plane (in Omnistrate's account) provisions and
+base template. The Omnistrate generated control plane (in your ISV account) provisions and
 operates a deployment cell — a Kubernetes cluster plus network, cell amenities, and
 outbound-only agents — in the boundary shown (your AWS account); customers reach the
 Redis workloads through the platform-managed endpoint (LoadBalancer + External-DNS)._

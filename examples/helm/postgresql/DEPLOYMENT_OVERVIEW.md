@@ -12,7 +12,7 @@ _Chart: bitnami/postgresql v18.8.0 (PostgreSQL 18.4.0)._
 _The diagram is `deployment-overview.svg`, derived from the Omnistrate architecture
 base template (`skills/omnistrate-fde/assets/omnistrate-architecture-base.svg`)
 with BYOC-specific edits applied per DISTRIBUTION_REFERENCE.md.
-The Omnistrate control plane (in Omnistrate's account) provisions and operates a
+The Omnistrate generated control plane (in your ISV account) provisions and operates a
 deployment cell — a Kubernetes cluster plus network, cell amenities, and
 outbound-only agents — inside **the customer's own AWS account**. Customers reach
 the PostgreSQL workloads through the platform-managed LB / DNS / TLS endpoint on

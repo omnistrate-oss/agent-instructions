@@ -7,7 +7,7 @@ _Generated at the end of Omnistrate onboarding. Deployment model(s): BYOC-K8s (b
 ![Deployment overview](deployment-overview.svg)
 
 _The diagram is `deployment-overview.svg`, derived from the Omnistrate architecture base template.
-The Omnistrate control plane (in Omnistrate's account) operates deployments in the customer's
+The Omnistrate generated control plane (in your ISV account) operates deployments in the customer's
 existing Kubernetes cluster via a dataplane agent. The agent opens an **outbound-only** mTLS/gRPC
 channel to the control plane — Omnistrate provisions no infra and manages no cloud accounts.
 The customer owns the cluster, storage (PVCs), ingress/DNS/TLS, and endpoint exposure._

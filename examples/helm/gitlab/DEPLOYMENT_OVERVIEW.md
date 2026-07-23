@@ -7,7 +7,7 @@ _Generated at the end of Omnistrate onboarding. Deployment model(s): hostedDeplo
 ![Deployment overview](deployment-overview.svg)
 
 _The diagram is `deployment-overview.svg`, derived from the Omnistrate architecture
-base template. The Omnistrate control plane (in Omnistrate's account) provisions and
+base template. The Omnistrate generated control plane (in your ISV account) provisions and
 operates a deployment cell — a Kubernetes cluster plus network, cell amenities, and
 outbound-only agents — in the boundary shown; customers reach the workloads through
 the platform-managed endpoint._

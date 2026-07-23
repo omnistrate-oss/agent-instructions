@@ -264,7 +264,7 @@ skills/omnistrate-fde/assets/omnistrate-architecture-base.svg
 ```
 
 It depicts the architecture Omnistrate sets up **by default** (verified against the
-docs): the **Omnistrate Control Plane** runs in Omnistrate's account (API + fleet
+docs): the **Omnistrate Generated Control Plane** runs in your ISV account (API + fleet
 orchestration, the **Customer Portal** auto-deployed per environment, billing/
 metering); the data plane is a **deployment cell = a Kubernetes cluster plus its
 supporting network, system add-ons ("cell amenities": ingress, DNS, CSI, operators),
@@ -354,7 +354,7 @@ _Generated at the end of Omnistrate onboarding. Deployment model(s): <hosted / B
 ![Deployment overview](deployment-overview.svg)
 
 _The diagram is `deployment-overview.svg`, derived from the Omnistrate architecture
-base template. The Omnistrate control plane (in Omnistrate's account) provisions and
+base template. The Omnistrate generated control plane (in your ISV account) provisions and
 operates a deployment cell — a Kubernetes cluster plus network, cell amenities, and
 outbound-only agents — in the boundary shown; customers reach the workloads through
 the platform-managed endpoint._

@@ -6,7 +6,7 @@ _Generated at the end of Omnistrate onboarding. Deployment model: BYOC-K8s (`byo
 
 ![Deployment overview](deployment-overview.svg)
 
-_The diagram is `deployment-overview.svg`, derived from the Omnistrate architecture base template. The Omnistrate control plane (in Omnistrate's account) provisions and operates the Jenkins workload into the customer's existing Kubernetes cluster via the dataplane agent. Omnistrate does not provision nodes or cluster infra — the customer owns the cluster. The Jenkins UI is reachable on the internal cluster endpoint shown; customers reach it through their cluster's own DNS and routing._
+_The diagram is `deployment-overview.svg`, derived from the Omnistrate architecture base template. The Omnistrate generated control plane (in your ISV account) provisions and operates the Jenkins workload into the customer's existing Kubernetes cluster via the dataplane agent. Omnistrate does not provision nodes or cluster infra — the customer owns the cluster. The Jenkins UI is reachable on the internal cluster endpoint shown; customers reach it through their cluster's own DNS and routing._
 
 ## 2. Responsibility split
 

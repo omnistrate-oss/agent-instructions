@@ -7,7 +7,7 @@ _Generated at the end of Omnistrate onboarding. Deployment model(s): air-gapped 
 ![Deployment overview](deployment-overview.svg)
 
 _The diagram is `deployment-overview.svg`, derived from the Omnistrate architecture base template.
-In air-gapped mode the Omnistrate control plane (in Omnistrate's account) is **not** connected to
+In air-gapped mode the Omnistrate generated control plane (in your ISV account) is **not** connected to
 the data plane at runtime. Instead, Omnistrate builds a self-contained installer artifact at build time
 (images embedded via `INSTALLER_EMBED`, Helm chart bundled, lifecycle action-hook scripts included).
 The artifact is transferred to the customer's site via offline means (USB, airlift, SFTP over private

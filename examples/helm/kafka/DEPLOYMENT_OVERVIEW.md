@@ -7,7 +7,7 @@ _Generated at the end of Omnistrate onboarding. Deployment model(s): BYOC (byoaD
 ![Deployment overview](deployment-overview.svg)
 
 _The diagram is `deployment-overview.svg`, derived from the Omnistrate architecture base template.
-The Omnistrate control plane (in Omnistrate's account) provisions and operates a deployment cell —
+The Omnistrate generated control plane (in your ISV account) provisions and operates a deployment cell —
 a Kubernetes cluster plus network, cell amenities, and outbound-only agents — inside the
 **customer's** AWS cloud account; customers reach Kafka through the platform-managed TCP endpoint
 on port 9092 (SASL_PLAINTEXT)._

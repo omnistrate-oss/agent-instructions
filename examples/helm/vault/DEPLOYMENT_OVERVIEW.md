@@ -8,7 +8,7 @@ _Generated at the end of simulated Omnistrate onboarding. Deployment model(s): B
 
 ![Deployment overview](deployment-overview.svg)
 
-_The diagram is `deployment-overview.svg`, derived from the Omnistrate architecture base template. The Omnistrate control plane (in Omnistrate's account) provisions and operates a deployment cell — a Kubernetes cluster plus network, cell amenities, and outbound-only agents — in the customer's AWS account. Vault pods communicate over raft internally. Customers reach Vault exclusively through a PrivateLink-backed internal endpoint (no public internet exposure); the Omnistrate control-plane channel to the dataplane agent is also routed over AWS PrivateLink (the `--private-link` flag on customer account onboarding). There is no public endpoint; the `LB / DNS / TLS` box in the diagram represents an internal NLB or VPC-private DNS entry only._
+_The diagram is `deployment-overview.svg`, derived from the Omnistrate architecture base template. The Omnistrate generated control plane (in your ISV account) provisions and operates a deployment cell — a Kubernetes cluster plus network, cell amenities, and outbound-only agents — in the customer's AWS account. Vault pods communicate over raft internally. Customers reach Vault exclusively through a PrivateLink-backed internal endpoint (no public internet exposure); the Omnistrate control-plane channel to the dataplane agent is also routed over AWS PrivateLink (the `--private-link` flag on customer account onboarding). There is no public endpoint; the `LB / DNS / TLS` box in the diagram represents an internal NLB or VPC-private DNS entry only._
 
 **PrivateLink requirements (customer VPC, per DEPLOYMENT_MODELS_REFERENCE.md §PrivateLink):**
 

@@ -8,7 +8,7 @@ _Generated at the end of Omnistrate onboarding simulation. Deployment model(s): 
 
 _The diagram is `deployment-overview.svg`, derived from the Omnistrate architecture
 base template (`skills/omnistrate-fde/assets/omnistrate-architecture-base.svg`).
-The Omnistrate control plane (in Omnistrate's account) provisions and operates a
+The Omnistrate generated control plane (in your ISV account) provisions and operates a
 deployment cell — a Kubernetes cluster plus network, cell amenities, and
 outbound-only mTLS/gRPC agents — in your (provider) AWS account in us-east-1.
 Customers reach RabbitMQ through the platform-managed LoadBalancer endpoint with
