@@ -691,11 +691,13 @@ not at design time.
 | **Cost Model** | Subscription | Subscription | Subscription | License / installer |
 | **Use Case** | Most SaaS | Enterprise / data sovereignty | Customers standardized on their own K8s | Regulated / defense / disconnected |
 
-**Architecture Pattern**: a single Plan can offer multiple models by declaring
-the matching `deployment:` blocks (e.g. `hostedDeployment` for a starter tier and
-`byoaDeployment` for an enterprise tier). Do not hand-write deployment fields
-from memory at design time — the onboarding workflow authors them from verified
-templates (see https://docs.omnistrate.com/build-guides/deployment-models/).
+**Architecture Pattern**: offer multiple models by building **one Plan per
+deployment model** (e.g. a hosted plan with `hostedDeployment` for a starter
+tier and a separate BYOC plan with `byoaDeployment` for an enterprise tier) —
+a single plan never declares more than one deployment model. Do not hand-write
+deployment fields from memory at design time — the onboarding workflow authors
+them from verified templates (see
+https://docs.omnistrate.com/build-guides/deployment-models/).
 
 ### Decision 3: Storage Architecture
 

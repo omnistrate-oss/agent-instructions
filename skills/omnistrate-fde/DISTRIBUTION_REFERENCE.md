@@ -372,13 +372,15 @@ the platform-managed endpoint._
 
 ### Small filled example — "Acme Postgres"
 
-Hosted (starter/pro) + BYOC (enterprise); one workload (a Postgres StatefulSet),
+Hosted (starter/pro) + BYOC (enterprise) — two separate plans, one per
+deployment model; one workload (a Postgres StatefulSet),
 terraform-managed S3 for backups, three Tier-1 parameters.
 
 **`deployment-overview.svg`** — copy the base template, then apply these operations:
 
 - `#diagram-title` → "Service deployment overview — Acme Postgres".
-- `#diagram-subtitle` → "Deployment model: hostedDeployment + byoaDeployment".
+- `#diagram-subtitle` → "Deployment model: hostedDeployment" (the BYOC diagram
+  gets "Deployment model: byoaDeployment" — one diagram per plan/model).
 - `#boundary-label` → "Your Cloud Account — hostedDeployment" (produce a second
   BYOC diagram with `#boundary-label` = "Customer's Cloud Account — byoaDeployment").
 - `#workload-slot-1` visible; `#workload-label-1` → "postgres (StatefulSet)".

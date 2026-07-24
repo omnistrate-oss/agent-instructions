@@ -92,7 +92,7 @@ Ask these questions before discussing tech stack — the answers determine not j
 | "We run OpenShift/EKS on-prem, cluster has outbound egress" | **BYOC-K8s** | `byoaDeployment` (`--cloud-provider byoc-onprem`) |
 | "Defense/air-gapped, no internet whatsoever" | **Air-gapped** | `onPremDeployment` |
 
-> Models are not mutually exclusive — one Plan may target both `hostedDeployment` (starter/pro tier) and `byoaDeployment` (enterprise tier). Confirm which model(s) to support before proceeding.
+> A service can offer several models (e.g. hosted starter/pro tiers plus a BYOC enterprise tier), but **each deployment model requires its own separate Plan** — never a single plan declaring both `hostedDeployment` and `byoaDeployment`, and never offer to build one plan serving multiple models. Confirm which model(s) to support before proceeding.
 >
 > For every `byoaDeployment` variant (BYOC-Account, BYO-VPC, PrivateLink, BYOC-K8s), the spec's account configuration is always an **AWS** account config designated as the **"Control Plane" account** — irrespective of which cloud the customers deploy into. The onboarding skill (FDE/operator) asks the user for that account explicitly at intake; note it in the handoff so it isn't defaulted.
 >
@@ -390,15 +390,18 @@ one). Uses the `onPremDeployment` spec block.
 
 #### Pricing-tier pairing
 
-Models are not mutually exclusive — a single Plan can pair models with pricing
-tiers (e.g. `hostedDeployment` for starter/pro tiers, `byoaDeployment` for an
-enterprise tier). Name the chosen model(s) explicitly in the Phase 11 handoff
-summary so FDE builds the matching `deployment:` block(s).
+Pair models with pricing tiers by planning **one Plan per deployment model**
+(e.g. a hosted plan with `hostedDeployment` for starter/pro tiers and a
+separate BYOC plan with `byoaDeployment` for an enterprise tier) — a single
+plan never serves multiple deployment models. Name the chosen model(s)
+explicitly in the Phase 11 handoff summary so FDE builds one plan (with its
+matching `deployment:` block) per model.
 
 #### Multi-Model Strategy
-Support multiple deployment models in same architecture:
+Support multiple deployment models with the same architecture — one separate
+Plan per model:
 ```yaml
-# Same compose spec, different plans
+# Same application architecture, one plan per deployment model
 services:
   app:
     image: myapp:latest
@@ -1092,7 +1095,8 @@ Architecture: Three-tier web app (NGINX → API → PostgreSQL + Redis)
 Tenancy: Hybrid (shared API, isolated databases for enterprise)
 Output format: Docker Compose
 Deployment models: Hosted (starter/pro tiers) + BYOC-Account (enterprise tier)
-  → hostedDeployment for starter/pro; byoaDeployment for enterprise
+  → two separate plans: a hosted plan (hostedDeployment) for starter/pro;
+    a BYOC plan (byoaDeployment) for enterprise — one plan per model
   → See DEPLOYMENT_MODELS_REFERENCE.md for deployment: block and account-onboarding flow
 Compliance: SOC2, GDPR data residency
 SLA: 99.95% (multi-zone)

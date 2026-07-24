@@ -48,7 +48,9 @@ nothing yet.
 → *Nothing yet* (needs an architecture designed first) hands off to
 **omnistrate-sa**.
 
-**2. Where should instances run?** (multi-select — one Plan can offer several)
+**2. Where should instances run?** (multi-select — a service can offer several
+models, but **each model becomes its own separate Plan**; never offer to build
+a single plan serving multiple deployment models)
 - *Your cloud account* → **hosted** deployment.
 - *Your customers' cloud accounts* → **BYOC** (`byoaDeployment`). Probe for VPC
   constraints and no-public-egress requirements → **BYO-VPC** / **PrivateLink**.
@@ -96,9 +98,11 @@ table is only for steering the interview.
 | **Air-gapped** | wherever the customer runs the installer | customer runs and operates | **none** — self-contained artifact, no live link | `onPremDeployment` |
 
 BYO-VPC and PrivateLink are BYOC variants selected at customer-account
-onboarding, not separate spec blocks. Models are not mutually exclusive — one
-Plan may declare both `hostedDeployment` and `byoaDeployment`. For every
-`byoaDeployment` model the account block carries the AWS **"Control Plane"
+onboarding, not separate spec blocks (they live within the BYOC plan). A
+service can offer several models, but **each deployment model requires its own
+separate Plan** — never combine `hostedDeployment` and `byoaDeployment` in one
+plan, and never offer a single plan that serves multiple models. For every
+`byoaDeployment` plan the account block carries the AWS **"Control Plane"
 account** config irrespective of the customer's cloud — asked explicitly at
 intake, never defaulted (`DEPLOYMENT_MODELS_REFERENCE.md` §BYOC).
 
@@ -141,8 +145,10 @@ time — see `DEPLOYMENT_MODELS_REFERENCE.md` (§BYOC, §BYOC-K8s) for the custo
 **2. Minimal spec, zero parameterization.** Hardcode everything: one cloud,
 create/delete lifecycle only, no API parameters, no `$var.*`, no autoscaling.
 Get a working deployment before adding anything. Build the deployment block from
-`DEPLOYMENT_MODELS_REFERENCE.md` for the model(s) chosen in Q2, and the service
-body from the format's reference.
+`DEPLOYMENT_MODELS_REFERENCE.md` for the model(s) chosen in Q2 — **one plan per
+model**: if several models were chosen, build and stabilize one plan first,
+then author a separate plan per remaining model. The service body comes from
+the format's reference.
 *Exception (from the operator skill): CR-driven specs are parameter-driven from
 day one, but still keep the parameter set minimal.*
 

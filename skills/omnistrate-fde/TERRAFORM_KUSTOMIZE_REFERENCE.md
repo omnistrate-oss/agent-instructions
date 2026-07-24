@@ -23,7 +23,8 @@ Schema pin (add as the first line of your spec for editor validation):
 - Tenancy handled inside your Kustomize manifests; set `tenancyType: CUSTOM_TENANCY` if required.
 - When an instance stays failed, follow the debug loop in SKILL.md workflow phase 4.
 
-For the `deployment:` block (account IDs, `hostedDeployment` vs `byoaDeployment`, field casing,
+For the `deployment:` block (account IDs, `hostedDeployment` vs `byoaDeployment` — **one
+plan per deployment model, never both blocks in one spec** — field casing,
 cloud-account prerequisites) see [DEPLOYMENT_MODELS_REFERENCE.md](DEPLOYMENT_MODELS_REFERENCE.md)
 ([choosing a model](DEPLOYMENT_MODELS_REFERENCE.md#choosing-a-deployment-model),
 [hosted](DEPLOYMENT_MODELS_REFERENCE.md#hosted),

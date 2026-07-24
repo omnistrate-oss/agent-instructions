@@ -25,7 +25,8 @@ Schema pin (add as the first line of your spec for editor validation):
 
 ## Minimal working skeleton
 
-For the `deployment:` block (account IDs, `hostedDeployment` vs `byoaDeployment`, field casing,
+For the `deployment:` block (account IDs, `hostedDeployment` vs `byoaDeployment` — **one
+plan per deployment model, never both blocks in one spec** — field casing,
 cloud-account prerequisites) see [DEPLOYMENT_MODELS_REFERENCE.md](DEPLOYMENT_MODELS_REFERENCE.md)
 ([choosing a model](DEPLOYMENT_MODELS_REFERENCE.md#choosing-a-deployment-model),
 [hosted](DEPLOYMENT_MODELS_REFERENCE.md#hosted),

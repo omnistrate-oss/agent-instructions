@@ -33,9 +33,10 @@ what the editor validator enforces — use it in new specs so validation passes:
 
 ## Choosing a Deployment Model
 
-Omnistrate lets a single Plan target the full spectrum of infrastructure — the
-model is chosen at deploy/onboarding time, not baked into the application. The
-supported models decide *where* tenants are placed:
+Omnistrate lets the same application target the full spectrum of
+infrastructure — the model is not baked into the application, but **every
+deployment model requires its own separate Plan** (see the one-plan-per-model
+rule below). The supported models decide *where* tenants are placed:
 
 | Model | One-line definition | Who manages infra | Connectivity | Typical buyer |
 |-------|---------------------|-------------------|--------------|---------------|
@@ -65,10 +66,16 @@ Map how ISVs describe their need to the right model:
 | "Defense customer, air-gapped, no internet at all." | **Air-gapped** |
 | "They have committed cloud spend / GPU reservations they want to use." | **BYOC-Account** (or BYOC-K8s for their own GPU cluster) |
 
-> **Models are not mutually exclusive.** One Plan may declare both
-> `hostedDeployment` and `byoaDeployment` — so you can offer the same product as
-> hosted SaaS *and* into customer accounts. The customer picks the model at
-> subscription/onboarding time.
+> **One Plan per deployment model.** A service can offer several models — e.g.
+> the same product as hosted SaaS *and* into customer accounts — but **each
+> deployment model requires its own separate Plan**: a hosted plan, a BYOC
+> plan, a BYOC-K8s plan, an air-gapped plan. Never combine deployment blocks
+> (`hostedDeployment` + `byoaDeployment`, etc.) in a single plan spec, and
+> never offer to build one plan that serves multiple models. The customer
+> picks the model by subscribing to the corresponding plan. (BYO-VPC and
+> PrivateLink are the exception in the sense that they are not separate plans:
+> they are variants *within* a BYOC plan, selected at customer-account
+> onboarding.)
 
 ---
 
@@ -187,10 +194,13 @@ given account+region bootstraps the deployment cell for that location → later
 instances in the same account+region reuse that cell → the account can only be
 offboarded after all its instances are deleted.
 
-### Spec syntax (`byoaDeployment`, both contexts; multi-model example)
+### Spec syntax (`byoaDeployment`, both contexts; one plan per model)
 
-Same `byoaDeployment` block serves BYOC-Account, BYO-VPC, BYOC PrivateLink, and
-BYOC-K8s — the variant is chosen at onboarding, not in the spec.
+The same `byoaDeployment` *syntax* serves BYOC-Account, BYO-VPC, BYOC
+PrivateLink, and BYOC-K8s. BYO-VPC and PrivateLink are variants **within** a
+BYOC plan, chosen at customer-account onboarding; BYOC-K8s is a separate
+deployment model and gets its **own plan** (deployed with
+`--cloud-provider byoc-onprem`) — see the one-plan-per-model rule above.
 
 > **Control Plane account rule (every BYOC variant).** Irrespective of which
 > cloud(s) the customers deploy into — AWS, GCP, Azure, OCI, or Nebius — the
@@ -234,14 +244,25 @@ deployment:
     awsBootstrapRoleAccountArn: arn:aws:iam::<CONTROL_PLANE_AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role
 ```
 
-Multi-model — offer the same plan as hosted *and* BYOC by declaring both blocks:
+Offering hosted *and* BYOC? Build **two separate plans** — one plan per
+deployment model. Never declare both blocks in one plan, and never offer the
+user a single plan that serves multiple models:
 
 ```yaml
+# Plan 1 — hosted (its own spec / plan)
 x-omnistrate-service-plan:
+  name: 'My Product - Hosted'
   deployment:
     hostedDeployment:
       awsAccountId: "<PROVIDER_AWS_ACCOUNT_ID>"
       awsBootstrapRoleAccountArn: arn:aws:iam::<PROVIDER_AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role
+```
+
+```yaml
+# Plan 2 — BYOC (separate spec / plan)
+x-omnistrate-service-plan:
+  name: 'My Product - BYOC'
+  deployment:
     byoaDeployment:
       # AWS "Control Plane" account — may equal the hosted account, but ask
       awsAccountId: "<CONTROL_PLANE_AWS_ACCOUNT_ID>"

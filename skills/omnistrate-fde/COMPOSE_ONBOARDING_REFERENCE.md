@@ -53,7 +53,7 @@ Always verify `$sys.*` variable paths against the current schema before use.
 
 Model selection, account setup, BYOC/BYOC-K8s/air-gapped flows: see `DEPLOYMENT_MODELS_REFERENCE.md`.
 
-Build the `deployment:` block for the model(s) chosen in intake Q2 (see `SKILL.md` Phase 0) — never silently default. `hostedDeployment` is shown below only as the example syntax; `byoaDeployment` (BYOC / BYO-VPC / PrivateLink / BYOC-K8s) and `onPremDeployment` (air-gapped) are documented in `DEPLOYMENT_MODELS_REFERENCE.md`.
+Build the `deployment:` block for the model(s) chosen in intake Q2 (see `SKILL.md` Phase 0) — never silently default. **One plan per deployment model**: a compose spec defines a single plan, so offering several models means one spec (and one build) per model — never combine deployment blocks in one spec. `hostedDeployment` is shown below only as the example syntax; `byoaDeployment` (BYOC / BYO-VPC / PrivateLink / BYOC-K8s) and `onPremDeployment` (air-gapped) are documented in `DEPLOYMENT_MODELS_REFERENCE.md`.
 
 Compose spec syntax (lowerCamel fields — see `DEPLOYMENT_MODELS_REFERENCE.md` for the full field reference and casing rules):
 
