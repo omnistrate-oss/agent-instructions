@@ -52,6 +52,11 @@ nothing yet.
 - *Your cloud account* → **hosted** deployment.
 - *Your customers' cloud accounts* → **BYOC** (`byoaDeployment`). Probe for VPC
   constraints and no-public-egress requirements → **BYO-VPC** / **PrivateLink**.
+  **Always ask explicitly: which AWS account config is designated as the
+  "Control Plane" account?** The `byoaDeployment` account block uses that AWS
+  account config no matter which cloud the customers deploy into (GCP/Azure/
+  OCI/Nebius included) — never assume or silently default it
+  (`DEPLOYMENT_MODELS_REFERENCE.md` §BYOC, Control Plane account rule).
   Then confirm **prod or dev**: *prod* → ask for the customer's cloud-account
   details (AWS account ID / GCP project ID + number / Azure subscription +
   tenant ID) **and the end-customer email**; *dev* → ask only for the
@@ -59,7 +64,8 @@ nothing yet.
   Account onboarding flow + per-cloud bootstrap instructions:
   `DEPLOYMENT_MODELS_REFERENCE.md` §BYOC.
 - *Your customers' existing Kubernetes clusters, you do NOT provision infra* →
-  **BYOC-K8s** (deploys via a dataplane agent; customer owns the cluster).
+  **BYOC-K8s** (deploys via a dataplane agent; customer owns the cluster). Uses
+  the same `byoaDeployment` block — ask the same Control Plane account question.
 - *Fully disconnected / no connectivity back to you* → **air-gapped installer**
   (`onPremDeployment`).
 
@@ -91,7 +97,10 @@ table is only for steering the interview.
 
 BYO-VPC and PrivateLink are BYOC variants selected at customer-account
 onboarding, not separate spec blocks. Models are not mutually exclusive — one
-Plan may declare both `hostedDeployment` and `byoaDeployment`.
+Plan may declare both `hostedDeployment` and `byoaDeployment`. For every
+`byoaDeployment` model the account block carries the AWS **"Control Plane"
+account** config irrespective of the customer's cloud — asked explicitly at
+intake, never defaulted (`DEPLOYMENT_MODELS_REFERENCE.md` §BYOC).
 
 ## Decision Matrix
 
@@ -123,8 +132,10 @@ generically; copy the exact syntax from the format's reference.
 READY before anything else: `omnistrate-ctl account list` /
 `omnistrate-ctl account describe <account-name>`. Extract account IDs,
 bootstrap role ARNs, project IDs for the `deployment:` block. For BYOC and
-BYOC-K8s, explain that *customer* accounts are onboarded later, at deploy time —
-see `DEPLOYMENT_MODELS_REFERENCE.md` (§BYOC, §BYOC-K8s) for the customer
+BYOC-K8s, verify the AWS **Control Plane** account config named at intake is
+`READY` — its values are what go into `byoaDeployment`, whatever the customer's
+cloud — and explain that *customer* accounts are onboarded later, at deploy
+time — see `DEPLOYMENT_MODELS_REFERENCE.md` (§BYOC, §BYOC-K8s) for the customer
 `account customer create` flows.
 
 **2. Minimal spec, zero parameterization.** Hardcode everything: one cloud,

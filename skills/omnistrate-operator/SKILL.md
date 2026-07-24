@@ -88,7 +88,10 @@ verify cloud accounts (`omnistrate-ctl account list` / `omnistrate-ctl account d
 **Phase 1 — Minimal spec.** Header (`name`, `tenancyType: CUSTOM_TENANCY`,
 `deployment.hostedDeployment` with real account values — field casing matters:
 `AWSBootstrapRoleAccountArn`; for BYOC plans add a `byoaDeployment` block with
-the same fields — the two can coexist in one plan), one CR service, operator install per decision 1,
+the same fields, set to the AWS account designated as the **"Control Plane"
+account** — ask the user which account that is; it is an AWS account config
+irrespective of the customer's cloud — the two blocks can coexist in one
+plan), one CR service, operator install per decision 1,
 `systemWorkflows` with **create and delete only**. Declare only the API
 parameters the CR manifest genuinely needs — unlike compose onboarding, the CR
 is parameter-driven from day one, but keep the set minimal and hardcode
@@ -124,8 +127,10 @@ its context variables: see the reference.
 `deployment` accounts and the metering bucket (state this in a header comment
 and keep them in sync); add `metering`, `billingProviders`, per-cloud
 `instanceTypes` via `apiParam`, node-affinity pinning to Omnistrate-managed
-nodes, BYOA variants if offered (add `byoaDeployment` with your account values;
-onboard each customer account with `omnistrate-ctl account customer create`,
+nodes, BYOA variants if offered (add `byoaDeployment` with the AWS **"Control
+Plane" account** values — ask the user which AWS account config is designated
+Control Plane; required irrespective of the customer's cloud; onboard each
+customer account with `omnistrate-ctl account customer create`,
 then deploy instances with `--customer-account-id`).
 
 ## Critical Rules

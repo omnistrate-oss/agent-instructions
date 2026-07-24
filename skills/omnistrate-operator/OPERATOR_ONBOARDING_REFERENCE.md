@@ -26,7 +26,9 @@ deployment:
     AzureSubscriptionId: "<uuid>"
     AzureTenantId: "<uuid>"
     NebiusTenantId: "tenant-..."
-  # byoaDeployment: {...}           # only when offering BYOC to customers
+  # byoaDeployment: {...}           # only when offering BYOC — always the AWS
+  #                                  # "Control Plane" account config, whatever
+  #                                  # cloud the customers deploy into (ask!)
 
 features:                           # optional; Omnistrate-native features
   INTERNAL:

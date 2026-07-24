@@ -179,6 +179,7 @@ Deployed in the customer's own AWS/GCP/Azure/OCI/Nebius account; Omnistrate reve
   omnistrate-ctl account customer describe <customer-account-instance-id> -o json  # copy summary.accountConfigID
   omnistrate-ctl account describe <account-config-id>                            # Actions -> Bootstrap
   ```
+- **Wrong `byoaDeployment` account config in the spec** → the `byoaDeployment` block must carry the AWS account designated as the **"Control Plane" account** — an AWS account config even when customers deploy on GCP/Azure/OCI/Nebius. GCP/Azure fields or a customer account ID in `byoaDeployment` is a spec bug: fix the spec with the designated Control Plane AWS account (ask the provider which one) and rebuild (onboarding flows: omnistrate-fde skill).
 - **BYO-VPC requirement violations** (bring-your-own VPC via `cloud_provider_native_network_id`): DNS hostnames + DNS resolution enabled; public NAT gateway with private-subnet routes for image pulls; private-subnet tag `kubernetes.io/role/internal-elb=1` and public-subnet tag `kubernetes.io/role/elb=1`.
 - **PrivateLink** (zero public exposure): interface VPC endpoint targeting the Omnistrate PrivateLink service name; security-group inbound TCP **8443–8506** from the VPC CIDR; do not enable private DNS for cross-region endpoints (pass `--service-region`).
 

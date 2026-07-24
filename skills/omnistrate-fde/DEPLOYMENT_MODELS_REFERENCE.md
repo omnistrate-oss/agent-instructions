@@ -192,6 +192,19 @@ offboarded after all its instances are deleted.
 Same `byoaDeployment` block serves BYOC-Account, BYO-VPC, BYOC PrivateLink, and
 BYOC-K8s — the variant is chosen at onboarding, not in the spec.
 
+> **Control Plane account rule (every BYOC variant).** Irrespective of which
+> cloud(s) the customers deploy into — AWS, GCP, Azure, OCI, or Nebius — the
+> account configuration in `byoaDeployment` is always an **AWS** account config:
+> the AWS account the provider has designated as the **"Control Plane" account**
+> (registered with `omnistrate-ctl account create`, bootstrapped to `READY`).
+> Do **not** put GCP/Azure/OCI/Nebius fields in `byoaDeployment`, and do **not**
+> use the customer's account here — the customer's cloud enters the picture
+> later, at customer-account onboarding (`account customer create
+> --gcp-project-id ...` etc.) and at deploy time (`--cloud-provider`). During
+> intake, **explicitly ask the user which AWS account config is their designated
+> Control Plane account** — never assume one or silently reuse another account
+> config.
+
 Compose context (lowerCamel):
 
 ```yaml
@@ -199,8 +212,9 @@ x-omnistrate-service-plan:
   name: 'My Product - BYOC'
   deployment:
     byoaDeployment:
-      awsAccountId: "<AWS_ACCOUNT_ID>"
-      awsBootstrapRoleAccountArn: arn:aws:iam::<AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role
+      # Always the AWS "Control Plane" account — even for GCP/Azure/OCI customers
+      awsAccountId: "<CONTROL_PLANE_AWS_ACCOUNT_ID>"
+      awsBootstrapRoleAccountArn: arn:aws:iam::<CONTROL_PLANE_AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role
 ```
 
 ServicePlanSpec / Plan-spec context, root-level. The block below uses
@@ -215,8 +229,9 @@ the editor validator expects**, so prefer it when authoring a fresh spec:
 name: My Product - BYOC
 deployment:
   byoaDeployment:
-    awsAccountId: "<AWS_ACCOUNT_ID>"
-    awsBootstrapRoleAccountArn: arn:aws:iam::<AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role
+    # Always the AWS "Control Plane" account — even for GCP/Azure/OCI customers
+    awsAccountId: "<CONTROL_PLANE_AWS_ACCOUNT_ID>"
+    awsBootstrapRoleAccountArn: arn:aws:iam::<CONTROL_PLANE_AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role
 ```
 
 Multi-model — offer the same plan as hosted *and* BYOC by declaring both blocks:
@@ -228,8 +243,9 @@ x-omnistrate-service-plan:
       awsAccountId: "<PROVIDER_AWS_ACCOUNT_ID>"
       awsBootstrapRoleAccountArn: arn:aws:iam::<PROVIDER_AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role
     byoaDeployment:
-      awsAccountId: "<PROVISIONER_AWS_ACCOUNT_ID>"
-      awsBootstrapRoleAccountArn: arn:aws:iam::<PROVISIONER_AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role
+      # AWS "Control Plane" account — may equal the hosted account, but ask
+      awsAccountId: "<CONTROL_PLANE_AWS_ACCOUNT_ID>"
+      awsBootstrapRoleAccountArn: arn:aws:iam::<CONTROL_PLANE_AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role
 ```
 
 ### Onboarding a customer account — assisted CLI (aws/gcp/azure flag sets)
@@ -425,11 +441,14 @@ the same way you would for other BYOC Plans. Its
 accepted variant casing `AwsBootstrapRoleAccountArn`; schema-canonical is
 `AWSBootstrapRoleAccountArn` — see the casing table at the top of this file) —
 even though Omnistrate provisions no AWS infra in the customer's cluster.
-These are the **provider-side** account values Omnistrate uses to anchor trust and host
-generated artifacts (install kit, chart/registry access); they are **required by the
-spec schema** for a BYOC plan. Use your real provider account values — do not treat the
-block as a throwaway placeholder. (If you need detail on every internal use of the ARN
-for the no-infra case, run a docs search.)
+These are the **provider-side** account values of the AWS **"Control Plane"
+account** (see the Control Plane account rule in §BYOC — it applies to every
+`byoaDeployment` variant, including this one), which Omnistrate uses to anchor
+trust and host generated artifacts (install kit, chart/registry access); they
+are **required by the spec schema** for a BYOC plan. Use the real designated
+Control Plane account values — ask the user which account that is; do not treat
+the block as a throwaway placeholder. (If you need detail on every internal use
+of the ARN for the no-infra case, run a docs search.)
 
 ### Target-cluster prerequisites
 

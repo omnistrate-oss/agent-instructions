@@ -94,6 +94,8 @@ Ask these questions before discussing tech stack — the answers determine not j
 
 > Models are not mutually exclusive — one Plan may target both `hostedDeployment` (starter/pro tier) and `byoaDeployment` (enterprise tier). Confirm which model(s) to support before proceeding.
 >
+> For every `byoaDeployment` variant (BYOC-Account, BYO-VPC, PrivateLink, BYOC-K8s), the spec's account configuration is always an **AWS** account config designated as the **"Control Plane" account** — irrespective of which cloud the customers deploy into. The onboarding skill (FDE/operator) asks the user for that account explicitly at intake; note it in the handoff so it isn't defaulted.
+>
 > Architecture-level implications per model (networking, licensing, backup, upgrade agility) are tabulated in `SOLUTIONS_ARCHITECT_REFERENCE.md` §"Deployment Model Implications for Architecture". Spec blocks and account-onboarding flows are authored later, during onboarding — do not hand-write them at design time.
 
 **Record the chosen model(s) — you will name them explicitly in the handoff summary.**
