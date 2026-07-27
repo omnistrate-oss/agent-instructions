@@ -126,6 +126,15 @@ fine-grained roles.
 
 ## 5. Pricing & billing (optional)
 
+> **Full FinOps coverage lives in [BILLING_METERING_REFERENCE.md](BILLING_METERING_REFERENCE.md)** —
+> including the end-to-end-billing vs custom-metering decision, the `metering`
+> bucket export (policy, path layout, record schema, `externalPayerId`), custom
+> dimensions and exporters, cloud marketplaces, and the CUSTOM_TENANCY billing
+> pod label. This section is the go-live summary of the **Stripe end-to-end**
+> path only. Anything other than Stripe-with-built-in-dimensions — a
+> marketplace, Chargebee, extra dimensions, custom aggregation — is the
+> metering path in that reference.
+
 **No billing configured = free tier.** Billing is opt-in. To enable it: enable
 Tenant Billing at the account level (FinOps Center > Tenant Billing), connect a
 billing provider (Stripe via Stripe Connect, or bring your own), then configure
@@ -184,6 +193,13 @@ maxNumberOfInstancesAllowed: 5
 > Plan-level pricing/billing/quota changes do **not** retroactively apply to
 > existing subscriptions — manage those under FinOps Center > Tenant Pricing.
 
+**Usage metering export (BYOB).** If the ISV bills through anything other than
+Stripe, needs dimensions beyond the built-in five, or wants their own
+aggregation logic, add a `metering` block exporting usage to their own S3/GCS
+bucket and process it downstream — see
+[BILLING_METERING_REFERENCE.md § Custom metering](BILLING_METERING_REFERENCE.md#4-custom-metering--usage-export-byob).
+It can run alongside Stripe billing, not only instead of it.
+
 ---
 
 ## 6. Go-live checklist (ordered)
@@ -191,8 +207,12 @@ maxNumberOfInstancesAllowed: 5
 1. **Release Preferred** — `omnistrate-ctl build ... --release-as-preferred --release-description "..."`.
 2. **Make the prod environment Public** — Dev-Ops > Environments.
 3. **Configure the portal** — custom domain (CNAME), SMTP sender email, SSO IdP(s).
-4. **(Optional) Billing** — enable tenant billing, connect provider, set `pricing` +
-   `billingProviders` + `maxNumberOfInstancesAllowed`.
+4. **(Optional) Billing** — enable tenant billing, connect provider, then either
+   set `pricing` + `billingProviders` + `maxNumberOfInstancesAllowed` (Stripe
+   end-to-end) or configure the `metering` export and your exporter
+   (marketplaces / non-Stripe / custom dimensions). On `CUSTOM_TENANCY` plans
+   also add the `omnistrate.com/include-customer-billing: "true"` pod label.
+   See [BILLING_METERING_REFERENCE.md](BILLING_METERING_REFERENCE.md).
 5. **Set subscription approval mode** — auto-approve or manual review.
 6. **Distribute the portal URL** to customers.
 7. **Monitor subscriptions** — review requests, statuses, and instances.

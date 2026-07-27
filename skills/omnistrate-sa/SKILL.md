@@ -1,6 +1,6 @@
 ---
 name: omnistrate-sa
-description: Guide users through designing application architectures from scratch for SaaS deployment on Omnistrate, including deployment-model selection (hosted/BYOC/BYOC-K8s/air-gapped). Focuses on technology selection, domain-specific architecture patterns, compliance and SLA requirements, and iterative compose spec development. Output may be a production-ready Docker Compose spec handed off to the FDE skill, or a ServicePlanSpec skeleton recommendation (when the stack uses Helm, Terraform, or a Kubernetes operator). Do NOT use when the user already has a deployable artifact (→ omnistrate-fde; operator services → omnistrate-operator) or needs to debug a failed instance (→ omnistrate-sre).
+description: Guide users through designing application architectures from scratch for SaaS deployment on Omnistrate, including deployment-model selection (hosted/BYOC/BYOC-K8s/air-gapped) and monetization model (Stripe end-to-end billing vs custom metering export for marketplaces, Chargebee, or non-built-in pricing dimensions). Focuses on technology selection, domain-specific architecture patterns, compliance and SLA requirements, and iterative compose spec development. Output may be a production-ready Docker Compose spec handed off to the FDE skill, or a ServicePlanSpec skeleton recommendation (when the stack uses Helm, Terraform, or a Kubernetes operator). Do NOT use when the user already has a deployable artifact (→ omnistrate-fde; operator services → omnistrate-operator) or needs to debug a failed instance (→ omnistrate-sre).
 ---
 
 # Omnistrate Solutions Architect
@@ -99,6 +99,23 @@ Ask these questions before discussing tech stack — the answers determine not j
 > Architecture-level implications per model (networking, licensing, backup, upgrade agility) are tabulated in `SOLUTIONS_ARCHITECT_REFERENCE.md` §"Deployment Model Implications for Architecture". Spec blocks and account-onboarding flows are authored later, during onboarding — do not hand-write them at design time.
 
 **Record the chosen model(s) — you will name them explicitly in the handoff summary.**
+
+#### Monetization (ask during discovery — it shapes the architecture)
+- **How do you charge, and who takes the payment?** (Stripe / a cloud
+  marketplace / an existing billing system like Chargebee / not billing yet)
+- **What do you charge for?** Omnistrate's built-in billable dimensions are
+  cpu, memory, storage, replica, and deploymentCell. Anything else — per-seat,
+  per-request, per-document, per-GB-processed — cannot be priced natively.
+- Map the answers:
+  - *Stripe + built-in dimensions suffice* → **end-to-end billing** (`pricing` +
+    `billingProviders`; Omnistrate meters, invoices, collects).
+  - *Extra dimensions, custom aggregation/rating, or any non-Stripe provider
+    (AWS/GCP/Azure Marketplace, Chargebee, Clazar, in-house)* → **custom
+    metering**: usage exports to the ISV's own bucket and **an exporter service
+    becomes part of the architecture** — call that out now, not at go-live.
+- Note the choice in the handoff summary; the onboarding skill implements it.
+  Architecture-level implications: `SOLUTIONS_ARCHITECT_REFERENCE.md`
+  §"Metering & Billing".
 
 #### Technical Requirements
 - What is your expected scale? (users, requests/sec, data volume)
@@ -1100,6 +1117,10 @@ Deployment models: Hosted (starter/pro tiers) + BYOC-Account (enterprise tier)
   → See DEPLOYMENT_MODELS_REFERENCE.md for deployment: block and account-onboarding flow
 Compliance: SOC2, GDPR data residency
 SLA: 99.95% (multi-zone)
+Monetization: Stripe, priced on cpu + storage (built-in dimensions)
+  → end-to-end billing; no exporter needed
+  → (if it were a marketplace/Chargebee/per-seat model: custom metering export
+     + an ISV-side exporter service)
 
 Container Images:
 Custom images (customer pushed):

@@ -128,7 +128,11 @@ its context variables: see the reference.
 `deployment` accounts and the metering bucket (state this in a header comment
 and keep them in sync); add `metering`, `billingProviders`, per-cloud
 `instanceTypes` via `apiParam`, node-affinity pinning to Omnistrate-managed
-nodes, BYOA variants if offered (a **separate BYOC plan/spec** — one plan per
+nodes, billing if the ISV monetizes (`pricing` + `billingProviders` for Stripe,
+or the `metering` export for marketplaces / non-Stripe / custom dimensions —
+**plus the `omnistrate.com/include-customer-billing: "true"` pod label, required
+on `CUSTOM_TENANCY`**; see the FDE skill's `BILLING_METERING_REFERENCE.md`),
+BYOA variants if offered (a **separate BYOC plan/spec** — one plan per
 deployment model — whose `byoaDeployment` carries the AWS **"Control Plane"
 account** values; ask the user which AWS account config is designated
 Control Plane; required irrespective of the customer's cloud; onboard each

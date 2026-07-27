@@ -267,19 +267,11 @@ x-internal-integrations:
     endpoint: https://http-intake.logs.datadoghq.com
     secretLocators:
       aws: arn:aws:secretsmanager:us-west-2:123456789012:secret:datadog-key
-
-  # Metering
-  metering:
-    enabled: true
-    metrics:
-      - name: storage_gb_hours
-        type: gauge
-        path: /var/lib/data
-      - name: api_requests
-        type: counter
-      - name: compute_hours
-        type: counter
 ```
+
+> Metering is **not** part of `x-internal-integrations`. Usage metering is a
+> plan-level block (`metering` with a bucket destination) — see
+> [Metering & Billing](#metering--billing) below.
 
 ---
 
@@ -570,68 +562,61 @@ x-internal-integrations:
     provider: omnistrate
 ```
 
-### Metering Integration
+### Metering & Billing
+
+Monetization is authored during onboarding, not at design time — but the
+architecture decision (what you charge for) belongs here, because it determines
+which of the two paths the ISV lands on.
+
+**Billable dimensions are fixed:** `cpu` (cores), `memory` (GiB), `storage`
+(GiB), `replica`, `deploymentCell` — all `timeUnit: hour`. **There is no spec
+field for adding a custom dimension**, and there is no `marketplace:` block.
+
+| ISV need | Path |
+|---|---|
+| Stripe, and the five built-in dimensions price the product correctly | **End-to-end billing** — `pricing` + `billingProviders` on the plan; Omnistrate meters, invoices, and collects |
+| Extra dimensions (per-seat, per-request, per-document), custom aggregation/rating, **or** any non-Stripe provider (AWS/GCP/Azure Marketplace, Chargebee, Clazar, in-house) | **Custom metering** — `metering` exports usage records to the ISV's own S3/GCS bucket; an ISV-side exporter transforms and submits them |
 
 ```yaml
-x-internal-integrations:
-  metering:
-    enabled: true
-    metrics:
-      # Storage usage
-      - name: storage_gb_hours
-        type: gauge
-        path: /var/lib/data
+# Plan-level (compose: under x-omnistrate-service-plan; plan spec: at root)
+pricing:
+  - dimension: cpu
+    unit: cores
+    timeUnit: hour
+    price: 0.01
+  - dimension: replica
+    timeUnit: hour
+    price: 0.10
 
-      # API request count
-      - name: api_requests
-        type: counter
+billingProviders:
+  - name: stripe
+    externalProductID: "prod_123"
+    enablePaywall: false
+    isDefault: true
 
-      # Compute time
-      - name: compute_hours
-        type: counter
-
-      # Custom metric from application
-      - name: documents_processed
-        type: counter
-        endpoint: http://localhost:8080/metrics
+metering:                                    # usage export (BYOB/marketplaces)
+  s3BucketARN: arn:aws:s3:::my-billing-bucket
+  s3BucketRegion: us-west-2
 ```
 
-### Billing Integration
+Design-time implications worth flagging to the ISV:
 
-```yaml
-x-omnistrate-integrations:
-  billing:
-    provider: stripe
-    secretLocator: arn:aws:secretsmanager:region:account:secret:stripe-key
-    plans:
-      - planName: pro
-        priceId: price_xxxxx
-        billingCycle: monthly
-```
+- **A per-seat/per-request pricing model means an exporter is part of the
+  architecture** — a small scheduled service reading the metering bucket. Budget
+  for it rather than discovering it at go-live.
+- **`CUSTOM_TENANCY` plans (Helm, operator, Kustomize) bill only pods labeled
+  `omnistrate.com/include-customer-billing: "true"`.** If the design is
+  chart/operator-based and billing is replica-driven, that label is a
+  requirement on the manifests.
+- **Air-gapped plans cannot export metering** (no live link) — monetize via the
+  offline license instead.
+- **BYOC/BYOC-K8s customers pay their own cloud bill**, so ISV pricing there is
+  usually a platform/license fee, not infra markup.
 
-### Marketplace Integration
-
-#### AWS Marketplace
-```yaml
-x-omnistrate-integrations:
-  marketplace:
-    - provider: aws
-      productCode: prod-xxxxx
-      meteringDimensions:
-        - name: instance-hours
-          meteringKey: compute_hours
-```
-
-#### GCP Marketplace
-```yaml
-x-omnistrate-integrations:
-  marketplace:
-    - provider: gcp
-      planId: my-saas-plan
-      meteringMetrics:
-        - name: api-calls
-          meteringKey: api_requests
-```
+Full authoring detail — bucket policies, export path layout, record schema,
+`externalPayerId`, exporter design, marketplaces — lives in the FDE skill's
+`BILLING_METERING_REFERENCE.md`. Do not hand-write billing YAML from memory at
+design time.
 
 ---
 

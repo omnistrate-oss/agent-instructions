@@ -11,6 +11,7 @@ Use the table below to select the right skill. All four deployment models — **
 | Design new SaaS app from scratch; choose tech stack; convert local `build:` compose to cloud-ready | **omnistrate-sa** |
 | Onboard Docker Compose, Helm chart, Terraform/OpenTofu module, Kustomize, or mixed stack to Omnistrate | **omnistrate-fde** |
 | Onboard a Kubernetes operator (CRDs + controller, e.g. CloudNativePG, Strimzi, KubeAI) | **omnistrate-operator** |
+| Add pricing, billing, usage metering, or a marketplace/Chargebee/Clazar integration to an existing plan | **omnistrate-fde** (`BILLING_METERING_REFERENCE.md`) |
 | Debug a FAILED or stuck Omnistrate instance (any artifact type, any deployment model) | **omnistrate-sre** |
 
 ## Available Skills
@@ -49,6 +50,7 @@ Guide users through designing application architectures from scratch for SaaS de
 - Private registry auth needs: identify and collect requirements for FDE (FDE configures `x-omnistrate-image-registry-attributes` and the Omnistrate secrets)
 - Output-format decision: compose vs Helm vs Terraform skeleton vs operator handoff
 - Omnistrate-aware design decisions (autoscaling, backups, multi-zone readiness)
+- Monetization discovery: Stripe end-to-end billing vs custom metering export (marketplaces, Chargebee, extra dimensions) — flags when an exporter service becomes part of the architecture
 
 ### Onboarding Services to Omnistrate (Universal Router)
 **Location**: `skills/omnistrate-fde/`
@@ -76,6 +78,7 @@ The primary onboarding skill for all artifact types and all deployment models. R
 - Iterative debugging until instances are RUNNING (delegates to SRE skill)
 - Multi-service architecture with synthetic root patterns and `dependsOn`
 - Air-gapped installer artifact (`onPremDeployment`)
+- Billing and metering (`BILLING_METERING_REFERENCE.md`): end-to-end Stripe billing (`pricing`, `billingProviders`, paywall, quotas, invoices) vs custom metering export (`metering` to S3/GCS, record schema, `externalPayerId`, custom dimensions and exporters, cloud marketplaces via Clazar), the `CUSTOM_TENANCY` billing pod label, and `omnistrate-ctl cost` insights
 
 **Hands off to**:
 - **omnistrate-operator** when the artifact is a Kubernetes operator (CRDs + controller)

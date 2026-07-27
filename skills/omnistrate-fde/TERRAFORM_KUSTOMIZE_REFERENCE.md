@@ -955,10 +955,34 @@ variable values. A spec change (new chart version, new terraform path) requires 
 
 ---
 
+## Billing — the CUSTOM_TENANCY pod label (Kustomize)
+
+Kustomize (and Terraform) plans run as `CUSTOM_TENANCY`, where Omnistrate bills
+**only pods carrying an explicit label**. When billing is enabled, add it to the
+**pod template** of every billable workload manifest:
+
+```yaml
+spec:
+  template:
+    metadata:
+      labels:
+        app: example-app
+        omnistrate.com/include-customer-billing: "true"   # pod label, quoted
+```
+
+It belongs under `spec.template.metadata.labels` — a label on the Deployment
+itself does not count, and neither does an annotation. Terraform-provisioned
+cloud resources (RDS, S3, …) are not pods and are not covered by replica
+billing at all; price them via the other dimensions or the metering export.
+Full FinOps coverage: [BILLING_METERING_REFERENCE.md](BILLING_METERING_REFERENCE.md).
+
+---
+
 ## Common mistakes
 
 | Mistake | Effect | Fix |
 |---------|--------|-----|
+| Billing enabled but no `omnistrate.com/include-customer-billing` pod label | CUSTOM_TENANCY bills only labeled pods → silent zero/under-billing | Add the label under `spec.template.metadata.labels` in each billable manifest |
 | `backend` block authored in `.tf` | Omnistrate strips it; state may be inconsistent during first apply | Remove all `backend` blocks — Omnistrate manages state |
 | Unpinned git `reference` (`refs/heads/main`) in production | Non-deterministic deploys; infra changes on next apply | Pin to a tag: `refs/tags/v1.0.0` |
 | Output referenced before `dependsOn` declared | Template render fails — `$serviceName` is unknown at render time | Add `dependsOn: [<terraformServiceName>]` on the consuming service |

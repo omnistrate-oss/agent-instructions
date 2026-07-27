@@ -1221,10 +1221,37 @@ phase 4; the `omnistrate-sre` skill, if installed, adds per-failure catalogs.
 
 ---
 
+## Billing — the CUSTOM_TENANCY pod label
+
+Helm plans run as `CUSTOM_TENANCY`, and for that tenancy Omnistrate bills
+**only pods carrying an explicit label**. If the ISV enables billing, every
+billable workload's **pod template** needs:
+
+```yaml
+omnistrate.com/include-customer-billing: "true"
+```
+
+Set it through the chart's pod-labels value — commonly `podLabels`, but the key
+is **chart-specific** (verify with `helm show values`; some charts namespace it
+per role, e.g. `primary.podLabels`):
+
+```yaml
+chartValues:
+  podLabels:
+    omnistrate.com/include-customer-billing: "true"
+```
+
+Without it the plan bills zero replicas with no error anywhere. Full FinOps
+coverage — pricing dimensions, Stripe vs metering export, exporters — is in
+[BILLING_METERING_REFERENCE.md](BILLING_METERING_REFERENCE.md).
+
+---
+
 ## Common mistakes
 
 | Mistake | Effect | Fix |
 |---------|--------|-----|
+| Billing enabled but no `omnistrate.com/include-customer-billing` pod label | CUSTOM_TENANCY bills only labeled pods → silent zero/under-billing | Set the label via the chart's `podLabels` (chart-specific key) |
 | Unpinned `chartVersion` | Unexpected chart upgrades on rebuild; config drift | Pin to an exact version (e.g. `19.6.2`) |
 | `$var.<key>` in `chartValues` but key not in `apiParameters` | Build error or empty value at deploy | Declare every referenced key in `apiParameters` on the same service |
 | Missing affinity (injection disabled; no manual rules) | Pods land on cell system/shared nodes, wrong instance's nodes, or fail to schedule | Leave injection enabled (default) or add the full manual affinity block (see Pod placement) |

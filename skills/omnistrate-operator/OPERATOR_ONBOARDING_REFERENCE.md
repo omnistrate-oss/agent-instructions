@@ -37,9 +37,14 @@ features:                           # optional; Omnistrate-native features
   CUSTOMER:
     logs:
 
-metering:                           # optional; usage export
-  s3BucketARN: arn:aws:s3:::<bucket>
+metering:                           # optional; usage export (BYOB / marketplaces)
+  s3BucketARN: arn:aws:s3:::<bucket>   # schema-canonical: s3BucketArn
   s3BucketRegion: "<region>"
+
+pricing:                            # optional; built-in dimensions only
+  - dimension: replica              # cpu | memory | storage | replica | deploymentCell
+    timeUnit: hour
+    price: 0.10
 
 billingProviders:                   # optional
   - name: stripe
@@ -63,6 +68,15 @@ not `AwsBootstrapRoleAccountArn`).
 identical EXCEPT the `deployment` account block and the metering bucket. Put a
 comment at the top of each stating this contract. Releasing prod must be a
 no-op on accounts (never remove an in-use account config from a released plan).
+
+**Billing on operator plans (`CUSTOM_TENANCY`) requires a pod label.** Omnistrate
+bills only pods carrying `omnistrate.com/include-customer-billing: "true"` on
+this tenancy — set it on the **pod template** the operator generates (via the
+CR's pod-template/labels field if the CRD exposes one, or the operator chart's
+pod-labels value for the controller's own pods). Missing label = silent
+zero-billing. Choosing between Stripe end-to-end billing and the metering export
+(marketplaces, Chargebee, custom dimensions/aggregation), plus bucket setup and
+exporter patterns: see the FDE skill's `BILLING_METERING_REFERENCE.md`.
 
 ## 2. Installing the operator and its CRDs
 

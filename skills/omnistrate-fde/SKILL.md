@@ -1,6 +1,6 @@
 ---
 name: omnistrate-fde
-description: Guide users through onboarding any application onto the Omnistrate platform and turning it into a managed SaaS offering. Covers Docker Compose, Helm charts, Terraform/OpenTofu modules, Kustomize, and mixed stacks, across all deployment models - hosted (your cloud), BYOC (customer cloud accounts, incl. BYO-VPC and PrivateLink), BYOC-K8s (customer-managed Kubernetes, no infra provisioning), and air-gapped/on-prem installers. Use when a customer/ISV wants to onboard, "SaaS-ify", productize, or offer their software as a managed service, or asks about BYOC / bring-your-own-cloud / on-prem / air-gapped delivery. For Kubernetes operator-based services (CRDs + controller) use omnistrate-operator; for designing an architecture from scratch use omnistrate-sa; for debugging failed instances use omnistrate-sre.
+description: Guide users through onboarding any application onto the Omnistrate platform and turning it into a managed SaaS offering. Covers Docker Compose, Helm charts, Terraform/OpenTofu modules, Kustomize, and mixed stacks, across all deployment models - hosted (your cloud), BYOC (customer cloud accounts, incl. BYO-VPC and PrivateLink), BYOC-K8s (customer-managed Kubernetes, no infra provisioning), and air-gapped/on-prem installers. Also covers monetization - pricing, Stripe end-to-end billing, usage metering export, custom billing dimensions, and cloud-marketplace/Chargebee/Clazar integrations. Use when a customer/ISV wants to onboard, "SaaS-ify", productize, or offer their software as a managed service, asks about BYOC / bring-your-own-cloud / on-prem / air-gapped delivery, or asks how to charge, meter, or bill for it. For Kubernetes operator-based services (CRDs + controller) use omnistrate-operator; for designing an architecture from scratch use omnistrate-sa; for debugging failed instances use omnistrate-sre.
 ---
 
 # Onboarding Services to Omnistrate
@@ -33,7 +33,7 @@ when the user has asked to work through MCP.
 
 ## Phase 0 — Intake (ALWAYS start here for new onboarding)
 
-Ask these five questions in plain language, **one at a time**, adapting to what
+Ask these six questions in plain language, **one at a time**, adapting to what
 the user already volunteered (skip anything already answered). No Omnistrate
 jargon — translate their answers into platform concepts yourself. The target
 user is an ISV who has never seen Omnistrate: they describe their product and
@@ -78,6 +78,18 @@ phases — not implemented up front.*
 
 **5. Private registries or private git repos?** Determines the auth setup steps
 for images (compose/helm) and source (terraform/kustomize/helm).
+
+**6. How do you charge for this — and who takes the payment?** (Stripe / a cloud
+marketplace / an existing billing system like Chargebee / not billing yet.)
+Follow up with **"what do you charge for?"** — the built-in dimensions are cpu,
+memory, storage, replica, deploymentCell.
+→ *Stripe **and** built-in dimensions suffice* → **end-to-end billing**.
+→ *Any other provider (AWS/GCP/Azure Marketplace, Chargebee, Clazar, in-house),
+**or** extra dimensions, **or** custom aggregation logic* → **custom metering**
+(usage export + your own exporter).
+→ *Not billing yet* → free tier; note it and move on.
+*Recorded now, implemented in phase 6 — never in the first build.* Details:
+`BILLING_METERING_REFERENCE.md`.
 
 If the user cannot cleanly place Q2, map their words to a model with the
 ISV-phrasing FAQ in `DEPLOYMENT_MODELS_REFERENCE.md` (e.g. "customers want it in
@@ -202,9 +214,16 @@ implement approved Tier-1 parameters **one at a time** — rebuild + redeploy af
 dependencies", and `TERRAFORM_KUSTOMIZE_REFERENCE.md` §"Managed-service modules".
 
 **6. Production hardening.** Split a prod Plan (accounts differ; spec otherwise
-identical), add metering/billing, additional clouds, and additional deployment
-models. For air-gapped targets the deliverable is the installer artifact rather
-than a running instance — see `DEPLOYMENT_MODELS_REFERENCE.md` §Air-gapped.
+identical), add additional clouds, and additional deployment models (one plan
+per model). For air-gapped targets the deliverable is the installer artifact
+rather than a running instance — see `DEPLOYMENT_MODELS_REFERENCE.md`
+§Air-gapped.
+**Billing/metering lands here, not earlier** — implement the path chosen in
+intake Q6: `pricing` + `billingProviders` for end-to-end Stripe billing, or the
+`metering` export (+ your exporter) for marketplaces / non-Stripe providers /
+custom dimensions. For `CUSTOM_TENANCY` plans (Helm, operator, Kustomize) the
+`omnistrate.com/include-customer-billing: "true"` **pod label** is required or
+usage silently bills zero. See `BILLING_METERING_REFERENCE.md`.
 
 **7. Distribute & document.** Release the Plan
 (`omnistrate-ctl build ... --release-as-preferred --release-description "..."`),
@@ -252,6 +271,8 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
 | "Air-gapped needs an always-on agent phoning home." | No. Air-gapped is a self-contained *installer* artifact — no live control-plane link (`onPremDeployment`). |
 | "BYOC-K8s will provision the customer's nodes." | It won't. The customer owns the cluster and infra; Omnistrate only deploys workloads via the dataplane agent. |
 | "I'll add all the parameters, then build once." | One change per build-deploy cycle. Batching hides which change broke it. |
+| "I'll add a custom pricing dimension / a `marketplace:` block to the spec." | Neither exists. Only cpu/memory/storage/replica/deploymentCell are billable dimensions; everything else is the metering-export path (`BILLING_METERING_REFERENCE.md`). |
+| "Billing is set up, so a CUSTOM_TENANCY Helm/operator plan will bill correctly." | Not without the `omnistrate.com/include-customer-billing: "true"` pod label — otherwise it silently bills zero. |
 | "I'll parameterize before the first deploy." | Zero-parameterization first (operator-CR excepted). Get to RUNNING, then parameterize. |
 
 ## Reference Files
@@ -270,6 +291,13 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
   operational flows for hosted / BYOC (BYO-VPC, PrivateLink) / BYOC-K8s /
   air-gapped, plus customer-account onboarding, tenancy, and the ISV-phrasing
   FAQ. Read this for **every** onboarding path.
+- **`BILLING_METERING_REFERENCE.md`** — FinOps: choosing end-to-end Stripe
+  billing vs custom metering export, `pricing` dimensions, `billingProviders`,
+  paywall/quota/invoices, the `metering` bucket export (policy, path layout,
+  record schema, `last_success_export.json`, `externalPayerId`), custom
+  dimensions + exporter patterns (Clazar recipe), marketplaces, the
+  CUSTOM_TENANCY billing pod label, and `omnistrate-ctl cost` insights
+  (workflow phase 6).
 - **`DISTRIBUTION_REFERENCE.md`** — release states + `--release` /
   `--release-as-preferred` / `--release-description`, prod env visibility, the
   Customer Portal (domain/SMTP/SSO), subscriptions, optional pricing/billing, the

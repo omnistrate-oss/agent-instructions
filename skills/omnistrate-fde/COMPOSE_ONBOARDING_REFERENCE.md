@@ -946,6 +946,17 @@ x-internal-integrations:
     provider: native
 ```
 
+### Billing and metering
+
+`pricing`, `billingProviders`, `maxNumberOfInstancesAllowed`, and `metering` all
+nest under `x-omnistrate-service-plan` with the same field names used in a
+ServicePlanSpec. Compose plans use `OMNISTRATE_DEDICATED_TENANCY` /
+`OMNISTRATE_MULTI_TENANCY`, so **all pods are billed automatically** — the
+`omnistrate.com/include-customer-billing` label is a CUSTOM_TENANCY concern
+only. Add billing in production hardening (workflow phase 6), never in the first
+build. Dimensions, the Stripe-vs-metering-export decision, bucket setup, and
+exporter patterns: [BILLING_METERING_REFERENCE.md](BILLING_METERING_REFERENCE.md).
+
 ## Complete Example
 
 A full multi-service compose spec is assembled from the sections above. Compose
