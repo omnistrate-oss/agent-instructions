@@ -655,8 +655,11 @@ Air-gapped is the **disconnected end** of the BYOC Anywhere spectrum. It is *not
 a live control-plane connection: the customer owns the connectivity, update,
 support, and operational-evidence boundaries. Do not assume live telemetry,
 remote debugging, online license checks, automatic image pulls, or continuous
-control-plane access. The installer supports at most **one Helm chart resource**
-and **one image registry** per Plan; bundle multiple charts into an umbrella chart.
+control-plane access. Modern installer Plans can include multiple Helm chart
+resources and multiple image registry copy resources. Model each Helm release as
+its own `services[]` entry, and model each source registry or repository copy
+path as its own internal image sync service. For complex graphs, read
+`ONPREM_INSTALLER_REFERENCE.md`.
 
 ### Spec syntax (`requirements.k8sVersion`, `onPremDeployment` fields)
 
@@ -792,6 +795,11 @@ services:
 Omitting `internal: true` surfaces the image-sync service as a customer-creatable
 resource in the portal (confusing); omitting `dependsOn` lets the chart install before
 images are mirrored.
+
+For installers with multiple Helm releases, multiple registries, shared private
+registry parameters, runtime prerequisite detection, or local installer testing,
+use `ONPREM_INSTALLER_REFERENCE.md`. Do not flatten a complex installer into one
+giant chart only to work around obsolete limitation guidance.
 
 ### Licensing + diagnostics in disconnected mode
 

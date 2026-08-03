@@ -131,7 +131,7 @@ Pick the row for the user's artifact (intake Q1). The **deployment model**
 | Terraform / Kustomize | ServicePlanSpec (`terraformConfigurations` / `kustomizeConfiguration`) | same | `TERRAFORM_KUSTOMIZE_REFERENCE.md` |
 | Operator (CRDs + controller) | ServicePlanSpec (`systemWorkflows`) | same | → **omnistrate-operator** skill (see Companion skills below) |
 | Mixed (e.g. terraform infra + helm app) | ServicePlanSpec, multiple services with `dependsOn` | same | `HELM_ONBOARDING_REFERENCE.md` + `TERRAFORM_KUSTOMIZE_REFERENCE.md` |
-| Any artifact, air-gapped target | ServicePlanSpec with `onPremDeployment` | same | `DEPLOYMENT_MODELS_REFERENCE.md` §Air-gapped (installer packages a Helm chart; non-Helm stacks must first be bundled into a chart) |
+| Any artifact, air-gapped target | ServicePlanSpec with `onPremDeployment` | same | `DEPLOYMENT_MODELS_REFERENCE.md` §Air-gapped + `ONPREM_INSTALLER_REFERENCE.md` (installer packages Helm releases; non-Helm stacks must first be bundled into chart(s)) |
 | Nothing yet (design first) | — | — | → hand off to **omnistrate-sa** |
 
 ServicePlanSpec builds all share `--spec-type ServicePlanSpec`; the compose path
@@ -291,6 +291,11 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
   operational flows for hosted / BYOC (BYO-VPC, PrivateLink) / BYOC-K8s /
   air-gapped, plus customer-account onboarding, tenancy, and the ISV-phrasing
   FAQ. Read this for **every** onboarding path.
+- **`ONPREM_INSTALLER_REFERENCE.md`** — air-gapped/on-prem installer setup for
+  complex Helm graphs: multiple Helm releases, multiple image registry copy
+  services, `INSTALLER_EMBED`, `autoDiscoverImagesTag`, `parameterDependencyMap`,
+  runtime skips with `skip_resource_deployment`, local installer testing, and
+  download/install flow.
 - **`BILLING_METERING_REFERENCE.md`** — FinOps: choosing end-to-end Stripe
   billing vs custom metering export, `pricing` dimensions, `billingProviders`,
   paywall/quota/invoices, the `metering` bucket export (policy, path layout,

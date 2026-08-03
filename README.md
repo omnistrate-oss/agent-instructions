@@ -59,12 +59,13 @@ The primary onboarding skill. Runs an intake interview, selects the right artifa
 - **HELM_ONBOARDING_REFERENCE.md** - Helm `helmChartConfiguration`, values templating, multi-service `dependsOn`
 - **TERRAFORM_KUSTOMIZE_REFERENCE.md** - Terraform/OpenTofu and Kustomize ServicePlanSpec, combined patterns
 - **DEPLOYMENT_MODELS_REFERENCE.md** - Hosted / BYOC / BYOC-K8s / air-gapped `deployment:` blocks, customer account onboarding, ISV-phrasing FAQ
+- **ONPREM_INSTALLER_REFERENCE.md** - Complex air-gapped/on-prem installer setup: multiple Helm releases, multiple image registry copy resources, runtime skips, and local installer validation
 - **BILLING_METERING_REFERENCE.md** - FinOps: Stripe end-to-end billing vs custom metering export, `pricing` dimensions, `billingProviders`, usage-export schema, custom dimensions and exporters, cloud marketplaces, cost insights
 - **DISTRIBUTION_REFERENCE.md** - Release states, prod visibility, Customer Portal, subscriptions, go-live checklist, and the `DEPLOYMENT_OVERVIEW.md` + SVG artifact pair
 
 **Supported artifact types**: Docker Compose, Helm charts, Terraform/OpenTofu modules, Kustomize overlays, and mixed stacks.
 
-**Supported deployment models**: Hosted (provider cloud), BYOC including BYO-VPC and PrivateLink (customer cloud accounts), BYOC-K8s (customer-managed Kubernetes / `byoc-onprem`), and air-gapped (`onPremDeployment` installer).
+**Supported deployment models**: Hosted (provider cloud), BYOC including BYO-VPC and PrivateLink (customer cloud accounts), BYOC-K8s (customer-managed Kubernetes / `byoc-onprem`), and air-gapped (`onPremDeployment` installer, including complex multi-Helm / multi-registry graphs).
 
 **Use when**: Onboarding any application to Omnistrate regardless of artifact type or deployment target.
 
@@ -103,7 +104,7 @@ Use this table to pick the right skill for a request:
 | Kubernetes operator (CRDs + controller) | hosted / BYOC / BYOC-K8s | **omnistrate-operator** |
 | Instance showing FAILED / DEPLOYING / probe errors | hosted / BYOC / BYOC-K8s / air-gapped | **omnistrate-sre** |
 
-**Deployment model quick-map** (all models available for all artifact types via the FDE skill; the air-gapped installer packages a Helm chart, so non-Helm stacks must first be bundled into a chart):
+**Deployment model quick-map** (all models available for all artifact types via the FDE skill; the air-gapped installer packages Helm chart(s), so non-Helm stacks must first be bundled into chart(s)):
 
 | Where instances run | Model name | Spec block |
 |---------------------|------------|------------|
