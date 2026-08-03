@@ -59,7 +59,7 @@ The primary onboarding skill. Runs an intake interview, selects the right artifa
 - **HELM_ONBOARDING_REFERENCE.md** - Helm `helmChartConfiguration`, values templating, multi-service `dependsOn`
 - **TERRAFORM_KUSTOMIZE_REFERENCE.md** - Terraform/OpenTofu and Kustomize ServicePlanSpec, combined patterns
 - **DEPLOYMENT_MODELS_REFERENCE.md** - Hosted / BYOC / BYOC-K8s / air-gapped `deployment:` blocks, customer account onboarding, ISV-phrasing FAQ
-- **ONPREM_INSTALLER_REFERENCE.md** - Complex air-gapped/on-prem installer setup: multiple Helm releases, multiple image registry copy resources, runtime skips, and local installer validation
+- **ONPREM_INSTALLER_REFERENCE.md** - Generic air-gapped/on-prem installer setup: multiple Helm releases, image registry copy resources, action hooks, runtime skips, and operator runbooks
 - **BILLING_METERING_REFERENCE.md** - FinOps: Stripe end-to-end billing vs custom metering export, `pricing` dimensions, `billingProviders`, usage-export schema, custom dimensions and exporters, cloud marketplaces, cost insights
 - **DISTRIBUTION_REFERENCE.md** - Release states, prod visibility, Customer Portal, subscriptions, go-live checklist, and the `DEPLOYMENT_OVERVIEW.md` + SVG artifact pair
 

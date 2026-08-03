@@ -293,9 +293,9 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
   FAQ. Read this for **every** onboarding path.
 - **`ONPREM_INSTALLER_REFERENCE.md`** — air-gapped/on-prem installer setup for
   complex Helm graphs: multiple Helm releases, multiple image registry copy
-  services, `INSTALLER_EMBED`, `autoDiscoverImagesTag`, `parameterDependencyMap`,
-  runtime skips with `skip_resource_deployment`, local installer testing, and
-  download/install flow.
+  services, `INSTALLER_EMBED`, `autoDiscoverImagesTag`, action hooks,
+  `parameterDependencyMap`, runtime skips with `skip_resource_deployment`, and
+  download/install runbooks.
 - **`BILLING_METERING_REFERENCE.md`** — FinOps: choosing end-to-end Stripe
   billing vs custom metering export, `pricing` dimensions, `billingProviders`,
   paywall/quota/invoices, the `metering` bucket export (policy, path layout,

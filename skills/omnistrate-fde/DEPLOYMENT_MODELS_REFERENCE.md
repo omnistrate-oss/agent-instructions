@@ -797,8 +797,8 @@ resource in the portal (confusing); omitting `dependsOn` lets the chart install 
 images are mirrored.
 
 For installers with multiple Helm releases, multiple registries, shared private
-registry parameters, runtime prerequisite detection, or local installer testing,
-use `ONPREM_INSTALLER_REFERENCE.md`. Do not flatten a complex installer into one
+registry parameters, runtime prerequisite detection, action hooks, or operator
+runbooks, use `ONPREM_INSTALLER_REFERENCE.md`. Do not flatten a complex installer into one
 giant chart only to work around obsolete limitation guidance.
 
 ### Licensing + diagnostics in disconnected mode
