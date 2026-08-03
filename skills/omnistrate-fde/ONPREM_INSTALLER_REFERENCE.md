@@ -21,7 +21,7 @@ Build complex installers from these reusable functions:
 | Image sync | internal service with `containerImagesRegistryCopyConfiguration` | Copies images from source registries to the customer's registry. |
 | Prerequisite Helm release | internal service with `helmChartConfiguration` | Installs cluster dependencies such as ingress, certs, storage, agents, or CRDs. |
 | Application Helm release | customer-facing service with `helmChartConfiguration` | Installs the product chart and owns the user-visible parameters. |
-| Parameter forwarding | `parameterDependencyMap` | Lets the customer enter a value once and forwards it to internal services. |
+| Parameter forwarding | `parameterDependencyMap` | Required when a value from one service must be passed to another service. |
 | Conditional inclusion | `disable` or hook-level skip | Skips optional resources based on parameters or target-cluster state. |
 
 Keep implementation details `internal: true` so the customer sees the product
@@ -167,8 +167,8 @@ services:
 
 Rules:
 
-- Use multiple image sync services when source registry, source repository,
-  credentials, image list, or target repository differs.
+- Use multiple image sync services when source registry, source repository, or
+  source credentials differ.
 - Keep image sync services `internal: true`.
 - Do not put target registry credentials in `pushTarget`; the installer obtains
   target upload credentials during execution.
@@ -238,8 +238,11 @@ Use `dependsOn` for real ordering only:
 - Later Helm releases depend on prerequisite Helm releases they require.
 - Independent prerequisites should not depend on each other.
 
-Every service named in `parameterDependencyMap` must declare the target
-parameter key in its own `apiParameters`.
+`dependsOn` does not pass parameter values by itself. If a parameter value from
+one service must populate another service, define the parameter on each service
+that needs it and add `parameterDependencyMap` on the upstream/customer-facing
+parameter. Every service named in a `parameterDependencyMap` must declare the
+target parameter key in its own `apiParameters`.
 
 ---
 
@@ -362,9 +365,9 @@ omnistrate-ctl instance get-installer <instance-id> \
 |---|---|
 | Treating air-gapped as BYOC-K8s | Use `onPremDeployment`, not `byoaDeployment` / `byoc-onprem`. |
 | Exposing prerequisites or image sync as product resources | Set implementation resources `internal: true`. |
-| Putting every parameter on every service | Put shared inputs on the customer-facing resource and use `parameterDependencyMap`. |
 | Using `RUNTIME_PULL` for a disconnected site | Use `INSTALLER_EMBED`. |
-| Hardcoding one registry layout for all images | Split image sync services by source registry/repository/credentials/target path. |
+| Combining images from different sources into one image sync service | Split image sync services by source registry/repository/credentials. |
+| Expecting `dependsOn` to pass parameter values | Define the parameter on each service that needs it and wire it with `parameterDependencyMap`. |
 | Skipping existing prerequisites unconditionally | Probe with `helm`/`kubectl`; skip only compatible healthy resources. |
 | Omitting action hooks for lifecycle-sensitive products | Use `VALIDATE`, `PRE_INSTALL`, `POST_INSTALL`, and `BACKUP` as needed. |
 | Debugging as if a control-plane tunnel exists | Use installer output, hook logs, local `kubectl`, and customer-provided diagnostics. |
