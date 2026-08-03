@@ -2,9 +2,7 @@
 
 Use this reference for generic air-gapped / on-prem installer setup when a
 ServicePlanSpec must package Helm releases, container images, customer-facing
-configuration, and lifecycle scripts into a downloadable installer. The patterns
-align with the Omnistrate air-gapped Helm documentation and production
-`omnistrate-installer` specs, but avoid product-specific assumptions.
+configuration, and lifecycle scripts into a downloadable installer.
 
 Core rule: an on-prem installer uses `deployment.onPremDeployment`. It is not
 BYOC-K8s (`byoc-onprem`), and there is no live control-plane link after the
