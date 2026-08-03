@@ -8,6 +8,19 @@ Core rule: an on-prem installer uses `deployment.onPremDeployment`. It is not
 BYOC-K8s (`byoc-onprem`), and there is no live control-plane link after the
 customer runs the installer.
 
+Installer intake rule: ask which install-time endpoints the installer will use,
+not merely whether upstream charts/images are public or private. The install
+flow uses public Helm/image endpoints, customer-accessible private Helm/image
+registries, or a mix. Keep image packaging separate: `INSTALLER_EMBED` controls
+whether images are packed into the installer; it is not a Helm/image install
+source.
+
+Target-environment rule: separate the artifact-hosting account from the
+customer's offline Kubernetes target. `onPremDeployment` currently uses an AWS
+artifact-hosting account to produce the downloadable installer. The offline
+target may be AWS, GCP, Azure, OCI, Nebius, on-prem Kubernetes, or mixed; use
+that answer for requirements, hooks, registry flow, and the runbook.
+
 ---
 
 ## Functional Building Blocks
@@ -64,7 +77,7 @@ There are four supported hook types: `VALIDATE`, `PRE_INSTALL`,
 |---|---|---|
 | `VALIDATE` | Before install/upgrade, and for installer validation phases | Check `kubectl`/`helm`, cluster version, required CRDs, storage classes, existing releases, DNS/TLS prerequisites. May call `skip_resource_deployment` for an acceptable preexisting resource. |
 | `PRE_INSTALL` | After validation, before Helm install/upgrade | Create namespaces, secrets, configmaps, pull secrets, certificates, or merge values from an existing install. |
-| `POST_INSTALL` | After Helm install/upgrade succeeds | Wait for custom readiness, create marker resources, print access details, verify expected endpoints, or finalize generated config. |
+| `POST_INSTALL` | After Helm install/upgrade succeeds | Run required post-Helm commands, create marker resources, print access details, or finalize generated config. |
 | `BACKUP` | Before upgrades | Snapshot application state, export manifests/config, or run product-specific backup commands. |
 
 Generic hook shape:

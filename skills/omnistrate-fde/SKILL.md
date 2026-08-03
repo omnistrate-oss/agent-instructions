@@ -11,9 +11,12 @@ All commands use the `omnistrate-ctl` CLI (alias `omctl`) — install and authen
 
 Omnistrate is a control plane that turns your existing artifact — a Docker
 Compose file, a Helm chart, a Terraform/OpenTofu module, Kustomize overlays, or
-a Kubernetes operator — into a multi-tenant, managed SaaS with automatic
-provisioning, full lifecycle (create/modify/stop/backup/restore/upgrade), and
-metering/billing. You bring the artifact; Omnistrate owns the substrate (node
+a Kubernetes operator — into a multi-tenant, managed SaaS. For connected
+deployment models, Omnistrate handles automatic provisioning, lifecycle
+operations (create/modify/stop/backup/restore/upgrade), and metering/billing.
+For air-gapped deployments, Omnistrate produces a self-contained installer
+artifact; the customer runs and operates it in a disconnected environment. You
+bring the artifact; Omnistrate owns the substrate for connected models (node
 pools, per-instance namespaces, storage, load balancers, TLS, DNS). Instances
 can run in *your* cloud (hosted), in *your customers'* cloud accounts (BYOC), in
 *your customers'* own Kubernetes clusters (BYOC-K8s, no infra provisioned by
@@ -72,24 +75,52 @@ a single plan serving multiple deployment models)
   (`onPremDeployment`).
 
 **3. Which clouds and regions?** (AWS / GCP / Azure / OCI / Nebius; regions).
+For **air-gapped installer only**, also separate artifact production from the
+offline install target: `onPremDeployment` currently uses an AWS
+artifact-hosting account (`AwsAccountId` + `AWSBootstrapRoleAccountArn`) to
+produce the downloadable installer, while the customer workload target is one of
+AWS, GCP, Azure, OCI, Nebius, on-prem Kubernetes, or mixed. The target answer
+informs installer requirements, hooks, image/chart access, and the runbook, not
+a live Omnistrate deployment region.
 
-**4. Lifecycle needs?** Backups, stop/start, scaling, upgrades. *Noted for later
-phases — not implemented up front.*
+**4. Operations needs?** Ask based on the deployment model chosen in Q2:
+- **Hosted / BYOC / BYOC-K8s:** ask about managed lifecycle needs — backups,
+  stop/start, scaling, upgrades. *Noted for later phases — not implemented up
+  front.*
+- **Air-gapped:** do **not** ask for live Omnistrate lifecycle operations. Ask
+  which installer action hooks are needed. There are four supported hook types:
+  `VALIDATE`, `PRE_INSTALL`, `POST_INSTALL`, and `BACKUP`. Use `VALIDATE` for
+  install/upgrade preflight checks and compatible prerequisite skips,
+  `PRE_INSTALL` for setup that must run before Helm, `POST_INSTALL` only for
+  commands that must run after Helm succeeds, and `BACKUP` for pre-upgrade
+  backup/export steps. Keep image packaging in Q5; do not present it as an
+  operational hook.
 
-**5. Private registries or private git repos?** Determines the auth setup steps
-for images (compose/helm) and source (terraform/kustomize/helm).
+**5. Artifact access and install-time registry flow?** Ask based on the
+deployment model chosen in Q2:
+- **Hosted / BYOC / BYOC-K8s:** ask whether any images, Helm charts,
+  Terraform/Kustomize sources, or git repos require private access. This
+  determines provider-side auth setup.
+- **Air-gapped:** do **not** ask only whether the upstream charts/images are
+  public or private. Ask which install-time endpoints the installer will use:
+  public Helm/image endpoints, customer-accessible private Helm/image
+  registries, or a mix. Keep image packaging separate: `INSTALLER_EMBED`
+  controls whether images are packed into the installer; it is not a Helm/image
+  install source. Capture target registry paths and split image-sync services
+  only when source registry, source repository, or source credentials differ.
 
-**6. How do you charge for this — and who takes the payment?** (Stripe / a cloud
-marketplace / an existing billing system like Chargebee / not billing yet.)
-Follow up with **"what do you charge for?"** — the built-in dimensions are cpu,
-memory, storage, replica, deploymentCell.
-→ *Stripe **and** built-in dimensions suffice* → **end-to-end billing**.
-→ *Any other provider (AWS/GCP/Azure Marketplace, Chargebee, Clazar, in-house),
-**or** extra dimensions, **or** custom aggregation logic* → **custom metering**
-(usage export + your own exporter).
-→ *Not billing yet* → free tier; note it and move on.
-*Recorded now, implemented in phase 6 — never in the first build.* Details:
-`BILLING_METERING_REFERENCE.md`.
+**6. Monetization?** Ask based on the deployment model chosen in Q2:
+- **Hosted / BYOC / BYOC-K8s:** ask how they charge and who handles payment
+  (Stripe / cloud marketplace / Chargebee or other billing system / not billing
+  yet). Follow up with **"what do you charge for?"** — the built-in dimensions
+  are cpu, memory, storage, replica, deploymentCell. Record now, implement in
+  phase 6 — never in the first build.
+- **Air-gapped:** skip billing/payment intake unless the user explicitly says
+  the installer offering needs commercial packaging. The installer setup itself
+  is about offline artifact delivery, install-time registry access, hooks, and
+  operator runbooks, not live metering or payment collection.
+
+Billing details, when applicable: `BILLING_METERING_REFERENCE.md`.
 
 If the user cannot cleanly place Q2, map their words to a model with the
 ISV-phrasing FAQ in `DEPLOYMENT_MODELS_REFERENCE.md` (e.g. "customers want it in
@@ -108,6 +139,9 @@ table is only for steering the interview.
 | **BYOC** (Account / BYO-VPC / PrivateLink) | the customer's cloud account | customer owns account, you operate | reverse/encrypted channel; PrivateLink = no public exposure | `byoaDeployment` |
 | **BYOC-K8s** | the customer's own Kubernetes cluster | customer owns the cluster; you deploy workloads only | cluster opens **outbound** mTLS/gRPC to your control plane | `byoaDeployment` (deploy `--cloud-provider byoc-onprem`) |
 | **Air-gapped** | wherever the customer runs the installer | customer runs and operates | **none** — self-contained artifact, no live link | `onPremDeployment` |
+
+Air-gapped plans have no live Omnistrate lifecycle after delivery. The customer
+runs the installer and any operational scripts in the disconnected environment.
 
 BYO-VPC and PrivateLink are BYOC variants selected at customer-account
 onboarding, not separate spec blocks (they live within the BYOC plan). A
@@ -141,7 +175,7 @@ them here.
 
 ## Universal Workflow (method-agnostic)
 
-Same six phases for every artifact and model. Per-phase commands are named
+Same workflow phases for every artifact and model. Per-phase commands are named
 generically; copy the exact syntax from the format's reference.
 
 **1. Verify accounts / prerequisites.** Confirm the *provider* cloud account is
@@ -154,9 +188,12 @@ cloud — and explain that *customer* accounts are onboarded later, at deploy
 time — see `DEPLOYMENT_MODELS_REFERENCE.md` (§BYOC, §BYOC-K8s) for the customer
 `account customer create` flows.
 
-**2. Minimal spec, zero parameterization.** Hardcode everything: one cloud,
-create/delete lifecycle only, no API parameters, no `$var.*`, no autoscaling.
-Get a working deployment before adding anything. Build the deployment block from
+**2. Minimal spec, zero parameterization.** Hardcode everything: no API
+parameters, no `$var.*`, no autoscaling. For connected models, start with one
+cloud/region, create/delete lifecycle only, and get a working deployment before
+adding anything. For air-gapped, start with the smallest installer artifact:
+minimal `onPremDeployment`, the smallest Helm/image-sync graph, and no optional
+action hooks unless required for install. Build the deployment block from
 `DEPLOYMENT_MODELS_REFERENCE.md` for the model(s) chosen in Q2 — **one plan per
 model**: if several models were chosen, build and stabilize one plan first,
 then author a separate plan per remaining model. The service body comes from
@@ -178,12 +215,13 @@ is added.
   access directly.) Proceed only after the user confirms, or adjust the spec
   and rebuild.
 
-**4. Deploy one instance and debug until RUNNING.** `instance create` targeting
-the main resource, then `instance describe`. For BYOC targets the customer
-account must be onboarded and `READY` first — see
-`DEPLOYMENT_MODELS_REFERENCE.md` §BYOC — then deploy with
-`--customer-account-id`. Expect **2–3 iterations** — do not
-stop at the first failure. Debug loop, in escalating order:
+**4. Deploy one instance or produce the installer artifact.**
+
+For connected models, `instance create` targeting the main resource, then
+`instance describe` until RUNNING. For BYOC targets the customer account must be
+onboarded and `READY` first — see `DEPLOYMENT_MODELS_REFERENCE.md` §BYOC — then
+deploy with `--customer-account-id`. Expect **2–3 iterations** — do not stop at
+the first failure. Debug loop, in escalating order:
    1. `omnistrate-ctl instance describe <id> --deployment-status --output json`
       — find the failing resource.
    2. `omnistrate-ctl workflow list --instance-id <id>` then
@@ -195,21 +233,28 @@ stop at the first failure. Debug loop, in escalating order:
    4. `omnistrate-ctl deployment-cell update-kubeconfig <cell-id> --kubeconfig
       /tmp/kc` + `kubectl logs` / `kubectl get` — live pod state. Never use
       aws/gcloud/az CLIs for cluster access; only the Omnistrate tunnel.
-   The **omnistrate-sre** skill, if installed, extends this loop with
-   per-resource-type and per-model failure catalogs.
+The **omnistrate-sre** skill, if installed, extends this loop with
+per-resource-type and per-model failure catalogs.
+
+For air-gapped targets, do not wait for a RUNNING workload through the control
+plane. Create the installer instance, wait for installer readiness, download
+the artifact, and use `ONPREM_INSTALLER_REFERENCE.md` for installer action hooks
+and customer-run diagnostics.
 
 **5. Customization discovery & parameterization.** Once the zero-param instance
-is RUNNING, **proactively inspect** the artifact to recommend a customer-facing
-parameter set — do not wait to be asked. For Helm, run `helm show values` /
-`helm show readme` (or Artifact Hub); for terraform, read `variables.tf`; for
-compose, inspect env vars/images. Classify every relevant value into three tiers
-(**Tier 1** recommended customer-facing → `apiParameters`; **Tier 2**
-optional/advanced → default to hardcoded; **Tier 3** platform/ISV-owned → never
-expose), **present the tier table for approval**, and also surface external
-dependencies: when a chart bundles a dependency with a working default, *suggest*
-(never force) replacing it with a terraform-managed RDS/ElastiCache/S3. Then
-implement approved Tier-1 parameters **one at a time** — rebuild + redeploy after
-*each* change, never batch. See
+is RUNNING for connected models, or the minimal installer artifact is produced
+for air-gapped, **proactively inspect** the artifact to recommend a
+customer-facing parameter set — do not wait to be asked. For Helm, run
+`helm show values` / `helm show readme` (or Artifact Hub); for terraform, read
+`variables.tf`; for compose, inspect env vars/images. Classify every relevant
+value into three tiers (**Tier 1** recommended customer-facing →
+`apiParameters`; **Tier 2** optional/advanced → default to hardcoded; **Tier 3**
+platform/ISV-owned → never expose), **present the tier table for approval**, and
+also surface external dependencies: when a chart bundles a dependency with a
+working default, *suggest* (never force) replacing it with a terraform-managed
+RDS/ElastiCache/S3. Then implement approved Tier-1 parameters **one at a time**
+— rebuild + redeploy after *each* change for connected models, or rebuild the
+installer artifact after *each* change for air-gapped, never batch. See
 `HELM_ONBOARDING_REFERENCE.md` §"Customization discovery" and §"External
 dependencies", and `TERRAFORM_KUSTOMIZE_REFERENCE.md` §"Managed-service modules".
 
@@ -218,12 +263,15 @@ identical), add additional clouds, and additional deployment models (one plan
 per model). For air-gapped targets the deliverable is the installer artifact
 rather than a running instance — see `DEPLOYMENT_MODELS_REFERENCE.md`
 §Air-gapped.
-**Billing/metering lands here, not earlier** — implement the path chosen in
-intake Q6: `pricing` + `billingProviders` for end-to-end Stripe billing, or the
-`metering` export (+ your exporter) for marketplaces / non-Stripe providers /
-custom dimensions. For `CUSTOM_TENANCY` plans (Helm, operator, Kustomize) the
+**Billing/metering lands here, not earlier** — and only when monetization was
+requested. Implement the path chosen in intake Q6: `pricing` +
+`billingProviders` for end-to-end Stripe billing, or the `metering` export (+
+your exporter) for marketplaces / non-Stripe providers / custom dimensions. For
+`CUSTOM_TENANCY` plans (Helm, operator, Kustomize) the
 `omnistrate.com/include-customer-billing: "true"` **pod label** is required or
-usage silently bills zero. See `BILLING_METERING_REFERENCE.md`.
+usage silently bills zero. For air-gapped installer setup, skip billing/metering
+unless commercial packaging was explicitly requested. See
+`BILLING_METERING_REFERENCE.md`.
 
 **7. Distribute & document.** Release the Plan
 (`omnistrate-ctl build ... --release-as-preferred --release-description "..."`),
@@ -246,10 +294,12 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
    Check the docs before every extension or field you add. (The MCP docs-search
    tools `mcp__ctl__docs_*` are an optional alternative only on user request.)
 2. **Zero-parameterization first** (compose / helm / terraform / kustomize).
-   Hardcode everything, get to RUNNING, then parameterize. *Operator-CR
-   exception:* CR specs are parameter-driven from day one, set kept minimal.
+   Hardcode everything, get to RUNNING for connected models or produce the
+   installer artifact for air-gapped, then parameterize. *Operator-CR exception:*
+   CR specs are parameter-driven from day one, set kept minimal.
 3. **One change per build-deploy cycle.** Add one parameter or capability, then
-   rebuild and redeploy to validate before the next.
+   rebuild and redeploy for connected models, or rebuild the installer artifact
+   for air-gapped, before the next change.
 4. **`defaultValue` is always a quoted string** — even for numeric types.
 5. **Never modify the user's original artifact.** Create Omnistrate variants
    (e.g. `-omnistrate.yaml`, a `spec.yaml`) — leave the source untouched.
@@ -269,11 +319,14 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
 | "I'll default to `hostedDeployment`." | Ask intake Q2 first. The model is a decision, not a default. |
 | "I remember the field name / that ctl flag exists." | Grep the reference files; verify flags with `--help` or docs search. |
 | "Air-gapped needs an always-on agent phoning home." | No. Air-gapped is a self-contained *installer* artifact — no live control-plane link (`onPremDeployment`). |
+| "For air-gapped, I'll ask about stop/start or restore lifecycle." | Don't. Ask which supported action hooks are needed: `VALIDATE`, `PRE_INSTALL`, `POST_INSTALL`, and `BACKUP`. Keep image packaging and registry flow separate. |
+| "For air-gapped, I'll ask whether the upstream charts/images are public or private." | Ask which install-time endpoints are used: public Helm/image endpoints, customer private registries/repos, or both. `INSTALLER_EMBED` is image packaging, not an install source. |
+| "For air-gapped, I'll ask who handles payment." | Skip billing/payment unless the user explicitly requests commercial packaging for the installer. |
 | "BYOC-K8s will provision the customer's nodes." | It won't. The customer owns the cluster and infra; Omnistrate only deploys workloads via the dataplane agent. |
 | "I'll add all the parameters, then build once." | One change per build-deploy cycle. Batching hides which change broke it. |
 | "I'll add a custom pricing dimension / a `marketplace:` block to the spec." | Neither exists. Only cpu/memory/storage/replica/deploymentCell are billable dimensions; everything else is the metering-export path (`BILLING_METERING_REFERENCE.md`). |
 | "Billing is set up, so a CUSTOM_TENANCY Helm/operator plan will bill correctly." | Not without the `omnistrate.com/include-customer-billing: "true"` pod label — otherwise it silently bills zero. |
-| "I'll parameterize before the first deploy." | Zero-parameterization first (operator-CR excepted). Get to RUNNING, then parameterize. |
+| "I'll parameterize before the first deploy." | Zero-parameterization first (operator-CR excepted). Get to RUNNING for connected models or produce the installer artifact for air-gapped, then parameterize. |
 
 ## Reference Files
 
@@ -324,8 +377,11 @@ Companion skills — separate installs; this skill is fully usable without them:
 - Instance reaches **RUNNING** with all resources healthy — **or**, for
   air-gapped targets, the installer artifact is produced.
 - Started with zero parameterization (operator-CR excepted) and completed at
-  least one deploy-debug-fix cycle.
-- Every lifecycle/parameter addition validated by a rebuild + redeploy.
+  least one deploy-debug-fix cycle for connected models — or produced the
+  minimal installer artifact for air-gapped.
+- Every lifecycle/parameter addition validated by a rebuild + redeploy for
+  connected models; every air-gapped installer action hook or parameter addition
+  represented in the spec and validated by rebuild.
 - The deployment model(s) match what the user chose in intake Q2.
 - Recommended customization tiers were reviewed with the user (tier table
   presented; approved Tier-1 parameters implemented one per build-deploy cycle).
