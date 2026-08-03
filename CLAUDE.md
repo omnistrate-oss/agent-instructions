@@ -4,7 +4,7 @@ All skills default to the `omnistrate-ctl` CLI (alias `omctl`) — install it an
 
 ## Skill Routing Guide
 
-Use the table below to select the right skill. All four deployment models — **hosted** (provider cloud), **BYOC** including BYO-VPC and PrivateLink (customer cloud accounts), **BYOC-K8s** (customer-managed Kubernetes / `byoc-onprem`), and **air-gapped** (`onPremDeployment` installer) — are supported across all artifact types (the air-gapped installer packages a Helm chart, so non-Helm stacks must first be bundled into a chart).
+Use the table below to select the right skill. All four deployment models — **hosted** (provider cloud), **BYOC** including BYO-VPC and PrivateLink (customer cloud accounts), **BYOC-K8s** (customer-managed Kubernetes / `byoc-onprem`), and **air-gapped** (`onPremDeployment` installer) — are supported across all artifact types (the air-gapped installer packages Helm chart(s), so non-Helm stacks must first be bundled into chart(s)).
 
 | Request shape | Skill |
 |---------------|-------|
@@ -77,7 +77,7 @@ The primary onboarding skill for all artifact types and all deployment models. R
 - Compute and storage resource setup
 - Iterative debugging until instances are RUNNING (delegates to SRE skill)
 - Multi-service architecture with synthetic root patterns and `dependsOn`
-- Air-gapped installer artifact (`onPremDeployment`)
+- Air-gapped installer artifact (`onPremDeployment`), including complex multi-Helm / multi-registry installer graphs (`ONPREM_INSTALLER_REFERENCE.md`)
 - Billing and metering (`BILLING_METERING_REFERENCE.md`): end-to-end Stripe billing (`pricing`, `billingProviders`, paywall, quotas, invoices) vs custom metering export (`metering` to S3/GCS, record schema, `externalPayerId`, custom dimensions and exporters, cloud marketplaces via Clazar), the `CUSTOM_TENANCY` billing pod label, and `omnistrate-ctl cost` insights
 
 **Hands off to**:
@@ -129,4 +129,3 @@ Systematically debug failed Omnistrate instance deployments using a progressive 
 - Pod-level investigation with kubectl via Omnistrate remote tunneling (no cloud-provider CLI)
 - Rendered-artifact inspection via `instance debug`: chart values, `.tf` files, CR status (kustomize: workflow events + tunnel, no rendered-artifact view)
 - Common failure-pattern recognition (infrastructure, container lifecycle, probe, per-model)
-
