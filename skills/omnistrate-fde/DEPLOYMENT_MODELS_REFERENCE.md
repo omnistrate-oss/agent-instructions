@@ -8,26 +8,42 @@ sibling references: `COMPOSE_ONBOARDING_REFERENCE.md`, `HELM_ONBOARDING_REFERENC
 `OPERATOR_ONBOARDING_REFERENCE.md`.
 
 Every YAML field, CLI flag, and `$sys.*` path below is drawn from the Omnistrate
-documentation (https://docs.omnistrate.com; the MCP docs-search tools
-`mcp__ctl__docs_*` are an optional alternative when the user has asked to work
-through MCP). When something here conflicts with the live schema or the docs,
-trust the schema/docs and update this file.
+documentation. **When something here conflicts with the live schema or the docs,
+trust the schema/docs and update this file** — read them with `omctl docs`, which
+needs no `omnistrate-ctl login` (network access is still required):
 
-**Field-casing rule (load-bearing):** the *same* fields are cased differently by
-context. The **schema-canonical** casing (the live
-`service-spec-schema.json` `$defs.Deployment` and `$defs.OnPremDeployment`) is
-what the editor validator enforces — use it in new specs so validation passes:
+- `omctl docs compose-spec "x-omnistrate-service-plan"` — the compose `deployment:`
+  block, plus `.deployment.hostedDeployment` / `.deployment.byoaDeployment` for the
+  per-model variants
+- `omctl docs plan-spec "deployment"` · `omctl docs plan-spec "deployment target"` —
+  the ServicePlanSpec equivalents
+- `omctl docs json-schema service-plan` — schema-canonical casing, including
+  `$defs.Deployment` and `$defs.OnPremDeployment` (see the casing rule below)
+- `omctl docs system-parameters` — the `$sys.*` paths
+- `omctl docs search "byoc privatelink" --limit 15` — per-model operational guides
 
-| Context | Deployment block lives at | Schema-canonical casing | Example |
-|---------|---------------------------|-------------------------|---------|
-| Compose (`x-omnistrate-service-plan`) | `x-omnistrate-service-plan.deployment` | lowerCamel | `awsAccountId`, `awsBootstrapRoleAccountArn` |
-| ServicePlanSpec — `hostedDeployment` / `byoaDeployment` | root `deployment` | UpperCamel with `AWS` acronym fully uppercased in the ARN field | `AwsAccountId`, `AWSBootstrapRoleAccountArn` |
-| ServicePlanSpec — air-gapped `onPremDeployment` | root `deployment.onPremDeployment` | Same as above: `AwsAccountId` + `AWSBootstrapRoleAccountArn` | `AwsAccountId`, `AWSBootstrapRoleAccountArn` |
+Add `-o json` for machine-readable output. (The MCP docs-search tools
+`mcp__ctl__docs_*` are an optional alternative only when the user has asked to work
+through MCP.)
 
-> Official examples vary in casing (`AwsBootstrapRoleAccountArn` also appears, as
-> does lowerCamel in some contexts) and the parser accepts those variants —
-> but **new specs should use the schema-canonical form above** so the in-editor
-> validator does not flag them.
+**Field casing:** the account fields are **lowerCamel in every context** — compose and
+ServicePlanSpec alike. Confirm straight from the schema rather than from memory:
+
+```bash
+omctl docs json-schema service-plan -o json | jq '.["$defs"].Deployment, .["$defs"].OnPremDeployment'
+```
+
+| Context | Deployment block lives at | Example |
+|---------|---------------------------|---------|
+| Compose (`x-omnistrate-service-plan`) | `x-omnistrate-service-plan.deployment` | `awsAccountId`, `awsBootstrapRoleAccountArn` |
+| ServicePlanSpec — `hostedDeployment` / `byoaDeployment` | root `deployment` | `awsAccountId`, `awsBootstrapRoleAccountArn` |
+| ServicePlanSpec — air-gapped `onPremDeployment` | root `deployment.onPremDeployment` | `awsAccountId`, `awsBootstrapRoleAccountArn` |
+
+> Older specs and some published examples use UpperCamel (`AwsAccountId`,
+> `AWSBootstrapRoleAccountArn`). Those still build — the platform decodes specs
+> through `encoding/json`, which matches field names case-insensitively — but write
+> lowerCamel in new specs so the editor pin and `omctl docs validate` both pass.
+> `omctl docs validate --file <spec>.yaml` is the quickest way to confirm.
 
 ---
 
@@ -138,17 +154,17 @@ In a ServicePlanSpec the deployment block is at the
 ```yaml
 deployment:
   hostedDeployment:
-    AwsAccountId: "<AWS_ACCOUNT_ID>"
-    AWSBootstrapRoleAccountArn: "arn:aws:iam::<AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role"
+    awsAccountId: "<AWS_ACCOUNT_ID>"
+    awsBootstrapRoleAccountArn: "arn:aws:iam::<AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role"
 ```
 
 > **Casing warning:** schema-canonically the ARN field is
-> `AWSBootstrapRoleAccountArn` (acronym `AWS` fully uppercased) while the
-> account-ID field is `AwsAccountId` — this is the form in the live schema, and it
+> `awsBootstrapRoleAccountArn` (acronym `AWS` fully uppercased) while the
+> account-ID field is `awsAccountId` — this is the form in the live schema, and it
 > is what the editor validator expects.
 > The `onPremDeployment` block uses the **same** canonical casing (see
 > [Air-gapped](#air-gapped--on-prem-installer)). Official examples also spell the
-> ARN field `AwsBootstrapRoleAccountArn`; the parser accepts it, but do not use
+> ARN field `awsBootstrapRoleAccountArn`; the parser accepts it, but do not use
 > that variant in a new spec.
 
 ### Tenancy interaction
@@ -229,13 +245,13 @@ x-omnistrate-service-plan:
 
 ServicePlanSpec / Plan-spec context, root-level. The block below uses
 **lowerCamel** fields (`awsAccountId`, `awsBootstrapRoleAccountArn`) — the parser
-accepts this. Schema-canonical UpperCamel (`AwsAccountId` +
-`AWSBootstrapRoleAccountArn`, as in `hostedDeployment`) **also works and is what
+accepts this. Schema-canonical UpperCamel (`awsAccountId` +
+`awsBootstrapRoleAccountArn`, as in `hostedDeployment`) **also works and is what
 the editor validator expects**, so prefer it when authoring a fresh spec:
 
 ```yaml
 # lowerCamel form (parser-accepted). Schema-canonical
-# form: AwsAccountId / AWSBootstrapRoleAccountArn.
+# form: awsAccountId / awsBootstrapRoleAccountArn.
 name: My Product - BYOC
 deployment:
   byoaDeployment:
@@ -457,10 +473,10 @@ stays **connected** to your control plane.
 
 BYOC-K8s is configured as a BYOC deployment Plan, and you set up the provider side
 the same way you would for other BYOC Plans. Its
-`byoaDeployment` block therefore still carries the provider `AwsAccountId` +
-`AWSBootstrapRoleAccountArn` (official examples also spell the ARN field in the
-accepted variant casing `AwsBootstrapRoleAccountArn`; schema-canonical is
-`AWSBootstrapRoleAccountArn` — see the casing table at the top of this file) —
+`byoaDeployment` block therefore still carries the provider `awsAccountId` +
+`awsBootstrapRoleAccountArn` (official examples also spell the ARN field in the
+accepted variant casing `awsBootstrapRoleAccountArn`; schema-canonical is
+`awsBootstrapRoleAccountArn` — see the casing table at the top of this file) —
 even though Omnistrate provisions no AWS infra in the customer's cluster.
 These are the **provider-side** account values of the AWS **"Control Plane"
 account** (see the Control Plane account rule in §BYOC — it applies to every
@@ -664,23 +680,23 @@ path as its own internal image sync service. For complex graphs, read
 ### Spec syntax (`requirements.k8sVersion`, `onPremDeployment` fields)
 
 Schema-canonically `onPremDeployment` uses
-the **same** casing as `hostedDeployment` — `AwsAccountId` +
-`AWSBootstrapRoleAccountArn`. The block below spells the ARN field
-`AwsBootstrapRoleAccountArn`; the parser accepts
-that variant, but the editor validator expects `AWSBootstrapRoleAccountArn`, so
+the **same** casing as `hostedDeployment` — `awsAccountId` +
+`awsBootstrapRoleAccountArn`. The block below spells the ARN field
+`awsBootstrapRoleAccountArn`; the parser accepts
+that variant, but the editor validator expects `awsBootstrapRoleAccountArn`, so
 prefer the canonical form in a fresh spec:
 
 ```yaml
-# variant casing AwsBootstrapRoleAccountArn (parser-accepted).
-# Schema-canonical form: AWSBootstrapRoleAccountArn.
+# variant casing awsBootstrapRoleAccountArn (parser-accepted).
+# Schema-canonical form: awsBootstrapRoleAccountArn.
 name: My Application
 deployment:
   requirements:
     k8sVersion: ">=1.30.0"   # optional: minimum K8s version on the target cluster
   onPremDeployment:
     # AWS account that hosts the installer artifacts
-    AwsAccountId: '<your-aws-account-id>'
-    AwsBootstrapRoleAccountArn: 'arn:aws:iam::<your-aws-account-id>:role/omnistrate-bootstrap-role'
+    awsAccountId: '<your-aws-account-id>'
+    awsBootstrapRoleAccountArn: 'arn:aws:iam::<your-aws-account-id>:role/omnistrate-bootstrap-role'
 ```
 
 ### Installer tools (`onPremInstallerTools.helperUserScript`, `$file` syntax)
@@ -819,8 +835,8 @@ deployment:
   requirements:
     k8sVersion: ">=1.30.0"
   onPremDeployment:
-    AwsAccountId: '<your-aws-account-id>'
-    AwsBootstrapRoleAccountArn: 'arn:aws:iam::<your-aws-account-id>:role/omnistrate-bootstrap-role'
+    awsAccountId: '<your-aws-account-id>'
+    awsBootstrapRoleAccountArn: 'arn:aws:iam::<your-aws-account-id>:role/omnistrate-bootstrap-role'
   onPremInstallerTools:
     helperUserScript: |
       #!/bin/bash

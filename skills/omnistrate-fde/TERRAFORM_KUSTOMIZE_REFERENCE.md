@@ -1,9 +1,22 @@
 # Terraform & Kustomize Onboarding Reference
 
-Based on the Omnistrate documentation (https://docs.omnistrate.com; the MCP
-docs-search tools `mcp__ctl__docs_*` are an optional alternative when the user
-has asked to work through MCP). When this file conflicts with the live schema
-or the docs, trust the schema/docs.
+Based on the Omnistrate documentation. **When this file conflicts with the live
+schema or the docs, trust the schema/docs** — and read them with `omctl docs`,
+which needs no `omnistrate-ctl login` (network access is still required):
+
+- `omctl docs plan-spec` — list every ServicePlanSpec section
+- `omctl docs plan-spec "terraform configuration"` · `omctl docs plan-spec "kustomize configuration"`
+- `omctl docs plan-spec "terraform per-cloud-provider configuration"` · `omctl docs plan-spec "terraform output"`
+- `omctl docs json-schema service-plan` — the authoritative schema (byte-identical
+  to the editor pin below)
+- `omctl docs system-parameters` — the `$sys.*` variables
+- `omctl docs search "<query>" --limit 15` — full-text across the guides
+- `omctl docs validate --file <spec>.yaml` — validate the finished spec against the schema; run this before every build
+
+Add `-o json` for machine-readable output. A section name that matches nothing
+prints the available-section list; pick from it rather than guessing again. (The
+MCP docs-search tools `mcp__ctl__docs_*` are an optional alternative only when the
+user has asked to work through MCP.)
 
 Schema pin (add as the first line of your spec for editor validation):
 
@@ -43,11 +56,11 @@ not customer-facing endpoints.
 name: Multiple Resources
 deployment:
   hostedDeployment:               # see DEPLOYMENT_MODELS_REFERENCE.md for all models
-    AwsAccountId: "<AWS_ACCOUNT_ID>"
-    AwsBootstrapRoleAccountArn: "arn:aws:iam::<AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role"
-    GcpProjectId: "<GCP_PROJECT_ID>"
-    GcpProjectNumber: "<GCP_PROJECT_NUMBER>"
-    GcpServiceAccountEmail: "<GCP_SA_EMAIL>"
+    awsAccountId: "<AWS_ACCOUNT_ID>"
+    awsBootstrapRoleAccountArn: "arn:aws:iam::<AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role"
+    gcpProjectId: "<GCP_PROJECT_ID>"
+    gcpProjectNumber: "<GCP_PROJECT_NUMBER>"
+    gcpServiceAccountEmail: "<GCP_SA_EMAIL>"
 
 services:
   - name: terraformChild

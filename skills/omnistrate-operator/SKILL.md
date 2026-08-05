@@ -19,11 +19,80 @@ expressed as Argo-workflow DAGs under `systemWorkflows`.
 **Core principle: never write spec YAML from memory.** Untrained-knowledge
 Omnistrate specs are reliably wrong in structure, field names, and variable
 syntax while looking plausible. Every block you write must be copied from a
-known-good example (see Canonical Examples) or verified against the Omnistrate
-docs (https://docs.omnistrate.com) and the JSON schema
-(`https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json`).
-The MCP docs-search tools (`mcp__ctl__docs_*`) are an optional alternative only
-when the user has asked to work through MCP.
+known-good example (see Canonical Examples) or verified with `omctl docs` (below).
+
+### Verifying spec fields against the platform
+
+An operator integration is a ServicePlanSpec, so `plan-spec` and the
+`service-plan` schema are your references — **not** `compose-spec`. These
+subcommands need no `omnistrate-ctl login`, though they do make network calls.
+
+| Need | Command |
+|---|---|
+| Every ServicePlanSpec section | `omctl docs plan-spec` |
+| The operator CRD section | `omctl docs plan-spec "operator crd"` |
+| Helm chart config for the operator deployment | `omctl docs plan-spec "helm chart configuration"` |
+| The authoritative ServicePlanSpec schema | `omctl docs json-schema service-plan` |
+| `$sys.*` system parameters | `omctl docs system-parameters` |
+| Full-text search across all guides | `omctl docs search "systemWorkflows" --limit 15` |
+| **Check the finished spec** | `omctl docs validate --file spec.yaml` |
+
+`systemWorkflows`, `customWorkflows`, `successCondition` and `outputParameters`
+have no `plan-spec` heading of their own — they are defined in the
+`service-plan` schema. Pull it and read the definitions directly. **Start with the
+`$ref` + key list**: `$defs` names are not spec key names (the root is
+`CustomServicePlanSpec`, `services[]` is `ResourceConfiguration`), so without this
+first step you will not know which definition to open.
+
+```bash
+# 1. discover the root definition and the full $defs index — always do this first
+omctl docs json-schema service-plan -o json | jq -r '.["$ref"], (.["$defs"]|keys[])'
+
+# 2. the workflow container: this is where you learn the Argo body nests under
+#    `workflow:` and that `outputParameters` is a sibling MAP, not a list
+omctl docs json-schema service-plan -o json | jq '.["$defs"].CreateWorkflowConfiguration, .["$defs"].CustomWorkflowConfiguration'
+
+# 3. the verb keys (additionalProperties:false, so this list is exhaustive)
+omctl docs json-schema service-plan -o json | jq '.["$defs"].SystemWorkflowsConfiguration'
+
+# 4. the DAG itself
+omctl docs json-schema service-plan -o json | jq '.["$defs"].WorkflowSpec, .["$defs"].Template, .["$defs"].DAGTemplate, .["$defs"].DAGTask, .["$defs"].Arguments'
+
+# 5. the CR config and the apply task
+omctl docs json-schema service-plan -o json | jq '.["$defs"].OperatorCRDConfiguration, .["$defs"].ResourceTemplate'
+
+# 6. which parent uses a definition? (disambiguates look-alike defs such as
+#    WorkflowOutputParameterSpec vs systemWorkflows.outputParameters)
+omctl docs json-schema service-plan -o json | jq -r --arg d WorkflowOutputParameterSpec \
+  '[paths(scalars) as $p | select(getpath($p)=="#/$defs/"+$d) | ($p|map(tostring)|join("."))][]'
+```
+
+**The Argo body goes under `create.workflow:`, not directly under `create:`.**
+`CreateWorkflowConfiguration` allows only `{outputParameters, workflow, workflowFile}`.
+Reading `WorkflowSpec` alone will mislead you into putting `entrypoint`/`templates`
+one level too high — this is the single most common structural mistake here.
+
+**`docs system-parameters` does NOT cover workflow-context variables.** Its root
+has only `backup`, `compute`, `deployment`, `deploymentCell`, `id`, `network`,
+`storage`, `tenant`, `deterministicSeedValue`. `$sys.namespace`, `$sys.instanceId`,
+`$sys.restore.*`, `$sys.sourceInstanceId` and `$sys.targetInstanceId` are **real but
+absent from it** — they are used throughout the platform's own operator examples.
+Never remove one because `system-parameters` omits it. For those, use
+`omctl docs search "Backup and Restore Workflow Context" --limit 15`.
+
+**Start every operator session with `omctl docs search "Kubernetes Operators" --limit 10`** —
+it returns the whole operator build guide: the lifecycle-verb table, a complete
+create-workflow example, the minimal plan shape, and the backup/restore context.
+Nothing else in the toolset gives you a copyable end-to-end workflow.
+
+Also note: no `enum` is emitted anywhere in the schema, so api-param `type:` values
+and `cloudProvider` values must come from the prose
+(`omctl docs search "parameter types" --limit 15`), and a wrong value will pass
+schema validation silently.
+
+A tag that matches nothing prints the available-tag list and warns on stderr —
+read that as "wrong name, pick from this list". The MCP docs-search tools
+(`mcp__ctl__docs_*`) are an optional alternative only on user request.
 
 ## When to Use
 
@@ -87,7 +156,7 @@ verify cloud accounts (`omnistrate-ctl account list` / `omnistrate-ctl account d
 
 **Phase 1 — Minimal spec.** Header (`name`, `tenancyType: CUSTOM_TENANCY`,
 `deployment.hostedDeployment` with real account values — field casing matters:
-`AWSBootstrapRoleAccountArn`; a BYOC offering is a **separate plan/spec** with
+`awsBootstrapRoleAccountArn`; a BYOC offering is a **separate plan/spec** with
 a `byoaDeployment` block instead — one plan per deployment model, never
 `hostedDeployment` and `byoaDeployment` together in one plan. The
 `byoaDeployment` values are the AWS account designated as the **"Control
@@ -196,7 +265,8 @@ then deploy instances with `--customer-account-id`).
 | "Outputs are templated strings on the resource" | Outputs are workflow `outputParameters` from `$tasks.*.resource.status.*`, gated on successCondition. |
 | "The operator's pods will schedule fine by default" | Omnistrate places only containers it creates. Pin operator-created pods to the managed node group via CR affinity (reference §8). |
 | "I'll install the operator via helmChartDependencies" | Deprecated. Cluster-scoped → cell amenity; namespace-scoped → hybrid (amenity CRDs + sibling service). |
-| "This ctl flag probably exists" | Verify with `--help` or docs search before using it. |
+| "This ctl flag probably exists" | Verify with `--help` before using it; verify spec fields with `omctl docs json-schema service-plan`. |
+| "I know the plan-spec section name for systemWorkflows" | There isn't one. Read `$defs.SystemWorkflowsConfiguration` out of `omctl docs json-schema service-plan`. |
 
 ## Canonical Examples & Reference
 
@@ -213,9 +283,12 @@ Public sources to verify against:
   delete/backup/restore/deleteBackup/failover + customWorkflows). NOTE: it
   still installs CNPG via the deprecated `helmChartDependencies`; copy its
   workflow anatomy, not its install method.
-- Service-spec JSON schema (URL above) and the Omnistrate docs
-  (https://docs.omnistrate.com/). The MCP docs-search tools (`mcp__ctl__docs_*`)
-  are an optional alternative only when the user has asked to work through MCP.
+- The live ServicePlanSpec schema and reference, straight from the platform:
+  `omctl docs json-schema service-plan`, `omctl docs plan-spec "<section>"`,
+  `omctl docs search "<query>"` (see "Verifying spec fields" above). Prefer these
+  over the docs site — no login needed, and they are never stale.
+  The MCP docs-search tools (`mcp__ctl__docs_*`) are an optional alternative only
+  when the user has asked to work through MCP.
 
 ## Success Criteria
 

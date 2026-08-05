@@ -206,6 +206,30 @@ Once installed (see [Installing the Skills](#installing-the-skills)), Claude Cod
 3. Follow the progressive workflow (status → events → instance debug → live cluster access)
 4. Skill branches by resource type (Compose / Helm / Terraform / Operator / Kustomize) and deployment model (hosted / BYOC / BYOC-K8s / air-gapped)
 
+## Looking up the spec and JSON schema
+
+Every skill verifies spec fields against the platform rather than from memory, using
+`omnistrate-ctl docs`. **These subcommands need no `omnistrate-ctl login`** (they do make network calls), so an agent can check itself even before the CLI is authenticated:
+
+```bash
+omnistrate-ctl docs compose-spec                            # list every compose tag / x-omnistrate-* extension
+omnistrate-ctl docs compose-spec "x-omnistrate-compute"     # read one tag's reference and examples
+omnistrate-ctl docs plan-spec                               # list every ServicePlanSpec section
+omnistrate-ctl docs plan-spec "helm chart configuration"    # read one section
+omnistrate-ctl docs json-schema                             # list the schema types available
+omnistrate-ctl docs json-schema x-omnistrate-compute        # one extension's authoritative schema
+omnistrate-ctl docs json-schema service-plan                # the whole ServicePlanSpec schema
+omnistrate-ctl docs system-parameters                       # the $sys.* catalog
+omnistrate-ctl docs search "byoc privatelink" --limit 15     # full-text across every guide
+omnistrate-ctl docs validate --file spec.yaml               # check a finished spec against the schema
+```
+
+Add `-o json` to any of them for machine-readable output. Scope schema requests to
+the extension you are writing (`json-schema x-omnistrate-compute` is ~6 KB against
+~92 KB for the full compose schema). A tag that matches nothing prints the
+available-tag list rather than erroring, so an agent that guesses wrong gets the
+valid names back instead of a dead end.
+
 ## Optional: MCP server
 
 The skills default to the `omnistrate-ctl` CLI and need nothing beyond it. If you
@@ -219,7 +243,7 @@ Per-agent MCP configuration for read-only access lives in the
 tools that map to the same operations the CLI performs:
 
 - `mcp__ctl__account_*` - Cloud account management (CLI: `omnistrate-ctl account ...`)
-- `mcp__ctl__docs_*` - Documentation search (CLI default: the [docs site](https://docs.omnistrate.com))
+- `mcp__ctl__docs_*` - Documentation and schema lookup (CLI: `omnistrate-ctl docs ...` — see below)
 - `mcp__ctl__build_compose` - Service builds (CLI: `omnistrate-ctl build ...`)
 - `mcp__ctl__service_plan_*` - Plan management (CLI: `omnistrate-ctl service-plan ...`)
 - `mcp__ctl__instance_*` - Instance operations (CLI: `omnistrate-ctl instance ...`)
@@ -237,6 +261,6 @@ To add new skills:
 
 ## Support
 
-- **Omnistrate Documentation**: https://docs.omnistrate.com
+- **Omnistrate Documentation**: https://docs.omnistrate.com (or `omnistrate-ctl docs search "<query>"`)
 - **Skill Best Practices**: https://docs.claude.com/en/docs/agents-and-tools/agent-skills/best-practices
 - **Issues**: Report issues in this repository

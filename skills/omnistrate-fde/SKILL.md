@@ -28,11 +28,45 @@ per-topic reference files in this directory.
 **Core principle: never write Omnistrate spec YAML, field names, or CLI flags
 from memory.** Untrained-knowledge Omnistrate specs are reliably wrong while
 looking plausible. Every fragment must be copied from a reference file in this
-directory or verified against the Omnistrate docs
-(https://docs.omnistrate.com) and the JSON schema
-(`https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json`).
-The MCP docs-search tools (`mcp__ctl__docs_*`) are an optional alternative only
-when the user has asked to work through MCP.
+directory or verified with `omctl docs` (below).
+
+### Verifying spec fields against the platform
+
+`omctl docs` serves the spec reference and the authoritative JSON schema straight
+from the platform. **These subcommands need no `omnistrate-ctl login`** (they do make network calls) — use them instead of browsing the docs site or fetching schema URLs.
+
+| Need | Command |
+|---|---|
+| Every compose tag / `x-omnistrate-*` extension | `omctl docs compose-spec` |
+| One compose tag's reference, with examples | `omctl docs compose-spec "x-omnistrate-compute"` |
+| Every ServicePlanSpec section | `omctl docs plan-spec` |
+| One ServicePlanSpec section | `omctl docs plan-spec "helm chart configuration"` |
+| Which JSON schemas can be requested | `omctl docs json-schema` |
+| One extension's JSON schema | `omctl docs json-schema x-omnistrate-compute` |
+| The whole compose / plan schema | `omctl docs json-schema compose` · `omctl docs json-schema service-plan` |
+| `$sys.*` system parameters | `omctl docs system-parameters` |
+| Full-text search across all guides | `omctl docs search "byoc privatelink" --limit 15` |
+| **Check a finished spec against the schema** | `omctl docs validate --file spec.yaml` |
+
+- Add `-o json` for machine-readable output.
+- **Scope the schema.** `json-schema x-omnistrate-compute` is ~6 KB; `json-schema
+  compose` is ~92 KB. Pull the one extension you are writing, not the world.
+- A tag that matches nothing prints the available-tag list instead of erroring.
+  Read that as "the name is wrong — pick from this list", then re-run.
+- Compose extensions live under `compose-spec`; Helm / Terraform / Kustomize /
+  operator plan fields live under `plan-spec` and the `service-plan` schema.
+- The MCP docs-search tools (`mcp__ctl__docs_*`) are an optional alternative only
+  when the user has asked to work through MCP.
+
+**Caveats — each one was observed breaking a real agent run. Do not skip.**
+
+- **`docs system-parameters` does not list workflow-context variables.** Its root has only `backup`, `compute`, `deployment`, `deploymentCell`, `id`, `network`, `storage`, `tenant`, `deterministicSeedValue`. `$sys.namespace`, `$sys.instanceId`, `$sys.restore.*`, `$sys.sourceInstanceId` and `$sys.targetInstanceId` are **absent from it but real** — they appear throughout the platform's own workflow examples. Never delete a `$sys.*` path merely because `system-parameters` omits it; confirm with `omctl docs search "workflow context system parameters" --limit 15`.
+- **Casing: follow the doc examples.** The platform decodes specs through `encoding/json`, which matches field names case-insensitively, so `awsAccountId` and `AwsAccountId` both build. The generated schema now uses the documented lowerCamel spelling for the blocks that had drifted (`ActionHook`, `Deployment`/`OnPremDeployment`, `configurationOverrides.acceleratorConfiguration`). A few fields are documented UpperCamel and stay that way — `OsFamily`, `GpuClusterID`, and `CustomDNSConfig`'s `TargetKubernetesService`/`TargetName`/`TargetPort`. When in doubt copy the doc example; use the schema to decide whether a field exists at all.
+- **Enum coverage is partial.** `tenancyType`, `cloudProvider`, api-param `type`, and action-hook `type`/`scope` now carry `enum` in the schema, so `omctl docs validate` catches a wrong value there. Everything else — storage types (`instanceStorageType`), `cpuArchitecture`, `networkingType` — is still a bare `{"type": "string"}`, so a wrong value passes silently. For those, get legal values from the prose (`omctl docs compose-spec "<tag>"` / `omctl docs plan-spec "<section>"`).
+- **Check the finished spec, do not just look fields up.** `omctl docs validate --file spec.yaml` validates a compose spec or ServicePlanSpec against the authoritative schema and reports every violation with its path. Run it before every build — it catches unknown, misplaced and mistyped fields without touching your account, and exits non-zero so it works in a pre-commit hook or CI step. `additionalProperties` errors mask nested ones, so re-run after each fix until it comes back clean.
+- **Prose sections are subsets of the schema.** A field missing from a `plan-spec` / `compose-spec` table is not proof it does not exist — cross-check the schema before concluding a field is invalid.
+- **The compose schema accepts any `x-*` key** (`patternProperties: {"^x-": {}}`), so schema validation cannot catch a misspelled extension name. Only the `omctl docs compose-spec` tag list can.
+- **`docs search` wants prose phrases, not identifiers.** `docs search "api parameter types"` works; `docs search "instanceTypes cloudProvider apiParam required"` returns unrelated pages. Use `--limit 15` — the syntax-bearing sections often rank 8–12, below the prose overview pages.
 
 ## Phase 0 — Intake (ALWAYS start here for new onboarding)
 
@@ -288,11 +322,11 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
 ## Critical Rules
 
 1. **Never write spec YAML, field names, or CLI flags from memory.** Copy from
-   the reference files' verified fragments or verify against the Omnistrate docs
-   (https://docs.omnistrate.com) / the JSON schema
-   (`https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json`).
-   Check the docs before every extension or field you add. (The MCP docs-search
-   tools `mcp__ctl__docs_*` are an optional alternative only on user request.)
+   the reference files' verified fragments, or verify with `omctl docs
+   compose-spec "<tag>"` / `omctl docs plan-spec "<section>"` for the reference
+   and `omctl docs json-schema <type>` for the authoritative schema. Run one of
+   these before every extension or field you add. (The MCP docs-search tools
+   `mcp__ctl__docs_*` are an optional alternative only on user request.)
 2. **Zero-parameterization first** (compose / helm / terraform / kustomize).
    Hardcode everything, get to RUNNING for connected models or produce the
    installer artifact for air-gapped, then parameterize. *Operator-CR exception:*
@@ -306,9 +340,12 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
 6. **The deployment model comes from intake Q2 — never silently default.** The
    old "ALWAYS use `hostedDeployment`" rule is gone. Ask Q2, then build the
    `deployment:` block from `DEPLOYMENT_MODELS_REFERENCE.md`.
-7. **Field casing depends on context.** Compose uses lowerCamel
-   (`awsBootstrapRoleAccountArn`); ServicePlanSpec uses UpperCamel
-   (`AWSBootstrapRoleAccountArn`). Copy from the reference for the right context.
+7. **Field casing is lowerCamel in both compose and ServicePlanSpec.** The platform
+   matches field names case-insensitively, so older specs using `AwsAccountId` still
+   build, but write lowerCamel (`awsAccountId`, `awsBootstrapRoleAccountArn`) so the
+   schema pin and `docs validate` both pass. The exceptions are documented UpperCamel:
+   `OsFamily`, `GpuClusterID`, and `CustomDNSConfig`'s `TargetKubernetesService` /
+   `TargetName` / `TargetPort`.
 
 ## Red Flags — STOP
 
@@ -317,7 +354,8 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
 | "Helm / Terraform / Kustomize isn't supported by this skill." | It is. Use `HELM_ONBOARDING_REFERENCE.md` / `TERRAFORM_KUSTOMIZE_REFERENCE.md`. |
 | "This is an operator, I'll write the workflows here." | Hand off to **omnistrate-operator** — it owns `systemWorkflows`. |
 | "I'll default to `hostedDeployment`." | Ask intake Q2 first. The model is a decision, not a default. |
-| "I remember the field name / that ctl flag exists." | Grep the reference files; verify flags with `--help` or docs search. |
+| "I remember the field name / that ctl flag exists." | Grep the reference files; confirm fields with `omctl docs compose-spec "<tag>"` or `omctl docs json-schema <type>`, and flags with `--help`. |
+| "The build rejected an extension I'm sure exists." | Run `omctl docs compose-spec` and match the exact spelling — the platform's error text points there for a reason. |
 | "Air-gapped needs an always-on agent phoning home." | No. Air-gapped is a self-contained *installer* artifact — no live control-plane link (`onPremDeployment`). |
 | "For air-gapped, I'll ask about stop/start or restore lifecycle." | Don't. Ask which supported action hooks are needed: `VALIDATE`, `PRE_INSTALL`, `POST_INSTALL`, and `BACKUP`. Keep image packaging and registry flow separate. |
 | "For air-gapped, I'll ask whether the upstream charts/images are public or private." | Ask which install-time endpoints are used: public Helm/image endpoints, customer private registries/repos, or both. `INSTALLER_EMBED` is image packaging, not an install source. |

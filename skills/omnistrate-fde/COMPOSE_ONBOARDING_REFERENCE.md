@@ -4,6 +4,26 @@ Complete reference for transforming Docker Compose applications to Omnistrate se
 
 All commands use the `omnistrate-ctl` CLI (alias `omctl`) — install and authenticate with `omnistrate-ctl login` first. An Omnistrate MCP server exposes equivalent tools (`mcp__ctl__*`); use those only if the user explicitly asks to work through MCP.
 
+**When this file conflicts with the live spec, trust the live spec** — read it with `omctl docs`, which needs no `omnistrate-ctl login` (network access is still required):
+
+- `omctl docs compose-spec` — list every tag and `x-omnistrate-*` extension
+- `omctl docs compose-spec "<tag>"` — one tag's reference and examples; nested tags work too (`"x-omnistrate-capabilities.autoscaling"`)
+- `omctl docs json-schema <extension>` — the authoritative schema for one extension (`omctl docs json-schema` lists them)
+- `omctl docs system-parameters` — the `$sys.*` variables
+- `omctl docs search "<query>" --limit 15` — full-text across the guides
+- `omctl docs validate --file <spec>.yaml` — validate the finished spec against the schema; run this before every build
+
+Add `-o json` for machine-readable output. A tag that matches nothing prints the available-tag list and warns on stderr — pick from that list rather than guessing again.
+
+**"Top-level or service-level?" — answer it mechanically.** Wrong nesting level is the most common compose mistake and prose examples are easy to misread. The full compose schema settles it in two commands:
+
+```bash
+omctl docs json-schema compose -o json > /tmp/compose-schema.json
+jq '.properties | keys' /tmp/compose-schema.json                       # valid TOP-LEVEL keys
+jq '.definitions.service.properties | keys' /tmp/compose-schema.json   # valid SERVICE-LEVEL keys
+```
+Note that this cannot catch a *misspelled* extension: both levels carry `patternProperties: {"^x-": {}}`, so any `x-*` key validates. Only the `omctl docs compose-spec` tag list catches a wrong name.
+
 **Note**: This reference covers Docker Compose-based onboarding only. Other onboarding methods have their own reference files: [HELM_ONBOARDING_REFERENCE.md](HELM_ONBOARDING_REFERENCE.md), [TERRAFORM_KUSTOMIZE_REFERENCE.md](TERRAFORM_KUSTOMIZE_REFERENCE.md), and (Kubernetes Operators) the `omnistrate-operator` skill (separate install). Deployment models (hosted/BYOC/BYOC-K8s/air-gapped) for every method are in [DEPLOYMENT_MODELS_REFERENCE.md](DEPLOYMENT_MODELS_REFERENCE.md).
 
 ## Table of Contents
@@ -41,13 +61,23 @@ Extract from account describe:
 
 ### System Parameters
 
-Verify the current system-parameter schema against the Omnistrate docs
-(https://docs.omnistrate.com) and the service-spec JSON schema
-(`https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json`).
+Get the current system-parameter schema straight from the platform:
+
+```bash
+omctl docs system-parameters -o json
+```
+
+Always verify `$sys.*` variable paths this way before use — never from memory.
+
+> **`docs system-parameters` does not cover workflow-context variables.** Its root
+> exposes only `backup`, `compute`, `deployment`, `deploymentCell`, `id`, `network`,
+> `storage`, `tenant`, `deterministicSeedValue`. `$sys.namespace`, `$sys.instanceId`,
+> `$sys.restore.*`, `$sys.sourceInstanceId` and `$sys.targetInstanceId` are **real but
+> absent from it**. Never drop a `$sys.*` path just because this command omits it —
+> confirm with `omctl docs search "workflow context system parameters" --limit 15`.
+
 (The MCP docs-search tool `mcp__ctl__docs_system_parameters` is an optional
 alternative only when the user has asked to work through MCP.)
-
-Always verify `$sys.*` variable paths against the current schema before use.
 
 ## Deployment Model
 
@@ -290,7 +320,7 @@ Wait for confirmation that secrets have been created before building.
 
 ### `x-omnistrate-image-registry-attributes` Block
 
-Verify against the Omnistrate docs first (https://docs.omnistrate.com — search for `x-omnistrate-image-registry-attributes`; MCP docs-search `mcp__ctl__docs_compose_spec_search` is an optional alternative only on user request).
+Verify first with `omctl docs compose-spec "x-omnistrate-image-registry-attributes"` and `omctl docs json-schema x-omnistrate-image-registry-attributes`. (Note the docs heading is singular, `x-omnistrate-image-registry-attribute`; the plural above is the spelling the spec and the schema use, and the CLI resolves either.) MCP docs-search `mcp__ctl__docs_compose_spec_search` is an optional alternative only on user request.
 
 Add at the **top level** of the compose file (same level as `version:` and `services:`):
 
@@ -338,8 +368,9 @@ services:
       - key: maxConnections
         type: Float64
         defaultValue: "100"
-        min: 10
-        max: 1000
+        limits:
+          min: 10
+          max: 1000
         parameterDependencyMap:
           database: maxConnections
 
@@ -369,8 +400,9 @@ services:
       - key: numReplicas
         type: Float64
         defaultValue: "3"
-        min: 1
-        max: 10
+        limits:
+          min: 1
+          max: 10
         parameterDependencyMap:
           backend: numReplicas
 
@@ -410,8 +442,9 @@ x-omnistrate-api-params:
   - key: cacheSize
     type: Float64
     defaultValue: "100"
-    min: 10
-    max: 1000
+    limits:
+      min: 10
+      max: 1000
     description: "Cache size in MB"
 ```
 
@@ -428,7 +461,7 @@ environment:
 ```
 
 #### 2. System Variables: `$sys.*`
-**Always verify paths** against the Omnistrate docs (https://docs.omnistrate.com) and the JSON schema (MCP docs-search `mcp__ctl__docs_system_parameters` is an optional alternative only on user request)
+**Always verify paths** with `omctl docs system-parameters -o json` before using them (MCP docs-search `mcp__ctl__docs_system_parameters` is an optional alternative only on user request)
 
 Common patterns:
 ```yaml
@@ -541,8 +574,9 @@ x-omnistrate-api-params:
   - key: storageSize
     type: Float64
     defaultValue: "100"
-    min: 50
-    max: 1000
+    limits:
+      min: 50
+      max: 1000
 
 # Volume configuration
 volumes:
@@ -640,23 +674,26 @@ x-omnistrate-load-balancer:
           backendPort: 5432
 ```
 
-### HTTP Load Balancer (Web Services, APIs)
+### HTTPS Load Balancer (L7 — Web Services, APIs)
+
+The L7 key is **`https`**, not `http`, and it routes by **`paths`**, not `ports`.
+Each path takes a **singular** `associatedResourceKey`. There is no `healthCheck`
+field on a load balancer — use an `x-omnistrate-actionhooks` `HEALTH_CHECK` hook.
+Verify with `omctl docs json-schema x-omnistrate-load-balancer`.
+
 ```yaml
 x-omnistrate-load-balancer:
-  http:
+  https:
     - name: "API Load Balancer"
       description: "Load balancer for API service"
-      ports:
-        - associatedResourceKeys:
-            - api
-          ingressPort: 443
+      paths:
+        - associatedResourceKey: api
+          path: /
           backendPort: 8080
-      healthCheck:
-        path: /health
-        port: 8080
-        intervalSeconds: 30
-        timeoutSeconds: 5
 ```
+
+L7 also accepts `enableCustomDNS` alongside `name`/`description`/`paths`, and each
+path entry additionally accepts `targetKubernetesServiceName`.
 
 ### Multiple Load Balancers
 ```yaml
@@ -667,16 +704,18 @@ x-omnistrate-load-balancer:
         - associatedResourceKeys: [redis]
           ingressPort: 6379
           backendPort: 6379
-  http:
+  https:
     - name: "Web LB"
-      ports:
-        - associatedResourceKeys: [web]
-          ingressPort: 80
+      paths:
+        - associatedResourceKey: web
+          path: /
           backendPort: 8080
-      healthCheck:
-        path: /
-        port: 8080
 ```
+
+> `x-omnistrate-load-balancer` is a **top-level** key (sibling of `services:`), never
+> service-level. The schema's `^x-` passthrough means a service-level copy validates
+> silently and is then ignored — confirm placement with
+> `omctl docs json-schema compose -o json | jq '.properties | keys'`.
 
 ## ActionHooks
 
@@ -689,8 +728,6 @@ x-omnistrate-actionhooks:
       #!/bin/bash
       curl -f http://localhost:8080/health || exit 1
       exit 0
-    timeout: 30
-    retries: 3
 ```
 
 ### Post-Start Hook
@@ -703,7 +740,6 @@ x-omnistrate-actionhooks:
       /app/init-db.sh
       /app/load-initial-data.sh
       exit 0
-    timeout: 300
 ```
 
 ### Pre-Stop Hook (Graceful Shutdown)
@@ -716,7 +752,6 @@ x-omnistrate-actionhooks:
       /app/drain-connections.sh
       /app/graceful-shutdown.sh
       exit 0
-    timeout: 120
 ```
 
 ### REMOVE Hook (Clustered Services)
@@ -736,7 +771,6 @@ x-omnistrate-actionhooks:
           sleep 10
       fi
       exit 0
-    timeout: 120
 ```
 
 **Key difference**:
@@ -898,12 +932,17 @@ Fix: Add depends_on: [database] to service
 ## Troubleshooting
 
 ### Validation Errors
-Validate fields against the service-spec JSON schema
-(`https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json`)
-and the Omnistrate docs (https://docs.omnistrate.com — search for the extension,
-e.g. `x-omnistrate-compute`). The MCP docs-search tool
-`mcp__ctl__docs_compose_spec_search` is an optional alternative only on user
-request.
+The error names the extension or field it rejected — resolve it against the live
+schema rather than guessing at the spelling:
+
+```bash
+omctl docs compose-spec                              # exact spelling of every valid tag
+omctl docs compose-spec "x-omnistrate-compute"       # that tag's reference and examples
+omctl docs json-schema x-omnistrate-compute          # required fields, types, enum values
+```
+
+The MCP docs-search tool `mcp__ctl__docs_compose_spec_search` is an optional
+alternative only on user request.
 
 ### Parameter Not Found
 ```
@@ -924,9 +963,13 @@ Fix: Verify storage type valid for cloud/instance type
 ```
 
 ### Build Failures
-Search the Omnistrate docs (https://docs.omnistrate.com) for the extension
-causing the error. (The MCP docs-search tool `mcp__ctl__docs_compose_spec_search`
-is an optional alternative only on user request.)
+Look up the extension named in the error: `omctl docs compose-spec "<extension>"`
+for the reference, `omctl docs json-schema <extension>` for the schema, and
+`omctl docs search "<message>" --limit 15` when the error is not field-level. The
+platform's own "invalid extension type" error points at `omctl docs compose-spec`
+for exactly this reason. (The MCP docs-search tool
+`mcp__ctl__docs_compose_spec_search` is an optional alternative only on user
+request.)
 
 ## Integration Configuration
 

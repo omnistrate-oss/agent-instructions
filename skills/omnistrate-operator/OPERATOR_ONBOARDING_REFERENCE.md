@@ -1,11 +1,28 @@
 # Operator Onboarding Reference (ServicePlanSpec)
 
 Verified against working production specs (CNPG/postgres, KubeAI/vLLM) and
-Omnistrate's operator spec template. When something here conflicts with the
-live schema or docs search, trust the schema/docs and update this file.
+Omnistrate's operator spec template. **When something here conflicts with the
+live schema or the docs, trust the schema/docs and update this file** — read them
+with `omctl docs`, which needs no `omnistrate-ctl login` (network access is still required):
+
+- `omctl docs json-schema service-plan` — the authoritative schema. The workflow
+  machinery has no docs heading of its own, so read it from the schema:
+  ```bash
+  omctl docs json-schema service-plan -o json | jq '.["$defs"].SystemWorkflowsConfiguration'
+  omctl docs json-schema service-plan -o json | jq '.["$defs"].WorkflowSpec, .["$defs"].DAGTask, .["$defs"].Template'
+  omctl docs json-schema service-plan -o json | jq '.["$defs"].OperatorCRDConfiguration'
+  ```
+- `omctl docs plan-spec "operator crd"` — the prose reference for `operatorCRDConfiguration`
+- `omctl docs plan-spec` — every other ServicePlanSpec section
+- `omctl docs system-parameters` — the `$sys.*` variables used in CR templates
+- `omctl docs search "<query>" --limit 15` — full-text across the guides
+- `omctl docs validate --file <spec>.yaml` — validate the finished spec against the schema; run this before every build
+
+Add `-o json` for machine-readable output.
 
 Schema: `https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json`
-(pin it in the spec header comment for editor validation):
+— byte-identical to `omctl docs json-schema service-plan`; pin it in the spec
+header comment for editor validation:
 
 ```yaml
 # yaml-language-server: $schema=https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json
@@ -18,14 +35,14 @@ name: <Service Plan Name>
 tenancyType: CUSTOM_TENANCY
 deployment:
   hostedDeployment:                 # your provider account (standard SaaS)
-    AwsAccountId: "<12-digit>"
-    AWSBootstrapRoleAccountArn: "arn:aws:iam::<acct>:role/omnistrate-bootstrap-role"
-    GcpProjectId: "<project-id>"
-    GcpProjectNumber: "<number>"
-    GcpServiceAccountEmail: "bootstrap-...@<project>.iam.gserviceaccount.com"
-    AzureSubscriptionId: "<uuid>"
-    AzureTenantId: "<uuid>"
-    NebiusTenantId: "tenant-..."
+    awsAccountId: "<12-digit>"
+    awsBootstrapRoleAccountArn: "arn:aws:iam::<acct>:role/omnistrate-bootstrap-role"
+    gcpProjectId: "<project-id>"
+    gcpProjectNumber: "<number>"
+    gcpServiceAccountEmail: "bootstrap-...@<project>.iam.gserviceaccount.com"
+    azureSubscriptionId: "<uuid>"
+    azureTenantId: "<uuid>"
+    nebiusTenantId: "tenant-..."
   # NOTE: BYOC is a SEPARATE plan/spec — one plan per deployment model. Do not
   # add byoaDeployment here alongside hostedDeployment. In the BYOC plan's own
   # spec, byoaDeployment always carries the AWS "Control Plane" account config,
@@ -61,8 +78,9 @@ services:
     ...
 ```
 
-Field casing in `hostedDeployment` is exactly as above (`AWSBootstrapRoleAccountArn`,
-not `AwsBootstrapRoleAccountArn`).
+Field names in `hostedDeployment` are lowerCamel, exactly as above. The platform
+matches them case-insensitively, so an older spec using `AwsAccountId` still builds;
+new specs should use the lowerCamel form so the schema pin validates cleanly.
 
 **Dev/prod twins:** maintain `spec-dev.yaml` and `spec-prod.yaml` that are
 identical EXCEPT the `deployment` account block and the metering bucket. Put a
@@ -549,10 +567,22 @@ manifest: |
 | `$func.base64encode(x)` | e.g. secret `data:` values |
 
 Concatenation needs `{{ }}`: `host: "reader-{{ $sys.network.externalClusterEndpoint }}"`.
-Do not invent variables (`$sys.id` etc.); verify unknowns against the Omnistrate
-docs (https://docs.omnistrate.com) and the service-spec JSON schema. (The MCP
-docs-search tool `mcp__ctl__docs_system_parameters` is an optional alternative
-only when the user has asked to work through MCP.)
+Do not invent variables (`$sys.id` etc.). The authoritative list is one command
+away — run it whenever you need a path that is not in the table above:
+
+```bash
+omctl docs system-parameters -o json          # full $sys.* schema
+```
+
+> **`docs system-parameters` does not cover workflow-context variables.** Its root
+> exposes only `backup`, `compute`, `deployment`, `deploymentCell`, `id`, `network`,
+> `storage`, `tenant`, `deterministicSeedValue`. `$sys.namespace`, `$sys.instanceId`,
+> `$sys.restore.*`, `$sys.sourceInstanceId` and `$sys.targetInstanceId` are **real but
+> absent from it**. Never drop a `$sys.*` path just because this command omits it —
+> confirm with `omctl docs search "workflow context system parameters" --limit 15`.
+
+(The MCP docs-search tool `mcp__ctl__docs_system_parameters` is an optional
+alternative only when the user has asked to work through MCP.)
 
 ## 7. Networking
 

@@ -7,6 +7,23 @@ description: Systematically debug failed or stuck Omnistrate instance deployment
 
 All commands use the `omnistrate-ctl` CLI (alias `omctl`) — install and authenticate with `omnistrate-ctl login` first. An Omnistrate MCP server exposes equivalent tools (`mcp__omnistrate-platform__omnistrate-ctl_*` / `mcp__ctl__*`); use those only if the user explicitly asks to work through MCP.
 
+**When the failure is a spec problem, not a runtime problem.** Build- and
+render-time errors that name an extension, a field, or a `$sys.*` variable are
+spec bugs, and `omctl docs` resolves them directly (no login needed) instead of
+guessing at the correct spelling:
+
+| Symptom | Command |
+|---|---|
+| Error names an unknown/invalid `x-omnistrate-*` extension | `omctl docs compose-spec` to list valid tags, then `omctl docs compose-spec "<tag>"` |
+| A compose field is rejected or silently ignored | `omctl docs json-schema <extension>` — the schema is the arbiter |
+| A ServicePlanSpec field is rejected (Helm/Terraform/operator/Kustomize) | `omctl docs json-schema service-plan`, `omctl docs plan-spec "<section>"` |
+| A `$sys.*` variable renders empty or literal | `omctl docs system-parameters` — confirm the exact path exists |
+| Unclear whether a behavior is even supported | `omctl docs search "<topic>" --limit 15` |
+| **Any of the above — check the whole spec at once** | `omctl docs validate --file spec.yaml` |
+
+Add `-o json` for machine-readable output. Do this **before** reaching for the
+cluster: a rejected field never produced a pod to inspect.
+
 ## When to Use This Skill
 - Instance deployments showing FAILED or DEPLOYING (stuck) status
 - Resources with unhealthy pod statuses or deployment errors

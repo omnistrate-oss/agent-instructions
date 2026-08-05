@@ -1,9 +1,21 @@
 # Helm Chart Onboarding Reference
 
-Based on the Omnistrate documentation (https://docs.omnistrate.com; the MCP
-docs-search tools `mcp__ctl__docs_*` are an optional alternative when the user
-has asked to work through MCP). When this file conflicts with the live schema or
-the docs, trust the schema/docs.
+Based on the Omnistrate documentation. **When this file conflicts with the live
+schema or the docs, trust the schema/docs** — and read them with `omctl docs`,
+which needs no `omnistrate-ctl login` (network access is still required):
+
+- `omctl docs plan-spec` — list every ServicePlanSpec section
+- `omctl docs plan-spec "helm chart configuration"` — one section's reference
+- `omctl docs json-schema service-plan` — the authoritative schema (byte-identical
+  to the editor pin below)
+- `omctl docs system-parameters` — the `$sys.*` variables
+- `omctl docs search "<query>" --limit 15` — full-text across the guides
+- `omctl docs validate --file <spec>.yaml` — validate the finished spec against the schema; run this before every build
+
+Add `-o json` for machine-readable output. A section name that matches nothing
+prints the available-section list; pick from it rather than guessing again. (The
+MCP docs-search tools `mcp__ctl__docs_*` are an optional alternative only when the
+user has asked to work through MCP.)
 
 Schema pin (add as the first line of your spec for editor validation):
 
@@ -36,8 +48,8 @@ cloud-account prerequisites) see [DEPLOYMENT_MODELS_REFERENCE.md](DEPLOYMENT_MOD
 name: Redis Server
 deployment:
   hostedDeployment:               # see DEPLOYMENT_MODELS_REFERENCE.md for all models
-    AwsAccountId: "<AWS_ACCOUNT_ID>"
-    AwsBootstrapRoleAccountArn: "arn:aws:iam::<AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role"
+    awsAccountId: "<AWS_ACCOUNT_ID>"
+    awsBootstrapRoleAccountArn: "arn:aws:iam::<AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role"
 
 services:
   - name: Redis Cluster
@@ -382,7 +394,6 @@ semantics:
 | `labeledOptions` | object | Labeled key→value choices when the display label differs from the value |
 | `limits` | object | Numeric min/max (or string length) bounds |
 | `regex` | string | Validation pattern (string types only) |
-| `tabIndex` | integer | Display order — lower first; put the most important parameters first |
 | `scope` | object | Restrict to specific `CloudProviders` (e.g. an AWS-only knob) |
 
 Concrete choices:
@@ -395,7 +406,10 @@ Concrete choices:
   need a re-provision stays `modifiable: false`.
 - **`export: true`** only for values the customer must read back (endpoints,
   usernames) — never for passwords.
-- Order with `tabIndex` so the most important parameter appears first.
+- Parameter display order follows the order you declare them in — there is no
+  `tabIndex` field on `apiParameters`. Verify with
+  `omctl docs json-schema service-plan -o json | jq '.["$defs"].APIParameterConfiguration'`;
+  in the whole schema `tabIndex` exists only on `WorkflowParameter`.
 
 **Valid `type` values:**
 `boolean`, `string`, `password`, `float64`, `bytes`, `json`, `any`, `resource`. The

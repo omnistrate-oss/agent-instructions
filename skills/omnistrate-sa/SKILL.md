@@ -7,6 +7,19 @@ description: Guide users through designing application architectures from scratc
 
 Any Omnistrate commands referenced here or in the reference use the `omnistrate-ctl` CLI (alias `omctl`) — install and authenticate with `omnistrate-ctl login` first. An Omnistrate MCP server exposes equivalent tools (`mcp__ctl__*`); use those only if the user explicitly asks to work through MCP.
 
+**Check platform capabilities before you design around them.** Design-time claims about what Omnistrate supports (autoscaling, backups, multi-zone, tenancy modes, GPU instance types) must be confirmed, not assumed — a design built on a capability that doesn't exist costs a whole onboarding cycle to unwind. `omctl docs` answers these without a login (network access is still required):
+
+| Need | Command |
+|---|---|
+| Every compose tag / `x-omnistrate-*` extension | `omctl docs compose-spec` |
+| One extension's capabilities and examples | `omctl docs compose-spec "x-omnistrate-capabilities"` |
+| One extension's authoritative schema (enum values, required fields) | `omctl docs json-schema x-omnistrate-capabilities` |
+| ServicePlanSpec sections, when the output is Helm/Terraform/operator | `omctl docs plan-spec` |
+| `$sys.*` system parameters | `omctl docs system-parameters` |
+| Whether the platform supports something at all | `omctl docs search "<capability>" --limit 15` |
+
+Add `-o json` for machine-readable output. The JSON schema is the arbiter for what values a field accepts — read it before promising an ISV a specific tenancy mode, instance type, or autoscaling metric.
+
 ## When to Use This Skill
 
 **Use this skill when**:

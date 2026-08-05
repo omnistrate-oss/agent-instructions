@@ -4,11 +4,20 @@ How to monetize a Plan: Omnistrate-managed **end-to-end billing** (Stripe), or
 **usage metering export** (BYOB) feeding your own billing system, marketplace,
 or custom aggregation logic.
 
-Based on the Omnistrate FinOps guides (https://docs.omnistrate.com/fin-ops-guides/overview/)
-and verified against the live JSON schema
-(`https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json`).
-When this file conflicts with the live schema, docs, or CLI `--help`, trust
-those and update this file.
+Based on the Omnistrate FinOps guides and verified against the live JSON schema.
+**When this file conflicts with the live schema, docs, or CLI `--help`, trust
+those and update this file** — read them with `omctl docs` (no
+`omnistrate-ctl login` needed; network access is):
+
+- `omctl docs plan-spec "pricing"` · `omctl docs plan-spec "metering"` ·
+  `omctl docs plan-spec "billing provider"` — the three billing sections
+- `omctl docs json-schema service-plan` — the authoritative schema; the billing
+  definitions are `$defs.DimensionPricing`, `$defs.MeteringConfiguration` and
+  `$defs.BillingProvider`
+- `omctl docs search "metering export" --limit 15` — the FinOps guides
+
+Add `-o json` for machine-readable output. Billable dimensions are a closed set —
+check the schema before promising a custom one.
 
 **Billing is opt-in — no billing configured = free tier.** Never add pricing,
 billing providers, or metering during the zero-parameterization phase. This is

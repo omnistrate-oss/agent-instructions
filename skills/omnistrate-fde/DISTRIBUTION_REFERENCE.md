@@ -5,10 +5,14 @@ produced) and turn it into a distributable SaaS: release the version, make it
 reachable, configure the Customer Portal, optionally add billing, and generate a
 `DEPLOYMENT_OVERVIEW.md` artifact for the ISV.
 
-Based on the Omnistrate documentation (https://docs.omnistrate.com; the MCP
-docs-search tools `mcp__ctl__docs_*` are an optional alternative when the user
-has asked to work through MCP). When this file conflicts with the live docs or
-CLI `--help`, trust the docs/CLI.
+Based on the Omnistrate documentation. **When this file conflicts with the live
+docs or CLI `--help`, trust the docs/CLI** — read the docs with
+`omctl docs search "<query>" --limit 15` (full-text across every guide, no
+`omnistrate-ctl login` needed; network access is) and confirm any spec field with
+`omctl docs plan-spec "<section>"` or `omctl docs json-schema service-plan`.
+Add `-o json` for machine-readable output. (The MCP docs-search tools
+`mcp__ctl__docs_*` are an optional alternative only when the user has asked to
+work through MCP.)
 
 Per-model customer experiences below reuse facts from
 [DEPLOYMENT_MODELS_REFERENCE.md](DEPLOYMENT_MODELS_REFERENCE.md) (same-skill link) rather than

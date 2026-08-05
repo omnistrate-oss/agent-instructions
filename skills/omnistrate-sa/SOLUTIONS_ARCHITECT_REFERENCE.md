@@ -2,7 +2,15 @@
 
 This document provides detailed reference material for architecting SaaS solutions on Omnistrate.
 
-Verify every field and extension below against the Omnistrate docs (https://docs.omnistrate.com) and the service-spec JSON schema (`https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json`). Any command uses the `omnistrate-ctl` CLI (alias `omctl`, authenticate with `omnistrate-ctl login`); an Omnistrate MCP server exposes equivalent tools (`mcp__ctl__*`, including the `mcp__ctl__docs_*` search tools) — use those only if the user explicitly asks to work through MCP.
+**Verify every field and extension below with `omctl docs`** — it serves the spec reference and the authoritative JSON schema from the platform, needs no `omnistrate-ctl login` (network access is still required), and is never stale:
+
+- `omctl docs compose-spec` · `omctl docs compose-spec "<tag>"` — compose tags and `x-omnistrate-*` extensions
+- `omctl docs json-schema <extension>` — the schema for one extension: required fields, types, and the enum values a field actually accepts (`omctl docs json-schema` lists the types)
+- `omctl docs plan-spec` · `omctl docs plan-spec "<section>"` — ServicePlanSpec sections, when the recommended output is Helm/Terraform/operator rather than compose
+- `omctl docs system-parameters` — the `$sys.*` catalog
+- `omctl docs search "<query>" --limit 15` — full-text across every guide; use it to establish whether the platform supports a capability at all before designing around it
+
+Add `-o json` for machine-readable output. Any command uses the `omnistrate-ctl` CLI (alias `omctl`, authenticate with `omnistrate-ctl login` for everything except `docs`); an Omnistrate MCP server exposes equivalent tools (`mcp__ctl__*`, including the `mcp__ctl__docs_*` search tools) — use those only if the user explicitly asks to work through MCP.
 
 ## Table of Contents
 1. [Compose Spec Extensions Reference](#compose-spec-extensions-reference)
@@ -60,7 +68,7 @@ services:
 #### x-omnistrate-api-params
 **Purpose**: Define customer-facing configuration parameters
 **Location**: Service level (typically on root service)
-**Documentation**: Verify against the Omnistrate docs (https://docs.omnistrate.com — search for `x-omnistrate-api-params`)
+**Documentation**: `omctl docs compose-spec "x-omnistrate-api-params"` for the reference and examples; `omctl docs json-schema x-omnistrate-api-params` for required fields, types and allowed values
 
 ```yaml
 x-omnistrate-api-params:
@@ -100,7 +108,7 @@ x-omnistrate-api-params:
 #### x-omnistrate-compute
 **Purpose**: Configure compute resources (instance types, replicas)
 **Location**: Service level
-**Documentation**: Verify against the Omnistrate docs (https://docs.omnistrate.com — search for `x-omnistrate-compute`)
+**Documentation**: `omctl docs compose-spec "x-omnistrate-compute"` for the reference and examples; `omctl docs json-schema x-omnistrate-compute` for required fields, types and allowed values
 
 ```yaml
 x-omnistrate-compute:
@@ -132,7 +140,7 @@ x-omnistrate-compute:
 #### x-omnistrate-storage
 **Purpose**: Configure persistent volumes
 **Location**: Service level (on services needing storage)
-**Documentation**: Verify against the Omnistrate docs (https://docs.omnistrate.com — search for `x-omnistrate-storage`)
+**Documentation**: `omctl docs compose-spec "x-omnistrate-storage"` for the reference and examples; `omctl docs json-schema x-omnistrate-storage` for required fields, types and allowed values
 
 ```yaml
 x-omnistrate-storage:
@@ -161,7 +169,7 @@ x-omnistrate-storage:
 #### x-omnistrate-capabilities
 **Purpose**: Enable advanced features (backups, autoscaling, HA)
 **Location**: Service level (only on root services)
-**Documentation**: Verify against the Omnistrate docs (https://docs.omnistrate.com — search for `x-omnistrate-capabilities`)
+**Documentation**: `omctl docs compose-spec "x-omnistrate-capabilities"` for the reference and examples; `omctl docs json-schema x-omnistrate-capabilities` for required fields, types and allowed values
 
 ```yaml
 x-omnistrate-capabilities:
@@ -194,7 +202,7 @@ x-omnistrate-capabilities:
 #### x-omnistrate-actionhooks
 **Purpose**: Custom logic at lifecycle events
 **Location**: Service level
-**Documentation**: Verify against the Omnistrate docs (https://docs.omnistrate.com — search for `x-omnistrate-actionhooks`)
+**Documentation**: `omctl docs compose-spec "x-omnistrate-actionhooks"` for the reference and examples; `omctl docs json-schema x-omnistrate-actionhooks` for required fields, types and allowed values
 
 ```yaml
 x-omnistrate-actionhooks:
@@ -403,7 +411,17 @@ services:
 
 ## System Parameters Catalog
 
-**Always verify with**: the Omnistrate docs (https://docs.omnistrate.com) and the service-spec JSON schema
+**Always verify with**: `omctl docs system-parameters -o json` — the authoritative
+`$sys.*` schema, straight from the platform. Never use a path from this table
+without confirming it there first; invented `$sys.*` paths render empty or literal
+rather than failing loudly.
+
+> **`docs system-parameters` does not cover workflow-context variables.** Its root
+> exposes only `backup`, `compute`, `deployment`, `deploymentCell`, `id`, `network`,
+> `storage`, `tenant`, `deterministicSeedValue`. `$sys.namespace`, `$sys.instanceId`,
+> `$sys.restore.*`, `$sys.sourceInstanceId` and `$sys.targetInstanceId` are **real but
+> absent from it**. Never drop a `$sys.*` path just because this command omits it —
+> confirm with `omctl docs search "workflow context system parameters" --limit 15`.
 
 ### Network Parameters
 
@@ -1039,9 +1057,31 @@ services:
 ## Quick Reference Commands
 
 ### Documentation
-Verify compose-spec extensions and system parameters against the Omnistrate docs
-(https://docs.omnistrate.com) and the service-spec JSON schema
-(`https://api.omnistrate.cloud/2022-09-01-00/schema/service-spec-schema.json`).
+```bash
+# List every compose tag / x-omnistrate-* extension
+omnistrate-ctl docs compose-spec
+
+# Read one extension's reference and examples
+omnistrate-ctl docs compose-spec "x-omnistrate-capabilities"
+
+# Authoritative schema for one extension (required fields, types, allowed values)
+omnistrate-ctl docs json-schema x-omnistrate-capabilities
+
+# List the schema types that can be requested
+omnistrate-ctl docs json-schema
+
+# ServicePlanSpec sections and schema (Helm / Terraform / operator outputs)
+omnistrate-ctl docs plan-spec
+omnistrate-ctl docs json-schema service-plan
+
+# The $sys.* catalog
+omnistrate-ctl docs system-parameters
+
+# Full-text search across every guide
+omnistrate-ctl docs search "multi-zone high availability" --limit 5
+```
+None of these need `omnistrate-ctl login` (network access is still required). Add `-o json` for
+machine-readable output.
 
 ### Account Management
 ```bash
@@ -1091,8 +1131,9 @@ omnistrate-ctl instance evaluate <instance-id> <resource-key> --expression "$sys
 
 ## Additional Resources
 
-- **Omnistrate Documentation**: https://docs.omnistrate.com
-- **Compose Spec Reference**: https://docs.omnistrate.com (search for the extension; MCP `mcp__ctl__docs_compose_spec_search` is an optional alternative only on user request)
-- **System Parameters**: https://docs.omnistrate.com and the service-spec JSON schema (MCP `mcp__ctl__docs_system_parameters` is an optional alternative only on user request)
+- **Omnistrate Documentation**: `omctl docs search "<query>" --limit 15` (full-text) or https://docs.omnistrate.com
+- **Compose Spec Reference**: `omctl docs compose-spec` to list tags, `omctl docs compose-spec "<tag>"` to read one (MCP `mcp__ctl__docs_compose_spec_search` is an optional alternative only on user request)
+- **JSON Schemas**: `omctl docs json-schema` to list types, `omctl docs json-schema <type>` to fetch one — byte-identical to the published `service-spec-schema.json` / `compose-spec-schema.json` URLs
+- **System Parameters**: `omctl docs system-parameters` (MCP `mcp__ctl__docs_system_parameters` is an optional alternative only on user request)
 - **omnistrate-fde skill** (separate install): onboarding workflows for compose/helm/terraform/kustomize across all deployment models
 - **omnistrate-sre skill** (separate install): systematic debugging of failed instances
