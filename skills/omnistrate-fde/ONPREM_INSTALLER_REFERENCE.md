@@ -357,7 +357,24 @@ omnistrate-ctl build \
   --release-description "v1.0.0 initial release"
 ```
 
-3. Create an installer instance for the customer-facing resource.
+3. Create an installer instance for the customer-facing resource. Installer-backed
+   instances select the target with `--onprem-platform`, **not** with
+   `--cloud-provider` / `--region` — those are mutually exclusive with it:
+
+```bash
+omnistrate-ctl instance create \
+  --service "<service>" --environment <env> --plan "<plan>" \
+  --resource <customerFacingResource> \
+  --onprem-platform=Generic \
+  --param-file ./params.json
+```
+
+   `--onprem-platform` accepts the target platform, for example `EKS`, `GKE`,
+   `AKS`, `OpenShift`, or `Generic`. (Source: `omnistrate-ctl instance create
+   --help`; the flag is not yet covered in the published docs.) This is the
+   cleanest signal that you are on the air-gapped path and not BYOC-K8s, which
+   uses `--cloud-provider byoc-onprem --region on-prem` instead.
+
 4. Wait for installer readiness; API flows expose this as `INSTALLER_READY`.
 5. Download the artifact:
 
@@ -376,7 +393,9 @@ omnistrate-ctl instance get-installer <instance-id> \
 
 | Mistake | Fix |
 |---|---|
-| Treating air-gapped as BYOC-K8s | Use `onPremDeployment`, not `byoaDeployment` / `byoc-onprem`. |
+| Treating air-gapped as BYOC-K8s | Use `onPremDeployment`, not `byoaDeployment` / `byoc-onprem`. Full side-by-side table: [`BYOC_K8S_REFERENCE.md`](BYOC_K8S_REFERENCE.md#byoc-k8s-vs-air-gapped--the-disambiguation-that-matters-most). |
+| Passing `--cloud-provider`/`--region` to an installer instance | Installer-backed instances use `--onprem-platform` instead; the flags are mutually exclusive. |
+| Expecting native logs (`features.INTERNAL.logs.provider: native`) to work | Not supported air-gapped — the dataplane cannot reach CloudWatch Logs. |
 | Exposing prerequisites or image sync as product resources | Set implementation resources `internal: true`. |
 | Using `RUNTIME_PULL` for a disconnected site | Use `INSTALLER_EMBED`. |
 | Combining images from different sources into one image sync service | Split image sync services by source registry/repository/credentials. |

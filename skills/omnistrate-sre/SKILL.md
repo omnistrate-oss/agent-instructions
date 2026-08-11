@@ -210,6 +210,26 @@ The customer owns the cluster, nodes, storage, routing, and endpoint exposure; O
 - **Outbound egress** — pods must resolve and reach your control-plane endpoints plus required image and Helm-chart registries. Blocked egress shows as image-pull/agent-connect failures.
 - **Missing StorageClasses** — required StorageClasses must pre-exist if the Plan uses persistent volumes; otherwise PVCs stay Pending.
 - **Endpoint exposure is customer-owned** — ingress, load balancer, firewall, and DNS routing are on the **customer side**. Instance-level success with an unreachable endpoint means the routing/firewall/DNS path is the customer's to fix, not a platform failure.
+- **Stuck in `DEPLOYING` at the Monitoring step, but the pod is Running and the Deployment step is green** → the endpoint's DNS record was never published, so the endpoint stays UNHEALTHY and Monitoring never completes. Nothing in any log states this. Confirm:
+  ```bash
+  omctl instance list-endpoints <instance-id>          # endpoint shows UNHEALTHY
+  kubectl get svc -n <instance-id> -o jsonpath='{..annotations}' --kubeconfig /tmp/kubeconfig
+  kubectl logs -n external-dns-ns deploy/external-dns --kubeconfig /tmp/kubeconfig | tail -30
+  ```
+  Two distinct causes, same symptom — check in this order:
+  1. **The external-dns amenity is not installed on the cell** (`kubectl get ns external-dns-ns`). A trimmed `byoc-onprem` deployment-cell template can omit it, and then no endpoint on that cell can ever go healthy. Removals cannot be undone on a live cell — the cell must be re-onboarded with External DNS in the template.
+  2. **The Service is missing the annotation.** Fix in the **spec**, not by hand: a ClusterIP Service needs `external-dns.alpha.kubernetes.io/internal-hostname: $sys.network.internalClusterEndpoint`. The plain `hostname` annotation is skipped for ClusterIP Services (external-dns runs `--source=service` without `--publish-internal-services`).
+
+  Either way the instance recovers on its own once the record appears — no redeploy needed. See the FDE skill's `BYOC_K8S_REFERENCE.md` §Endpoints and §Trimming the amenity footprint.
+- **Confirm what actually landed in the cluster** — the **instance ID is the namespace**, so you can compare control-plane state against cluster state directly:
+  ```bash
+  kubectl get all -n <instance-id> --kubeconfig /tmp/kubeconfig
+  helm list -n <instance-id> --kubeconfig /tmp/kubeconfig
+  ```
+  An empty namespace with a healthy agent points at the workflow/plan; a populated namespace with a FAILED instance points at readiness conditions or endpoints.
+- **Agent connected but the account never went READY** — re-run the install kit (`./install.sh --non-interactive`), or re-download it with `omnistrate-ctl account customer install-kit <onboarding-instance-id>`, then re-check `omnistrate-ctl account customer describe <id>`.
+
+For the deployment model itself — onboarding flow, egress allowlist, prerequisites, endpoint patterns — see the FDE skill's `BYOC_K8S_REFERENCE.md`.
 
 ### Air-gapped (on-prem installer)
 No live control-plane link — you cannot use `instance debug` or the remote tunnel against a disconnected environment. Work from what the installer produces locally:

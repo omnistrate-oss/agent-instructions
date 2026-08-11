@@ -208,6 +208,14 @@ Control Plane; required irrespective of the customer's cloud; onboard each
 customer account with `omnistrate-ctl account customer create`,
 then deploy instances with `--customer-account-id`).
 
+> **Targeting a customer-managed cluster (BYOC-K8s, `--cloud-provider byoc-onprem`)?**
+> Four assumptions break: CRD install is a cluster-scoped change on infrastructure
+> you don't own; the customer may already run the same operator; there is no cloud
+> load balancer and no cloud StorageClass; and operator backups need a
+> customer-supplied object store. Read **§11** of
+> `OPERATOR_ONBOARDING_REFERENCE.md` before designing the install path, and the
+> FDE skill's `BYOC_K8S_REFERENCE.md` for the deployment model itself.
+
 ## Critical Rules
 
 1. **`systemWorkflows` is the lifecycle mechanism.** `template`,

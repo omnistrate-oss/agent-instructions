@@ -11,27 +11,57 @@ Install and authenticate the Omnistrate CLI before using any skill:
 
 That is all the skills require. An Omnistrate MCP server is an optional add-on (see [Optional: MCP server](#optional-mcp-server)); use it only if you explicitly want an agent to work through MCP instead of the CLI.
 
-## Supported Agents
+## Installing the Skills
 
-Any assistant that can run `omnistrate-ctl` can use these skills, including:
+Each skill is a self-contained directory under `skills/<skill-name>/` (SKILL.md + reference files + assets) in the open [Agent Skills](https://agentskills.io) format. Install the ones you need — `omnistrate-fde`, `omnistrate-operator`, `omnistrate-sre`, `omnistrate-sa`.
 
-- Claude Code
-- Claude.ai and Claude for Desktop
-- Cursor
-- VS Code with Copilot
-- Cline
-- Windsurf
-- Gemini Code Assist
-- Gemini CLI
+### Cross-agent (one command)
 
-The same agents can optionally connect the Omnistrate MCP server if they prefer MCP tools over direct CLI calls.
+The [`skills` CLI](https://github.com/vercel-labs/skills) auto-detects your installed agents and places the skills in the right directories:
 
-## Repository Structure
+```bash
+# All skills, all detected agents (add -g for personal/global scope)
+npx skills add omnistrate-oss/agent-instructions
 
-### Agent Configuration Files
+# A single skill for a specific agent
+npx skills add omnistrate-oss/agent-instructions -s omnistrate-fde --agent claude-code
+```
 
-- **[CLAUDE.md](./CLAUDE.md)** - Claude Code skill configuration
-- **[AGENTS.md](./AGENTS.md)** - Generic agent instructions for any CLI-capable agent
+### Claude Code
+
+Skills load from `~/.claude/skills/` (personal, all projects) or `.claude/skills/` (per project):
+
+```bash
+git clone https://github.com/omnistrate-oss/agent-instructions /tmp/agent-instructions
+mkdir -p ~/.claude/skills
+for s in omnistrate-fde omnistrate-operator omnistrate-sre omnistrate-sa; do
+  cp -r "/tmp/agent-instructions/skills/$s" ~/.claude/skills/
+done
+```
+
+### OpenAI Codex
+
+Codex CLI supports the same SKILL.md format from `~/.agents/skills/` (personal) or `.agents/skills/` (per project):
+
+```bash
+git clone https://github.com/omnistrate-oss/agent-instructions /tmp/agent-instructions
+mkdir -p ~/.agents/skills
+for s in omnistrate-fde omnistrate-operator omnistrate-sre omnistrate-sa; do
+  cp -r "/tmp/agent-instructions/skills/$s" ~/.agents/skills/
+done
+```
+
+### GitHub Copilot
+
+Copilot (coding agent, CLI, and VS Code agent mode) supports agent skills; install with the GitHub CLI (v2.90.0+):
+
+```bash
+gh skill install omnistrate-oss/agent-instructions omnistrate-fde
+gh skill install omnistrate-oss/agent-instructions omnistrate-operator
+gh skill install omnistrate-oss/agent-instructions omnistrate-sre
+gh skill install omnistrate-oss/agent-instructions omnistrate-sa
+# add --scope user for personal scope; project installs land in .github/skills/
+```
 
 ### Skills
 
@@ -112,143 +142,6 @@ Use this table to pick the right skill for a request:
 | Customer's cloud account (AWS/GCP/Azure/OCI) | BYOC / BYO-VPC / PrivateLink | `byoaDeployment` |
 | Customer's own Kubernetes cluster | BYOC-K8s (`byoc-onprem`) | `byoaDeployment` |
 | Fully disconnected / no internet | Air-gapped | `onPremDeployment` |
-
-## Installing the Skills
-
-Each skill is a self-contained directory under `skills/<skill-name>/` (SKILL.md + reference files + assets) in the open [Agent Skills](https://agentskills.io) format. Install the ones you need — `omnistrate-fde`, `omnistrate-operator`, `omnistrate-sre`, `omnistrate-sa`.
-
-### Cross-agent (one command)
-
-The [`skills` CLI](https://github.com/vercel-labs/skills) auto-detects your installed agents and places the skills in the right directories:
-
-```bash
-# All skills, all detected agents (add -g for personal/global scope)
-npx skills add omnistrate-oss/agent-instructions
-
-# A single skill for a specific agent
-npx skills add omnistrate-oss/agent-instructions -s omnistrate-fde --agent claude-code
-```
-
-### Claude Code
-
-Skills load from `~/.claude/skills/` (personal, all projects) or `.claude/skills/` (per project):
-
-```bash
-git clone https://github.com/omnistrate-oss/agent-instructions /tmp/agent-instructions
-mkdir -p ~/.claude/skills
-for s in omnistrate-fde omnistrate-operator omnistrate-sre omnistrate-sa; do
-  cp -r "/tmp/agent-instructions/skills/$s" ~/.claude/skills/
-done
-```
-
-### OpenAI Codex
-
-Codex CLI supports the same SKILL.md format from `~/.agents/skills/` (personal) or `.agents/skills/` (per project):
-
-```bash
-git clone https://github.com/omnistrate-oss/agent-instructions /tmp/agent-instructions
-mkdir -p ~/.agents/skills
-for s in omnistrate-fde omnistrate-operator omnistrate-sre omnistrate-sa; do
-  cp -r "/tmp/agent-instructions/skills/$s" ~/.agents/skills/
-done
-```
-
-### GitHub Copilot
-
-Copilot (coding agent, CLI, and VS Code agent mode) supports agent skills; install with the GitHub CLI (v2.90.0+):
-
-```bash
-gh skill install omnistrate-oss/agent-instructions omnistrate-fde
-gh skill install omnistrate-oss/agent-instructions omnistrate-operator
-gh skill install omnistrate-oss/agent-instructions omnistrate-sre
-gh skill install omnistrate-oss/agent-instructions omnistrate-sa
-# add --scope user for personal scope; project installs land in .github/skills/
-```
-
-## How to Use
-
-### For Claude Code Users
-
-Once installed (see [Installing the Skills](#installing-the-skills)), Claude Code discovers the skills automatically. Simply start working with Omnistrate and Claude will invoke the appropriate skill based on your intent; [CLAUDE.md](./CLAUDE.md) describes the routing between skills.
-
-### For Other Agent Users
-
-1. Read [AGENTS.md](./AGENTS.md) to understand available skills
-2. Browse `skills/*/SKILL.md` files for workflow guidance
-3. Consult `skills/*/*_REFERENCE.md` files for detailed syntax and examples
-4. Ensure `omnistrate-ctl` is installed and logged in (see [Prerequisite](#prerequisite)); optionally connect the MCP server if you prefer working through MCP
-
-### Quick Start
-
-**Designing a new SaaS application:**
-1. Use the **omnistrate-sa** skill
-2. Start with requirements (domain, scale, compliance, SLA) and deployment-model discovery (hosted vs BYOC vs BYOC-K8s vs air-gapped)
-3. Select appropriate technologies and architecture patterns
-4. Iteratively develop Docker Compose spec (or recommend a Helm/Terraform skeleton if appropriate)
-5. Handoff artifact to the FDE skill for Omnistrate-native transformation
-
-**Onboarding a service (Docker Compose, Helm, Terraform, Kustomize, or mixed):**
-1. Use the **omnistrate-fde** skill
-2. Provide your artifact (compose file, Helm chart, Terraform module, etc.)
-3. FDE runs intake to determine the deployment model (hosted / BYOC / BYOC-K8s / air-gapped)
-4. Transform to Omnistrate-native with ZERO parameterization initially
-5. Build, deploy, and iterate until RUNNING
-6. Add API parameters and lifecycle incrementally as needed
-
-**Onboarding a Kubernetes operator (CRDs + controller):**
-1. Use the **omnistrate-operator** skill
-2. Provide the operator name and CRD/CR examples
-3. Skill authors the `systemWorkflows` ServicePlanSpec and lifecycle verbs
-
-**Debugging a deployment:**
-1. Use the **omnistrate-sre** skill
-2. Start with deployment status analysis
-3. Follow the progressive workflow (status → events → instance debug → live cluster access)
-4. Skill branches by resource type (Compose / Helm / Terraform / Operator / Kustomize) and deployment model (hosted / BYOC / BYOC-K8s / air-gapped)
-
-## Looking up the spec and JSON schema
-
-Every skill verifies spec fields against the platform rather than from memory, using
-`omnistrate-ctl docs`. **These subcommands need no `omnistrate-ctl login`** (they do make network calls), so an agent can check itself even before the CLI is authenticated:
-
-```bash
-omnistrate-ctl docs compose-spec                            # list every compose tag / x-omnistrate-* extension
-omnistrate-ctl docs compose-spec "x-omnistrate-compute"     # read one tag's reference and examples
-omnistrate-ctl docs plan-spec                               # list every ServicePlanSpec section
-omnistrate-ctl docs plan-spec "helm chart configuration"    # read one section
-omnistrate-ctl docs json-schema                             # list the schema types available
-omnistrate-ctl docs json-schema x-omnistrate-compute        # one extension's authoritative schema
-omnistrate-ctl docs json-schema service-plan                # the whole ServicePlanSpec schema
-omnistrate-ctl docs system-parameters                       # the $sys.* catalog
-omnistrate-ctl docs search "byoc privatelink" --limit 15     # full-text across every guide
-omnistrate-ctl docs validate --file spec.yaml               # check a finished spec against the schema
-```
-
-Add `-o json` to any of them for machine-readable output. Scope schema requests to
-the extension you are writing (`json-schema x-omnistrate-compute` is ~6 KB against
-~92 KB for the full compose schema). A tag that matches nothing prints the
-available-tag list rather than erroring, so an agent that guesses wrong gets the
-valid names back instead of a dead end.
-
-## Optional: MCP server
-
-The skills default to the `omnistrate-ctl` CLI and need nothing beyond it. If you
-prefer to have an agent work through the [Model Context Protocol](https://modelcontextprotocol.io)
-instead of running CLI commands, you can connect the Omnistrate MCP server, which
-exposes tools equivalent to the CLI subcommands. Set this up only if you
-explicitly want MCP; it is never required.
-
-Per-agent MCP configuration for read-only access lives in the
-`skills/omnistrate-mcp-readonly/` skill. When connected, the server provides
-tools that map to the same operations the CLI performs:
-
-- `mcp__ctl__account_*` - Cloud account management (CLI: `omnistrate-ctl account ...`)
-- `mcp__ctl__docs_*` - Documentation and schema lookup (CLI: `omnistrate-ctl docs ...` — see below)
-- `mcp__ctl__build_compose` - Service builds (CLI: `omnistrate-ctl build ...`)
-- `mcp__ctl__service_plan_*` - Plan management (CLI: `omnistrate-ctl service-plan ...`)
-- `mcp__ctl__instance_*` - Instance operations (CLI: `omnistrate-ctl instance ...`)
-- `mcp__ctl__workflow_*` - Workflow analysis (CLI: `omnistrate-ctl workflow ...`)
-- `mcp__ctl__deployment-cell_*` - Kubernetes access (CLI: `omnistrate-ctl deployment-cell ...`)
 
 ## Contributing
 

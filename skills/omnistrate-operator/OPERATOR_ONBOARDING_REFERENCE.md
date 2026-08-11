@@ -857,3 +857,50 @@ systematic version.
 | create hangs forever at successCondition | Condition references a status field the operator never writes at this state (e.g. waiting on replicas with scale-to-zero). Check a live CR's actual status; drop or change the condition. |
 | CR is ready on-cluster but the task never completes | Unsupported condition syntax: conditions[] array queries (`#(type=="Ready")`) and dotted string literals (`== 1.1.0`) never match. Use a flat path with a numeric or dot-free string value (§3). |
 | stop/backup rejected with "conflicting operation is already in progress" | Another workflow on the instance still holds the lock — including a backup workflow whose steps all succeeded but whose parent record stays RUNNING (observed platform behavior). List workflows for the instance and wait or escalate; retrying immediately won't help. |
+
+---
+
+## 11. Operators on customer-managed Kubernetes (BYOC-K8s)
+
+An operator plan can target a customer-owned cluster (`byoaDeployment`, deployed
+with `--cloud-provider byoc-onprem --region on-prem`). Everything above still
+applies, but four assumptions that hold on hosted/BYOC cells break here, because
+**Omnistrate provisions no infrastructure** in a cluster it does not own.
+
+Read [`BYOC_K8S_REFERENCE.md`](../omnistrate-fde/BYOC_K8S_REFERENCE.md) in the
+`omnistrate-fde` skill for the deployment model itself (onboarding flow, install
+kit, egress allowlist, endpoints). The operator-specific deltas:
+
+**1. CRD installation mutates a cluster you don't own.** Installing the operator's
+CRDs is cluster-scoped. Confirm the customer accepts it and that the identity the
+`dp-agent` runs as may create CRDs, ClusterRoles, and ClusterRoleBindings. Raise
+this at intake — it is frequently the item that needs a customer security review.
+
+**2. The customer may already run the same operator.** A shared CNPG, Strimzi, or
+cert-manager install is common in enterprise clusters, and a second cluster-scoped
+install will fight the incumbent over the same CRDs. The §2a pattern —
+operator + CRDs as a **deployment-cell amenity**, per-instance resources as
+namespaced CRs — is not merely preferred on BYOC-K8s, it is what makes coexistence
+possible. Ask what is already installed before designing the install path.
+
+**3. No cloud load balancer, no cloud StorageClass.** The §7 networking patterns
+that request a `LoadBalancer` Service, and any CR field naming `gp3` /
+`premium-rwo`, will hang on a customer cluster. Use ClusterIP plus the customer's
+own ingress, and take the StorageClass name as an `apiParameter` (or rely on the
+cluster default). A missing StorageClass leaves PVCs `Pending` and the
+`successCondition` never fires — it looks like an operator bug and is not.
+
+**4. Operator-managed backups need a customer-supplied target.** There is no
+Omnistrate-provisioned S3 bucket on BYOC-K8s, so the §4 backup verbs must point the
+operator's backup configuration (pgBackRest repo, Velero target, etc.) at an object
+store the customer supplies as `apiParameters`. Decide this before promising
+backup/restore verbs in a BYOC-K8s plan.
+
+| BYOC-K8s pitfall | Correction |
+|---|---|
+| Assuming CRDs can be installed silently | Cluster-scoped change on customer infrastructure — get explicit agreement |
+| Per-instance chart owning CRDs | `crds.enabled=false` + cell amenity (§2a); mandatory here, not optional |
+| Ignoring an operator the customer already runs | Check first; collide and both reconcilers fight |
+| `LoadBalancer` Service in the CR | ClusterIP + customer ingress |
+| Hardcoded cloud StorageClass | `apiParameter` or cluster default |
+| Backup verbs with no bucket | Customer-supplied object store via `apiParameters` |

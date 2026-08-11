@@ -924,6 +924,17 @@ chartValues:
         external-dns.alpha.kubernetes.io/hostname: $sys.network.externalClusterEndpoint
 ```
 
+> **`hostname` vs `internal-hostname` — this pair silently hangs instances.** The
+> block above is the **LoadBalancer / PUBLIC** pattern. For a **ClusterIP** Service
+> (the norm on BYOC-K8s, where there is no cloud LB) you must use
+> **`external-dns.alpha.kubernetes.io/internal-hostname`** with
+> `$sys.network.internalClusterEndpoint` instead. The cell's external-dns runs
+> `--source=service` without `--publish-internal-services`, so it **skips ClusterIP
+> Services carrying the plain `hostname` annotation** — no record is created, the
+> endpoint stays UNHEALTHY, and the Monitoring workflow step never completes even
+> though the pod is Running and the Deployment step is green. See
+> [`BYOC_K8S_REFERENCE.md` §Endpoints](BYOC_K8S_REFERENCE.md#endpoints).
+
 ### endpointConfiguration (surfaces connectivity to customers)
 
 `endpointConfiguration` does NOT create the Kubernetes Service, Ingress, or DNS record —
@@ -1069,6 +1080,53 @@ Read the `metadata.name` of each Service in the output — those are the exact n
 pin. For Bitnami charts this surfaces names like `<release>-primary`, `<release>-read`,
 `<release>-headless`, etc. Do this before wiring `endpointConfiguration.host` or any
 `targetKubernetesServiceName`, so a reader/replica endpoint is not left as a guess.
+
+---
+
+## Internal logs — Omnistrate-managed vs native CloudWatch
+
+`features.INTERNAL.logs` controls the SaaS Provider operations log view. An empty
+object gives Omnistrate-managed logs; `provider: native` ships Helm-resource
+workload logs to CloudWatch Logs instead, via a per-instance OpenTelemetry
+collector.
+
+```yaml
+features:
+  INTERNAL:
+    logs: {}              # Omnistrate-managed logs
+
+features:
+  INTERNAL:
+    logs:
+      provider: native    # Helm resource logs -> CloudWatch Logs
+```
+
+This is a **Helm-resource** feature. Verified against
+`omctl docs plan-spec "Features schema"`:
+
+| Deployment model | Where logs land | Extra requirements |
+|---|---|---|
+| **Hosted** | CloudWatch in your AWS deployment account, using the cell's native AWS credentials | Currently supported **only when the instance is deployed on AWS** |
+| **BYOC / BYOC-K8s** | CloudWatch in the **Hosted SaaS Provider's AWS account**, regardless of the dataplane cloud | `ExpandBoundaryForAWSServiceIntegrations=true`; dataplane needs an HTTPS path to the regional CloudWatch Logs endpoint |
+| **Air-gapped** | Not supported — the dataplane cannot reach CloudWatch Logs | — |
+
+Non-obvious points:
+
+- On BYOC and BYOC-K8s the **customer's** account needs no logging permissions.
+  Omnistrate issues the collector scoped, temporary AWS credentials that can write
+  only to that instance's log groups and stream prefix. Keep
+  **`ExpandBoundaryForAWSServiceIntegrations=true`** in the provider AWS account's
+  generated CloudFormation stack, or those credentials cannot be issued. Accounts
+  onboarded before that parameter existed need their stack updated.
+- This is independent of **`EnableECRHelmChartPull=true`** (needed when the plan
+  pulls a Helm OCI chart from the provider's private ECR — see §Private Amazon ECR
+  OCI repos). A plan using both capabilities needs both flags set.
+- The network path may be public egress or private routed connectivity to a
+  CloudWatch Logs interface VPC endpoint (VPN / Direct Connect). On BYOC-K8s, add
+  it to the customer's egress allowlist — see
+  [`BYOC_K8S_REFERENCE.md` §Native logs](BYOC_K8S_REFERENCE.md#native-logs).
+- Removing `provider: native` (keeping the feature enabled) switches back to
+  Omnistrate-managed logs.
 
 ---
 
