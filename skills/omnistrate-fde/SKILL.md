@@ -395,8 +395,8 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
   operators on customer clusters, day-2 ops, adopted deployment cells, the
   canonical **BYOC-K8s vs air-gapped** disambiguation table, and **trimming the
   amenity footprint** via a `--cloud byoc-onprem` deployment-cell template
-  (BYOC-K8s cells only, without touching other clouds) — start at Cert Manager
-  only with no endpoints in the spec, then add External DNS + endpoints on request.
+  (BYOC-K8s cells only, without touching other clouds) — start with all amenities
+  `disable: "true"` and no endpoints in the spec, then add them on request.
 - **`ONPREM_INSTALLER_REFERENCE.md`** — air-gapped/on-prem installer setup for
   complex Helm graphs: multiple Helm releases, multiple image registry copy
   services, `INSTALLER_EMBED`, `autoDiscoverImagesTag`, action hooks,

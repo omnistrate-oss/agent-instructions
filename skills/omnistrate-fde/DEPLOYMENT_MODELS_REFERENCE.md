@@ -904,18 +904,21 @@ take `--cloud aws|azure|gcp|nebius|byoc-onprem`, and a cell is seeded from the
 template matching **its own** cloud provider — so a `--cloud byoc-onprem` template
 reaches BYOC-K8s cells and nothing else. Three caveats, all verified on live cells:
 
-- The list is **allow-list** semantics once a template exists — an amenity omitted
-  from it is not installed. But an **empty** `managedAmenities` list is a silent
-  no-op that still reports success; always re-read with `describe-config-template`.
-- **Cert Manager cannot be removed** (`it is a required managed amenity`) — a
-  hardcoded guard in `ValidateManagedAmenitiesList`, not a functional dependency.
-  It makes 1 amenity the practical floor.
+- Trim with **`disable: "true"`** on the entry, keeping all entries in the list.
+  Deleting entries, `managedAmenities: []`, a null list, a 0-byte file, and
+  `skip: true` are all silent no-ops or rejections — `Skip` is an internal-only
+  field absent from the public API. Always re-read with `describe-config-template`.
+- **Disable Cert Manager, never delete it.** Deletion is rejected
+  (`it is a required managed amenity`); `disable: "true"` is not a removal, so it
+  works. All seven disabled is a validated configuration on current builds. On
+  older control planes it hangs every instance in the Deployment step on
+  `CreateCertificate` — if you see that, re-enable Cert Manager.
 - The allow-list only applies at **cell bootstrap**. On a live cell, additions
   reconcile but **removals do not** — the sync reports SUCCESS and the release stays.
 - `$sys.deploymentCell.isImported` is **`false`** on a BYOC-K8s cell onboarded via
   the install kit, so the idiom above does not fire there.
 
-For BYOC-K8s, start at **Cert Manager only** with a spec that declares no
+For BYOC-K8s, start with **all seven disabled** and a spec that declares no
 endpoints, then add External DNS (and an `endpointConfiguration`) when the user
 asks for a reachable endpoint — see
 [`BYOC_K8S_REFERENCE.md` §Trimming the amenity footprint](BYOC_K8S_REFERENCE.md#trimming-the-amenity-footprint-byoc-k8s-cells-only).
