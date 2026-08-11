@@ -399,10 +399,17 @@ to your control plane over outbound mTLS/gRPC. Omnistrate provisions no infra.
 
 **Design decisions**:
 - Expose services via `$sys.network.internalClusterEndpoint` (INTERNAL); use `externalClusterEndpoint`/PUBLIC only if the cluster has a working load balancer
-- Validate customer StorageClasses, ingress controllers, and DNS during onboarding
+- For an HTTP/HTTPS app there is **no platform cloud LB** — design for ClusterIP + the customer's own ingress, and take the external hostname as an apiParameter
+- Validate customer StorageClasses, ingress controllers, and DNS during onboarding; never design around a cloud-specific StorageClass name
+- Cluster-level components (ingress, cert-manager, monitoring) belong in deployment-cell amenities, not the plan
+- Confirm the cluster is allowed **outbound** egress to your control plane, image registries, and chart registries — if not, this is an air-gapped design, not BYOC-K8s
 - Enable licensing — same as BYOC-Account
 
 **Best for**: Customers standardizing on EKS/AKS/GKE/OpenShift/Rancher/k3s
+
+**Hand off with**: the FDE skill's `BYOC_K8S_REFERENCE.md` — it carries the
+onboarding flow, egress allowlist, endpoint patterns, and the BYOC-K8s vs
+air-gapped disambiguation the build phase needs.
 
 #### Air-gapped (self-contained installer)
 **Architecture**: A self-contained installer artifact the customer runs locally,

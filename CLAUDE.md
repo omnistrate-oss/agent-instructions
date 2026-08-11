@@ -106,6 +106,7 @@ The primary onboarding skill for all artifact types and all deployment models. R
 - Helm `helmChartConfiguration`, values templating, multi-service `dependsOn` (`HELM_ONBOARDING_REFERENCE.md`)
 - Terraform/OpenTofu and Kustomize ServicePlanSpec (`TERRAFORM_KUSTOMIZE_REFERENCE.md`)
 - Deployment model `deployment:` blocks and customer account onboarding (`DEPLOYMENT_MODELS_REFERENCE.md`)
+- BYOC-K8s on customer-managed Kubernetes (`BYOC_K8S_REFERENCE.md`): trust/egress model and customer allowlist, cluster prerequisites, `account customer create --cluster-name` install-kit onboarding, `--cloud-provider byoc-onprem --region on-prem`, endpoints without a cloud LB, native logs, operators on customer clusters, adopted deployment cells, and the BYOC-K8s vs air-gapped disambiguation
 - Zero-parameterization initial builds; incremental API parameter addition
 - Compute and storage resource setup
 - Iterative debugging until instances are RUNNING (delegates to SRE skill)

@@ -177,6 +177,12 @@ table is only for steering the interview.
 Air-gapped plans have no live Omnistrate lifecycle after delivery. The customer
 runs the installer and any operational scripts in the disconnected environment.
 
+BYOC-K8s and air-gapped are the pair most often confused — both are "the
+customer's own Kubernetes", but the deciding question is **"can that cluster hold
+an outbound connection to your control plane?"** Yes → BYOC-K8s. No → air-gapped.
+They share almost no mechanics; `BYOC_K8S_REFERENCE.md` has the full
+side-by-side table.
+
 BYO-VPC and PrivateLink are BYOC variants selected at customer-account
 onboarding, not separate spec blocks (they live within the BYOC plan). A
 service can offer several models, but **each deployment model requires its own
@@ -382,6 +388,15 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
   operational flows for hosted / BYOC (BYO-VPC, PrivateLink) / BYOC-K8s /
   air-gapped, plus customer-account onboarding, tenancy, and the ISV-phrasing
   FAQ. Read this for **every** onboarding path.
+- **`BYOC_K8S_REFERENCE.md`** — BYOC-K8s depth: trust/egress model and the
+  customer allowlist, target-cluster prerequisites, the `account customer create
+  --cluster-name` install-kit onboarding flow, `--cloud-provider byoc-onprem
+  --region on-prem`, endpoints without a cloud LB, storage, native logs,
+  operators on customer clusters, day-2 ops, adopted deployment cells, the
+  canonical **BYOC-K8s vs air-gapped** disambiguation table, and **trimming the
+  amenity footprint** via a `--cloud byoc-onprem` deployment-cell template
+  (BYOC-K8s cells only, without touching other clouds) — start at Cert Manager
+  only with no endpoints in the spec, then add External DNS + endpoints on request.
 - **`ONPREM_INSTALLER_REFERENCE.md`** — air-gapped/on-prem installer setup for
   complex Helm graphs: multiple Helm releases, multiple image registry copy
   services, `INSTALLER_EMBED`, `autoDiscoverImagesTag`, action hooks,

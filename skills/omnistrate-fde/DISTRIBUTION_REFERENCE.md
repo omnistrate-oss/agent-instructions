@@ -244,8 +244,9 @@ One paragraph per deployment model. Facts reused from
 - **BYOC-K8s (customer-managed Kubernetes)** — the customer runs the **install
   kit** to connect their existing cluster (the cluster opens an outbound mTLS/gRPC
   channel to your control plane); Omnistrate provisions no infra and deploys
-  workloads only. See
-  [DEPLOYMENT_MODELS_REFERENCE.md § BYOC-K8s](DEPLOYMENT_MODELS_REFERENCE.md#byoc-k8s-customer-managed-kubernetes).
+  workloads only. See [BYOC_K8S_REFERENCE.md](BYOC_K8S_REFERENCE.md), or
+  [DEPLOYMENT_MODELS_REFERENCE.md § BYOC-K8s](DEPLOYMENT_MODELS_REFERENCE.md#byoc-k8s-customer-managed-kubernetes)
+  for model selection.
 
 - **Air-gapped** — the customer receives a self-contained **installer artifact**
   and runs it against their cluster with **no live control-plane connection**; the

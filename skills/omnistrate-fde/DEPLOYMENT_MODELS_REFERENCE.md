@@ -243,15 +243,15 @@ x-omnistrate-service-plan:
       awsBootstrapRoleAccountArn: arn:aws:iam::<CONTROL_PLANE_AWS_ACCOUNT_ID>:role/omnistrate-bootstrap-role
 ```
 
-ServicePlanSpec / Plan-spec context, root-level. The block below uses
-**lowerCamel** fields (`awsAccountId`, `awsBootstrapRoleAccountArn`) — the parser
-accepts this. Schema-canonical UpperCamel (`awsAccountId` +
-`awsBootstrapRoleAccountArn`, as in `hostedDeployment`) **also works and is what
-the editor validator expects**, so prefer it when authoring a fresh spec:
+ServicePlanSpec / Plan-spec context, root-level. Write **lowerCamel**
+(`awsAccountId`, `awsBootstrapRoleAccountArn`) — that is what
+`omctl docs plan-spec "Deployment schema"` publishes and what
+`omctl docs validate` checks against. Some published BYOC On-Premise examples
+show UpperCamel (`AwsAccountId` / `AwsBootstrapRoleAccountArn`); those build too,
+because the platform decodes through `encoding/json` and matches
+case-insensitively — but do not author fresh specs that way.
 
 ```yaml
-# lowerCamel form (parser-accepted). Schema-canonical
-# form: awsAccountId / awsBootstrapRoleAccountArn.
 name: My Product - BYOC
 deployment:
   byoaDeployment:
@@ -472,189 +472,52 @@ stays **connected** to your control plane.
 #### `byoaDeployment` account fields for a pure BYOC-K8s plan
 
 BYOC-K8s is configured as a BYOC deployment Plan, and you set up the provider side
-the same way you would for other BYOC Plans. Its
-`byoaDeployment` block therefore still carries the provider `awsAccountId` +
-`awsBootstrapRoleAccountArn` (official examples also spell the ARN field in the
-accepted variant casing `awsBootstrapRoleAccountArn`; schema-canonical is
-`awsBootstrapRoleAccountArn` — see the casing table at the top of this file) —
-even though Omnistrate provisions no AWS infra in the customer's cluster.
+the same way you would for other BYOC Plans. Its `byoaDeployment` block therefore
+still carries the provider `awsAccountId` + `awsBootstrapRoleAccountArn` — even
+though Omnistrate provisions no AWS infra in the customer's cluster.
+
 These are the **provider-side** account values of the AWS **"Control Plane"
 account** (see the Control Plane account rule in §BYOC — it applies to every
 `byoaDeployment` variant, including this one), which Omnistrate uses to anchor
 trust and host generated artifacts (install kit, chart/registry access); they
 are **required by the spec schema** for a BYOC plan. Use the real designated
 Control Plane account values — ask the user which account that is; do not treat
-the block as a throwaway placeholder. (If you need detail on every internal use
-of the ARN for the no-infra case, run a docs search.)
+the block as a throwaway placeholder.
 
-### Target-cluster prerequisites
+> **Casing.** `omctl docs plan-spec "Deployment schema"` gives both fields as
+> lowerCamel (`awsAccountId`, `awsBootstrapRoleAccountArn`) — write those. Some
+> published BYOC On-Premise examples show `AwsAccountId` / `AwsBootstrapRoleAccountArn`;
+> the platform decodes through `encoding/json` and matches case-insensitively, so
+> those build too. See the casing table at the top of this file.
 
-| Requirement | Details |
-|-------------|---------|
-| Kubernetes cluster | A working cluster with a supported Kubernetes version |
-| `kubectl` access | The operator running the install kit must target the intended cluster context |
-| Pod networking | CNI and pod-to-pod networking must work |
-| DNS and egress | Pods must resolve and reach your control-plane endpoints and required registries |
-| Storage | Required StorageClasses must exist if the Plan uses persistent volumes |
-| Endpoint path | Ingress, load balancer, firewall, and DNS routing must match the endpoint exposure your Plan defines |
+### Choosing it
 
-Cluster-level components (ingress controllers, cert-manager, monitoring, etc.)
-should be configured as deployment-cell amenities or pre-installed by the customer.
+| Signal | Read |
+|---|---|
+| "We run OpenShift / EKS / Rancher and the cluster can reach the internet" | BYOC-K8s |
+| "We have a cluster but it is fully disconnected" | **Air-gapped**, not BYOC-K8s (see §Air-gapped) |
+| "We want you to create the cluster in our AWS account" | **BYOC-Account**, not BYOC-K8s |
+| "We already run clusters we want Omnistrate to schedule onto" | **Adopted deployment cell** — a fleet operation, not a customer model |
 
-> **Surfacing prerequisites (e.g. StorageClass) to the customer.** These
-> prerequisites (a default StorageClass for PVC-backed plans, an ingress controller
-> for HTTP apps) are the customer's responsibility, and the plan cannot auto-provision
-> them on a customer-managed cluster. The `VALIDATE`/`PRE_INSTALL` `actionHooks`
-> that assert cluster preconditions are documented only for the **air-gapped**
-> installer path (see §Air-gapped), **not** for BYOC-K8s. So on BYOC-K8s, communicate
-> hard requirements (like "a default StorageClass must exist, or PVCs stay Pending and
-> the instance never reaches RUNNING") through the **Customer Portal onboarding
-> instructions** and the deployment overview, and prefer cell amenities for anything
-> you can install once per cell. If you need a per-instance precondition check on
-> BYOC-K8s, run a docs search for a current mechanism before assuming one exists.
-
-### Onboarding flow
-
-Passing `--cluster-name` (instead of an account flag like `--aws-account-id`)
-selects the BYOC On-Premise path. `account customer create` downloads the install
-kit into the current directory.
-
-```bash
-mkdir -p dp-install-kit && cd dp-install-kit
-
-omnistrate-ctl account customer create \
-  --service=<service-name> --environment=<environment-name> \
-  --plan=<plan-name> --cluster-name=<customer-cluster-name> \
-  --cluster-description="Customer production Kubernetes cluster"
-
-# Extract the kit and confirm kubectl targets the right cluster, then install the agent:
-tar xf byoc-onprem-install-kit-<account-config-id>.tar
-./install.sh --non-interactive
-
-# The onboarding instance is NOT immediately READY. After the agent connects,
-# poll until account_status is READY:
-omnistrate-ctl account customer describe <customer-account-instance-id>
-```
-
-To re-download the kit for an existing onboarding instance:
-`omnistrate-ctl account customer install-kit <customer-onboarding-instance-id>`.
-
-### Deploying (`--cloud-provider byoc-onprem --region on-prem`)
-
-```bash
-omnistrate-ctl instance create \
-  --service=<service-name> --environment=<environment-name> \
-  --plan=<plan-name> --version=latest --resource=<resource-name> \
-  --cloud-provider=byoc-onprem --region=on-prem \
-  --customer-account-id=<customer-account-instance-id> \
-  --param-file=./params.json --wait
-```
-
-`byoc-onprem` / `on-prem` are fixed CLI identifiers — pass them verbatim.
-
-### Local testing (k3d / k3s installer flags)
-
-The same install kit can spin up a local test cluster (skip these flags in
-production — the customer installs into their existing cluster):
-
-```bash
-# Fully local smoke test:
-./install.sh --create-k3d-cluster <cluster-name> --non-interactive
-
-# Single-node K3s advertising a public IP (to validate a PUBLIC endpoint Plan):
-PUBLIC_IP=<node-public-ip>
-./install.sh --create-k3s-cluster <cluster-name> \
-  --k3s-node-external-ip "${PUBLIC_IP}" --non-interactive
-```
-
-### Spec implications (INTERNAL endpoints, `internalClusterEndpoint`)
-
-For a customer cluster you typically expose the product on an **internal**
-endpoint using the `$sys.network.internalClusterEndpoint` system variable:
-
-```yaml
-services:
-  - name: postgresChart
-    network:
-      ports:
-        - 5432
-    endpointConfiguration:
-      postgresEndpoint:
-        host: "$sys.network.internalClusterEndpoint"
-        ports:
-          - 5432
-        primary: true
-        networkingType: INTERNAL
-```
-
-For a public endpoint Plan, use `$sys.network.externalClusterEndpoint` with
-`networkingType: PUBLIC` instead.
-
-Both examples above follow the same pattern (INTERNAL with
-`internalClusterEndpoint`; PUBLIC with `externalClusterEndpoint`).
-
-#### HTTP/HTTPS applications on BYOC-K8s (no platform cloud LB)
-
-The `$sys.*` endpoint examples above cover TCP services. For an **HTTP/HTTPS
-application** (Harbor, GitLab, a web UI) on BYOC-K8s there is an important difference:
-**Omnistrate provisions no cloud load balancer on a customer-managed cluster** — the
-customer owns ingress, DNS, and endpoint exposure. The customer owns the Kubernetes
-cluster, nodes, storage, network routing, and endpoint exposure, and decides whether
-product endpoints are private-only, reachable through a corporate network, or exposed
-through a public IP or load balancer.
-
-So the plan-level `loadBalancers.https` (which expects a platform-managed cloud LB) is
-**not** the mechanism here. The pattern is:
-
-1. Set the chart's Service type to **ClusterIP** (e.g. `expose.type: clusterIP`) — the
-   chart does not try to create a cloud LB.
-2. The **customer's own ingress controller** routes to that ClusterIP (configured as a
-   deployment-cell amenity or pre-installed by the customer — see §Target-cluster
-   prerequisites).
-3. Surface the customer-facing URL as an **INTERNAL** `endpointConfiguration` on
-   `$sys.network.internalClusterEndpoint`, and expose the externally-resolvable
-   hostname the customer will use as a **customer-supplied `String` apiParameter**
-   (e.g. `externalURL`) rather than a `$sys.network.*` variable — because no `$sys.*`
-   value resolves to the customer's own ingress hostname.
-
-```yaml
-services:
-  - name: harborChart
-    apiParameters:
-      - key: externalURL
-        name: External URL
-        description: The URL customers use to reach the app via their own ingress/DNS
-        type: String
-        modifiable: true
-        required: true
-        export: true
-    network:
-      ports:
-        - 8080
-    endpointConfiguration:
-      internal:
-        host: "$sys.network.internalClusterEndpoint"
-        ports:
-          - 8080
-        primary: true
-        networkingType: INTERNAL
-    helmChartConfiguration:
-      chartValues:
-        expose:
-          type: clusterIP          # chart-specific key — no platform cloud LB on BYOC-K8s
-        externalURL: $var.externalURL
-```
-
-> The `expose.type` / `externalURL` value keys are **chart-specific** (Harbor uses
-> exactly these; other charts differ) — confirm via `helm show values`. The Omnistrate
-> side is: ClusterIP + an INTERNAL endpoint + a customer-supplied `externalURL` String
-> parameter, because the customer owns the ingress/DNS path.
+The deciding question is never "is it their Kubernetes?" — it is **"can that
+cluster hold an outbound connection to your control plane?"**
 
 ### Limitations
 
 - The customer cluster must have **outbound** connectivity to your control plane — BYOC-K8s is **NOT** for air-gapped environments (use the air-gapped installer instead).
 - Each customer onboarding instance maps to **one** Kubernetes cluster.
+- Omnistrate provisions no nodes, storage, load balancers, or DNS.
 - Endpoint reachability depends on the customer's DNS, firewall, load balancer, and routing.
+- No ISV cloud account exists for a Terraform resource to target, so cloud-managed dependencies (RDS, Cloud SQL) are unavailable from the plan.
+
+> **Depth lives in [`BYOC_K8S_REFERENCE.md`](BYOC_K8S_REFERENCE.md).** Read it before
+> building a BYOC-K8s plan. It covers the trust/egress model and the customer
+> allowlist, target-cluster prerequisites and how to surface them, the full
+> onboarding flow (`account customer create --cluster-name`, install kit, `READY`
+> gate), deploy flags, local testing, endpoint patterns including HTTP apps behind
+> customer ingress, storage, native logs, operators on customer-managed clusters,
+> verification and day-2 ops, adopted cells, and the canonical **BYOC-K8s vs
+> air-gapped** disambiguation table.
 
 ---
 
@@ -982,14 +845,12 @@ managed *customer* experience on a customer-owned cluster, use
 [BYOC-K8s](#byoc-k8s-customer-managed-kubernetes) instead.
 
 ```bash
-omctl login
-
 omctl deployment-cell adopt \
   --cloud-provider aws \
-  --description "adopted cluster" \
-  --id "cluster-1" \
   --region us-east-1 \
-  --customer-email alok+drprod@omnistrate.com
+  --id "cluster-1" \
+  --description "adopted cluster" \
+  --customer-email customer@example.com     # optional; omit to adopt under the logged-in user
 
 # Installs the agent (extract cluster-1.tar and apply the manifests per the kit README),
 # then check status until it leaves PENDING_ADOPTION:
@@ -999,6 +860,11 @@ omctl deployment-cell status --id cluster-1
 `PENDING_ADOPTION` means the cluster is registered but waiting for the agent to
 install and connect. An adopted/imported cell reports `$sys.deploymentCell.isImported`
 = `true`, which you can use to condition amenities.
+
+Full flow — required vs optional flags, the agent-install manifest sequence,
+deregistration, and the traps (`--customer-email` optional on `adopt` but required
+on `delete`; `HEALTH_STATUS` stays `UNKNOWN` until adoption completes) — is in
+[`BYOC_K8S_REFERENCE.md` §Adopted deployment cells](BYOC_K8S_REFERENCE.md#adopted-deployment-cells).
 
 ### Deployment cell amenities (once-per-cell components)
 
@@ -1031,6 +897,28 @@ customAmenities:
 A `disable` expression that references a tag key not present on the account fails
 the amenity sync — set the tag (`"true"`/`"false"`) on **every** account you
 condition on.
+
+**Templates are scoped per cloud provider**, and that scoping is usually a better
+lever than a `disable` expression. `generate-config-template` / `update-config-template`
+take `--cloud aws|azure|gcp|nebius|byoc-onprem`, and a cell is seeded from the
+template matching **its own** cloud provider — so a `--cloud byoc-onprem` template
+reaches BYOC-K8s cells and nothing else. Three caveats, all verified on live cells:
+
+- The list is **allow-list** semantics once a template exists — an amenity omitted
+  from it is not installed. But an **empty** `managedAmenities` list is a silent
+  no-op that still reports success; always re-read with `describe-config-template`.
+- **Cert Manager cannot be removed** (`it is a required managed amenity`) — a
+  hardcoded guard in `ValidateManagedAmenitiesList`, not a functional dependency.
+  It makes 1 amenity the practical floor.
+- The allow-list only applies at **cell bootstrap**. On a live cell, additions
+  reconcile but **removals do not** — the sync reports SUCCESS and the release stays.
+- `$sys.deploymentCell.isImported` is **`false`** on a BYOC-K8s cell onboarded via
+  the install kit, so the idiom above does not fire there.
+
+For BYOC-K8s, start at **Cert Manager only** with a spec that declares no
+endpoints, then add External DNS (and an `endpointConfiguration`) when the user
+asks for a reachable endpoint — see
+[`BYOC_K8S_REFERENCE.md` §Trimming the amenity footprint](BYOC_K8S_REFERENCE.md#trimming-the-amenity-footprint-byoc-k8s-cells-only).
 
 ### Custom networks (`features.CUSTOM_NETWORKS` — hosted-only)
 
