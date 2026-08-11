@@ -160,13 +160,18 @@ produced 8 Helm releases across 6 new namespaces within ~4 minutes:
 | `nvidia-dcgm-exporter` (installed even with no GPUs present) | `observability-ns` |
 | `headlamp` | `headlamp-ns` |
 
-Plus a `monitoring-endpoints` namespace (created by the agent regardless of
-amenities). **Disclose this at intake.** A security reviewer evaluating "you only
+Plus a `monitoring-endpoints` namespace. That one is **not an amenity and cannot
+be trimmed** — it is applied as raw manifests, independent of the template, and
+holds a 2-replica `endpoint-monitoring-agent` Deployment plus a secret and a
+configmap. Together with `dp-agent` it is the irreducible platform footprint on a
+customer cluster.
+
+**Disclose the amenity list at intake.** A security reviewer evaluating "you only
 deploy workloads in our cluster" will ask about cluster-scoped CRDs and a
 cluster-wide ingress controller, and being surprised by it late is how BYOC-K8s
 deals stall.
 
-You can cut this to **cert-manager + the agent** — see the next section.
+You can cut this to **zero amenities** — see the next section.
 
 ---
 
@@ -184,11 +189,29 @@ omctl deployment-cell update-config-template --environment GLOBAL --cloud byoc-o
 omctl deployment-cell describe-config-template --cloud byoc-onprem      # confirm it took
 ```
 
-The amenity list is **allow-list** semantics once a template exists
-(`ShouldInstallManagedAmenity`: absent ⇒ not installed), so trimming is done by
-**omitting entries**, not by adding flags.
+**Trim with `disable: "true"`, keeping every entry in the list.** Deleting entries
+looks like the obvious move and is wrong — the API rejects deletion of Cert
+Manager, and every "empty" form is a silent no-op. Verified on the live platform:
 
-### Start here: Cert Manager only, and no endpoints in the spec
+| Form | Result |
+|---|---|
+| `disable: "true"` on an entry | **Works.** Round-trips through `describe-config-template` and the raw API |
+| Deleting the Cert Manager entry | **Rejected** — `amenity 'Cert Manager' cannot be removed, it is a required managed amenity` |
+| Deleting the other six entries | Accepted — but `disable` is simpler and uniform |
+| `skip: true` | **Silently ignored.** `Skip` is an internal-only field, absent from the CLI's Amenity struct *and* from the public OpenAPI schema (`[DependsOn, Description, Disable, IsManaged, Name, Properties, Type]`). The YAML key is dropped at parse time and the amenity installs normally |
+| `managedAmenities: []`, `null`, `customAmenities: []`, a 0-byte file | **Silent no-ops** on the org template. (The CLI's `Configuration file is empty - removing all amenities` message applies only to the per-cell `--id` path) |
+
+`disable` takes a **rendered expression**, so a literal must be the quoted string
+`"true"` — it is parsed with `strconv.ParseBool`, and a value that renders to a
+non-boolean is a hard error. Disabled amenities are filtered out by
+`removeDisabledAmenities` before the reconciler builds its map, so
+`ShouldInstallManagedAmenity` then returns false via `!exists`.
+
+> After **every** template update, re-read with `describe-config-template`. Between
+> the silent no-ops and the dropped `skip` key, "Successfully updated organization
+> template" is not evidence that anything changed.
+
+### Start here: zero amenities, and no endpoints in the spec
 
 The amenity floor and the plan spec are **coupled**. External DNS is only needed
 because an `endpointConfiguration` creates an endpoint that must become healthy
@@ -196,25 +219,72 @@ before the Monitoring workflow step completes. A plan that declares **no**
 `endpointConfiguration` has no endpoint to monitor, so it needs no DNS record, so
 it needs no External DNS amenity.
 
-So the smallest working starting point is a **Cert Manager-only** template paired
-with a spec that declares no endpoints — the same zero-first philosophy this skill
+So the smallest working starting point is an **all-disabled** template paired with
+a spec that declares no endpoints — the same zero-first philosophy this skill
 applies to API parameters:
 
 ```yaml
-# byoc-onprem GLOBAL amenity template — smallest possible starting set.
+# byoc-onprem GLOBAL amenity template — zero amenities.
 # Apply BEFORE onboarding the cluster (see the bootstrap-only rule below).
+# Keep all seven entries LISTED — the API blocks removing Cert Manager, but
+# disabling it is allowed. `disable` suppresses installation.
 managedAmenities:
-    # The floor. Cannot be removed once present — see "Why Cert Manager" below.
+    - name: Observability Prometheus
+      description: Observability Prometheus
+      type: Helm
+      disable: "true"
+    - name: External DNS
+      description: External DNS
+      type: Helm
+      disable: "true"
     - name: Cert Manager
       description: Cert Manager
       type: Helm
+      disable: "true"
+    - name: Nginx Ingress Controller
+      description: Nginx Ingress Controller
+      type: Helm
+      disable: "true"
+    - name: Cost Insight Prometheus
+      description: Cost Insight Prometheus
+      type: Helm
+      disable: "true"
+    - name: NVIDIA DCGM Exporter
+      description: NVIDIA DCGM Exporter
+      type: Helm
+      disable: "true"
+    - name: Headlamp
+      description: Headlamp Kubernetes Dashboard
+      type: Helm
+      disable: "true"
 ```
 
-This drops **6 of 7** amenities, leaving `cert-manager` + `dp-agent` and nothing
-else. Pair it with a spec that has **no `endpointConfiguration` block and no
-endpoint monitoring**, and install with
+This drops **all 7** amenities. Pair it with a spec that has **no
+`endpointConfiguration` block and no endpoint monitoring**, and install with
 `./install.sh --non-interactive --skip-nginx-validation` — validated with **no
 LoadBalancer present on the cluster at all**.
+
+Measured result on a real cell — no `cert-manager-ns`, **zero CRDs cluster-wide**,
+`dp-agent` the only platform Helm release, and the workload RUNNING in ~32 s:
+
+```
+STEP Bootstrap    success   20:11:07Z -> 20:11:30Z  (23s)
+STEP Deployment   success   20:11:11Z -> 20:11:30Z  (19s)
+STEP Monitoring   success   20:11:30Z -> 20:11:30Z  (0s)
+```
+
+Nothing timed out at bootstrap waiting for an amenity that never installs.
+
+> **Version dependency — check this if it hangs.** Older control planes run an
+> unconditional `CreateCertificate` step that needs the
+> `certificates.cert-manager.io` CRD. On such a build a zero-amenity cell **hangs
+> forever in the Deployment step**, retrying `CreateCertificate` with no fast-fail
+> while the pod sits `1/1 Running` — and it fires even with no
+> `endpointConfiguration`. Both behaviours were observed on the same account hours
+> apart, so this is a platform-version boundary, not a config difference. If you
+> see that hang, re-onboard with **Cert Manager enabled** (drop its `disable`
+> line); that intermediate floor is separately validated and reaches RUNNING in
+> ~3 min.
 
 The canonical first spec — validated end-to-end, reached RUNNING in 2m17s:
 
@@ -253,6 +323,7 @@ there is no `compute` block either (no nodes are provisioned; see §Omit `comput
 
 | The user wants… | Add to the template | Add to the spec |
 |---|---|---|
+| TLS certificates for endpoints | **Cert Manager** (drop its `disable` line) | — |
 | A reachable INTERNAL endpoint | **External DNS** | `endpointConfiguration` + the `external-dns.alpha.kubernetes.io/internal-hostname` annotation (§Endpoints) |
 | A PUBLIC endpoint / web UI | **+ Nginx Ingress Controller** (and a real LoadBalancer) | `networkingType: PUBLIC` on `externalClusterEndpoint` |
 | Metrics + dashboards | **+ Observability Prometheus** | `features.CUSTOMER.metrics` |
@@ -266,36 +337,73 @@ Validated: adding External DNS to a running Cert-Manager-only cell
 had external-dns Running on the cluster **~40 s later**, after which an
 endpoint-bearing instance reached RUNNING with a HEALTHY endpoint.
 
-### Why Cert Manager is the floor
+### The `CreateCertificate` hang (older control planes)
 
-It is **not** a functional dependency of the dataplane agent. Reading the source:
+**Zero amenities is not a working configuration.** This was tested directly: with
+all seven disabled, the cell onboarded cleanly and reached READY, the target
+footprint was achieved exactly (only `dp-agent` + `monitoring-endpoints`, no CRDs
+at all) — and then **no workload could ever deploy**.
 
-- `bootstrap-service-go/.../onprem/amenities/dataplane.go:148-270` — `installDataplaneAgent`
-  runs **last and unconditionally**, takes no cert-manager input, and its
-  `dp-agent-tls` secret is supplied by the control plane rather than issued by
-  cert-manager. The agent installs and connects fine without it.
-- `commons/model/common/common.go:427-453` (`AmendAmenityList`) — the declared
-  dependency graph names cert-manager only as a dependency of the **Kubernetes
-  Dashboard** (alongside External DNS and Nginx). Nothing else declares it.
-- What it is actually *for*: it is constructed with Route53 / ZeroSSL /
-  GooglePublicCA credentials, i.e. it issues **public TLS certificates** for
-  endpoints. That matters when you expose TLS endpoints — not for a bare agent.
+The instance stuck in the **Deployment** step, on `CreateCertificate`, retrying
+forever with no fast-fail:
 
-The requirement is a **hardcoded special case**, in
-`commons/model/common/common.go:573-581` inside `ValidateManagedAmenitiesList`:
-
-```go
-for name := range currentMap {
-    if _, exists := pendingMap[name]; !exists {
-        if name == constants.ManagedAmenityCertManagerName {
-            err = errors.Errorf("amenity '%s' cannot be removed, it is a required managed amenity", name)
+```
+STEP Bootstrap    success      19:34:43 -> 19:34:46
+STEP Deployment   in-progress  19:34:46 -> (never)
+   19:35:10 CreateHelmPackage  Completed
+   19:35:43 CreateCertificate  Running | activity StartToClose timeout, retry checking.
+   19:38:23 CreateCertificate  Running | activity StartToClose timeout. Previous failed... Retry checking.
 ```
 
-Note what this actually says: it fires only when cert-manager is in the **current**
-set and absent from the **pending** set. It is a *removal* guard, not a presence
-requirement. Since `generate-config-template` emits all 7 amenities and any
-existing org template already contains cert-manager, in practice you cannot get
-below 1 — but the floor is an API guard, not a functional need.
+The pod was `1/1 Running` in-cluster the whole time. Root cause: no
+`certificates.cert-manager.io` CRD exists, so `CreateCertificate` can never
+succeed. It never reaches Monitoring.
+
+**This fires even with no `endpointConfiguration`** — `network.ports` alone is
+enough to trigger certificate creation.
+
+**On current builds this is fixed**: `CreateCertificate` no longer runs, and the
+same zero-amenity cell reaches RUNNING in ~32 s. Both behaviours were observed on
+the same account hours apart, so treat it as a platform-version boundary. The
+diagnostic shape is worth remembering because it is so misleading — agent
+connected, account READY, pod `1/1 Running`, and the instance permanently
+`DEPLOYING` with no error. If you hit it, re-onboard with **Cert Manager enabled**
+(drop its `disable` line); that intermediate floor is separately validated and
+reaches RUNNING in ~3 min.
+
+### Disable Cert Manager, never delete it
+
+The API rejects *deleting* the Cert Manager entry, in
+`commons/model/common/common.go` inside `ValidateManagedAmenitiesList`:
+
+```go
+if !isBYOCOnPrem {                       // a byoc-onprem exemption exists in source
+    for name := range currentMap {
+        if _, exists := pendingMap[name]; !exists {
+            if name == constants.ManagedAmenityCertManagerName {
+                err = errors.Errorf("amenity '%s' cannot be removed, it is a required managed amenity", name)
+```
+
+The `isBYOCOnPrem` exemption is present in source but **was not live** at last
+test — deletion still returns that error. Do not depend on it.
+
+You do not need to: **`disable: "true"` is not a removal**, so the guard never
+fires, and a disabled Cert Manager is not installed. That is why the recommended
+template keeps all seven entries listed — and it means this guidance works on both
+sides of that rollout.
+
+### What is actually irreducible
+
+Two things land on the customer's cluster regardless of the template:
+
+| Component | Namespace | Notes |
+|---|---|---|
+| `dp-agent` | `dataplane-agent` | Installed by the install kit, not as an amenity |
+| `endpoint-monitoring-agent` | `monitoring-endpoints` | 2 replicas, image `ghcr.io/omnistrate/endpoint-monitor-agent`; applied as **raw manifests**, not a Helm release; not an amenity, not disableable |
+
+So "zero amenities" means two platform workloads and **zero CRDs** — not an empty
+cluster. Use that pair, not "nothing", when describing the footprint to a customer
+security reviewer.
 
 ### Three rules this mechanism will break on
 
@@ -309,11 +417,13 @@ Service, created the record, and the instance went RUNNING within ~90 s. It
 recovered on its own, no redeploy. **Keep the template and the spec in step: no
 endpoints ⇒ no External DNS; endpoints ⇒ External DNS.**
 
-**2. An empty `managedAmenities` list is a silent no-op.** `managedAmenities: []`,
-a null list, and `[]` plus `customAmenities: []` all print
-`Successfully updated organization template` and change **nothing**. You get a
-success message and the full 7-amenity stack. Always re-read with
-`describe-config-template` rather than trusting the update output.
+**2. Every "empty" form, and `skip: true`, fail silently.** `managedAmenities: []`,
+a null list, `customAmenities: []`, and even a 0-byte file all print
+`Successfully updated organization template` and change **nothing** — you get a
+success message and the full 7-amenity stack. `skip: true` is worse: it parses
+without complaint and is discarded, because `Skip` exists only internally and is
+absent from both the CLI struct and the public API schema. Use `disable: "true"`
+and always re-read with `describe-config-template`.
 
 **3. The allow-list only takes effect at cell bootstrap.** Set the reduced
 template **before** onboarding the cluster. On an already-connected cell,
@@ -336,14 +446,23 @@ omctl deployment-cell apply-pending-changes  --id <hc-id> --force
 > omctl instance describe <instance-id> -o json | jq -r .deploymentCellID
 > ```
 
-### Why not `disable:` expressions
+### `disable:` is install-time only
 
-`disable:` is accepted on managed amenities and round-trips intact, but it is
-**install-time only** — setting `disable: "true"` on an already-installed amenity
-does not uninstall it, so it is no better than omission for trimming. And the
-idiom `disable: $sys.deploymentCell.isImported` **does not fire on BYOC-K8s**:
-a cell onboarded via `account customer create` + install kit reports
-`isImported: false`. Use the per-cloud-provider template instead.
+`disable:` decides whether an amenity gets **installed**; it does not uninstall one
+that already exists. Setting `disable: "true"` on an already-installed amenity
+leaves it running. That is why the template must be set **before** onboarding —
+and why the growth direction (enable more later) works while the trim direction
+(disable something already installed) does not.
+
+Two further notes on the expression itself:
+
+- It is a rendered expression parsed with `strconv.ParseBool`, so a literal must be
+  the **quoted string** `"true"`. Anything that renders to a non-boolean is a hard
+  error, not a silent skip.
+- The idiom `disable: $sys.deploymentCell.isImported` **does not fire on BYOC-K8s**:
+  a cell onboarded via `account customer create` + install kit reports
+  `isImported: false`. That flag distinguishes *adopted* cells, not customer-owned
+  ones.
 
 ---
 
@@ -971,7 +1090,12 @@ cells:
 | Passing a service ID to `omctl service delete` | It takes the service **name**. |
 | Declaring `endpointConfiguration` in the **first** BYOC-K8s spec | Start with no endpoints; add them (with the External DNS amenity) only when the user asks for a reachable endpoint. |
 | **Endpoints in the spec but no External DNS amenity** | Instance hangs in Monitoring forever — same symptom as a missing annotation. Keep template and spec in step. |
-| Trimming amenities with `managedAmenities: []` | Silent no-op that reports success. Name Cert Manager explicitly. |
+| Trimming amenities with `managedAmenities: []`, null, or a 0-byte file | Silent no-ops that report success. Keep all 7 entries and set `disable: "true"`. |
+| Using `skip: true` to disable an amenity | Silently dropped — `Skip` is internal-only, not in the CLI struct or public API. Use `disable: "true"`. |
+| Unquoted `disable: true` | `disable` is a rendered expression parsed with `ParseBool`; use the quoted string `"true"`. |
+| **Deleting** the Cert Manager entry | Rejected by the API. `disable: "true"` is not a removal and works. |
+| Instance stuck in Deployment on `CreateCertificate` | Older control plane; that step needs the cert-manager CRD. Re-onboard with Cert Manager enabled. |
+| Passing `ac-*` to `--customer-account-id` or `account customer describe` | Both take the **onboarding instance ID** (`instance-*`); `ac-*` gives a misleading `custom account config not found`. |
 | Trying to remove an amenity from a live cell | Only additions reconcile; removals report SUCCESS and do nothing. Set the template **before** onboarding. |
 | `disable: $sys.deploymentCell.isImported` to skip amenities on BYOC-K8s | `isImported` is `false` there. Use a `--cloud byoc-onprem` template. |
 | Passing the `byoc-onprem-instance-*` id to `deployment-cell` commands | Use the `hc-*` id from `instance describe -o json \| jq -r .deploymentCellID`. |
