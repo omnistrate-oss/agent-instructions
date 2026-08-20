@@ -231,7 +231,10 @@ deployment model and gets its **own plan** (deployed with
 > Control Plane account** — never assume one or silently reuse another account
 > config.
 
-Compose context (lowerCamel):
+Compose context (lowerCamel) — **BYOC-Account variants only.** A compose spec
+with `byoaDeployment` works for BYOC-Account / BYO-VPC / PrivateLink. It does
+**not** work for BYOC-K8s: it builds and is accepted at `instance create`, then
+never deploys (see §BYOC-K8s below). BYOC-K8s needs a ServicePlanSpec.
 
 ```yaml
 x-omnistrate-service-plan:
@@ -468,6 +471,29 @@ operates deployments in that cluster via the product dataplane agent.
 Omnistrate does **not** provision nodes here — the customer-managed cluster is the
 deployment target. This is different from air-gapped: in BYOC-K8s the customer
 stays **connected** to your control plane.
+
+#### Spec format: ServicePlanSpec only — compose does not work here
+
+**BYOC-K8s requires a ServicePlanSpec.** A Docker Compose spec cannot deploy to
+`byoc-onprem`, and it fails in the worst possible way — silently, after every
+check passes:
+
+| Step | Result with a compose spec |
+|---|---|
+| `omctl docs compose-spec "x-omnistrate-service-plan"` | documents `byoaDeployment` — looks supported |
+| `omctl docs validate --file compose.yaml` | **valid** |
+| `omnistrate-ctl build --file compose.yaml` | **succeeds**, plan reports `tenancy_type: BYOA` with the full resource graph |
+| `instance create --cloud-provider byoc-onprem --region on-prem` | **accepted**, returns an instance ID |
+| Actual deployment | **never happens** — instance stuck `DEPLOYING`, instance namespace never created, no pods, no Helm release, no error |
+
+Verified on a cell with a connected `dp-agent` and a `READY` customer account:
+10+ minutes in `DEPLOYING` with `kubectl get pods -n <instance-id>` returning
+nothing at all.
+
+> **Diagnostic rule:** an **empty instance namespace** on `byoc-onprem` means the
+> spec format is wrong, not the cluster. Do not chase the agent, the amenities,
+> the account, or the egress allowlist. Convert the workload to a Helm chart and
+> rebuild with `--spec-type ServicePlanSpec`.
 
 #### `byoaDeployment` account fields for a pure BYOC-K8s plan
 

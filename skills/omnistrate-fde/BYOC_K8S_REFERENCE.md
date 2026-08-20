@@ -11,6 +11,15 @@ infrastructure** here — no nodes, no VPC, no load balancer, no StorageClass. I
 deploys and operates *workloads* in a cluster it does not own, through the
 dataplane agent.
 
+Second core rule: **the spec must be a ServicePlanSpec.** Docker Compose is not a
+BYOC-K8s path. A compose spec with `byoaDeployment` validates, builds, produces a
+plan with `tenancy_type: BYOA`, and is accepted by `instance create
+--cloud-provider byoc-onprem` — then never deploys, leaving the instance in
+`DEPLOYING` with **its namespace never created** and no error anywhere. An empty
+instance namespace on `byoc-onprem` is the signature of a compose spec, not of a
+cluster, agent or amenity fault. Bundle the workload into a Helm chart first
+(`HELM_ONBOARDING_REFERENCE.md`).
+
 Deployment-model selection (which of hosted / BYOC-Account / BYO-VPC /
 PrivateLink / BYOC-K8s / air-gapped to offer) lives in
 `DEPLOYMENT_MODELS_REFERENCE.md`. This file is the operational depth for BYOC-K8s
@@ -730,12 +739,28 @@ On BYOC-K8s the annotation must be **`internal-hostname`**, not `hostname`:
 
 `external-dns.alpha.kubernetes.io/hostname` — the annotation shown in the
 LoadBalancer/PUBLIC examples in `HELM_ONBOARDING_REFERENCE.md` — **does not work
-for a ClusterIP Service**. The cell runs external-dns with `--source=service` and
-without `--publish-internal-services`, so it skips ClusterIP Services annotated
-with plain `hostname`. `internal-hostname` is what publishes a ClusterIP.
+for a ClusterIP Service**. The cell runs external-dns without
+`--publish-internal-services`, so it skips ClusterIP Services annotated with
+plain `hostname`. `internal-hostname` is what publishes a ClusterIP.
 
 This is the single most common way a BYOC-K8s plan silently fails. Adding the
 annotation took a hung instance to `RUNNING` in 90 seconds.
+
+> **Do not assume the Service annotation is the only route — check the cell's
+> actual sources.** A cell observed in 2026-08 ran external-dns with **both**
+> `--source=service` **and** `--source=ingress`, so an **Ingress** also gets its
+> host published automatically. Read the flags rather than trusting this file:
+>
+> ```bash
+> kubectl get deploy -n external-dns-ns \
+>   -o jsonpath='{.items[0].spec.template.spec.containers[0].args}' | tr ',' '\n'
+> ```
+>
+> Look for `--source=...` (which object kinds publish records) and
+> `--domain-filter=...` (**records are only created for hostnames under this
+> domain** — an Ingress host outside the filter is silently ignored). When
+> `--source=ingress` is present, the Ingress route in §HTTP/HTTPS applications is
+> simpler and needs no Service annotation at all.
 
 ### Internal (the common case)
 
@@ -777,13 +802,73 @@ exposure (e.g. the k3s `--k3s-node-external-ip` case above, or their own LB).
 
 ### HTTP/HTTPS applications
 
-For a web application (Harbor, GitLab, an admin UI), plan-level `loadBalancers.https`
-expects a platform-managed cloud LB and is **not** the mechanism here. Instead:
+For a web application (Harbor, GitLab, webhook.site, an admin UI), plan-level
+`loadBalancers.https` expects a platform-managed cloud LB and is **not** the
+mechanism here. There are two routes. **Prefer the Ingress route** — it is
+simpler, needs no customer-supplied hostname, and yields a working *public*
+HTTPS URL.
 
-1. Set the chart's Service type to **ClusterIP** so the chart does not try to
-   create a cloud LB — **and annotate it** per the section above.
-2. Let the **customer's own ingress controller** route to that ClusterIP —
-   installed as a deployment-cell amenity or pre-installed by the customer.
+#### Route A (preferred): chart-created Ingress on the cell's nginx amenity
+
+Available when the cell has the **Nginx Ingress Controller** amenity and
+external-dns runs with **`--source=ingress`** (verify both — see the box in
+§CRITICAL above). The amenity's controller is a `LoadBalancer` Service holding
+the node's public IP, so it is already the cluster's public entry point; a bare
+`curl http://<node-ip>/` returning **404** confirms it is answering and merely
+has no matching Ingress yet.
+
+1. Keep the app's Service **ClusterIP** — no Service annotation needed on this
+   route.
+2. Have the chart create an **Ingress** whose host is
+   `$sys.network.externalClusterEndpoint` and whose `ingressClassName` matches
+   the amenity's IngressClass (`nginx`). Creating the Ingress is what triggers
+   external-dns to publish the public DNS record.
+3. Declare a **PUBLIC** `endpointConfiguration` on the same hostname.
+4. Add TLS by referencing the platform-provisioned certificate secret — see
+   §TLS below. Public HTTPS costs one `tls:` block.
+
+```yaml
+services:
+  - name: webhooksite
+    network:
+      ports:
+        - 80
+    endpointConfiguration:
+      webhookEndpoint:
+        host: "$sys.network.externalClusterEndpoint"
+        ports:
+          - 80
+        primary: true
+        networkingType: PUBLIC
+    helmChartConfiguration:
+      chartName: webhook-site
+      chartVersion: 0.2.1
+      chartRepoName: my-charts
+      chartRepoURL: oci://ghcr.io/<org>/charts
+      chartValues:
+        ingress:
+          enabled: true
+          className: nginx
+          host: $sys.network.externalClusterEndpoint   # bare $sys — whole value
+          tls:
+            enabled: true
+            secretName: google-public-ca-tls          # see §TLS
+```
+
+The `ingress.*` value paths are **chart-specific** — that example assumes a chart
+that exposes them. What generalises: ClusterIP Service + an Ingress whose host is
+`$sys.network.externalClusterEndpoint` under the cell's `--domain-filter`, plus a
+PUBLIC `endpointConfiguration` on the same value.
+
+#### Route B: customer's pre-existing ingress, hostname supplied by the customer
+
+Use when the cell has **no** nginx amenity, external-dns lacks
+`--source=ingress`, or the customer insists on routing through their own
+controller with their own DNS.
+
+1. Set the chart's Service type to **ClusterIP** — **and annotate it** per the
+   section above.
+2. Let the **customer's own ingress controller** route to that ClusterIP.
 3. Surface the endpoint as **INTERNAL** on `$sys.network.internalClusterEndpoint`,
    and take the externally-resolvable hostname as a **customer-supplied `String`
    apiParameter** — no `$sys.*` value can resolve to the customer's own ingress
@@ -832,6 +917,101 @@ services:
 
 ---
 
+## TLS
+
+**Omnistrate provisions a publicly-trusted certificate for every instance on a
+BYOC-K8s cell, automatically, whether or not your plan uses it.** Public HTTPS
+therefore costs one `tls:` block in the chart — you do not need cert-manager
+annotations, an ACME issuer of your own, or a customer-supplied certificate.
+
+Note that elsewhere in this file cert-manager appears only as a *hazard* (§The
+`CreateCertificate` hang). That is a real failure mode on older control planes,
+but it is not the whole story: on current builds the same machinery is what hands
+you free public TLS.
+
+### What the cell provides
+
+Observed on a live `byoc-onprem` cell (2026-08), created by the platform at
+**instance deploy time** without anything in the plan asking for it:
+
+| Object | Value |
+|---|---|
+| ClusterIssuers (cluster-scoped) | `google-public-ca`, `google-public-ca-http`, `selfsigned`, `zerossl-prod` — all `READY=True` |
+| `Certificate` | `google-public-ca`, in the **instance's own namespace**, `READY=True` |
+| Secret it writes | `google-public-ca-tls` (`kubernetes.io/tls`; keys `tls.crt`, `tls.key`, `tls-combined.pem`) |
+| Issuer on the wire | `C=US, O=Google Trust Services, CN=WR1` — trusted by default system trust stores |
+| SAN | `*.instance-<instance-id>.hc-<cell>.on-prem.byoc-onprem.<org>.cloud` |
+| Duration / renewal | 2160h (90d), `renewBefore` 360h, `rotationPolicy: Always` |
+
+Two properties make this directly usable:
+
+- The SAN **wildcard covers the endpoint host.** The endpoint Omnistrate
+  generates is `r-<resource-id>.instance-<id>.hc-<cell>...`, and `r-<resource-id>`
+  is a single label under the wildcard's parent domain.
+- The secret is created **in the instance namespace**, which is where the Ingress
+  lives — nginx only reads TLS secrets from its own namespace.
+
+Confirm on a running instance before relying on the name:
+
+```bash
+kubectl get clusterissuer
+kubectl get certificate,secret -n <instance-id> --field-selector type=kubernetes.io/tls
+kubectl get secret google-public-ca-tls -n <instance-id> \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d | \
+  openssl x509 -noout -issuer -dates -ext subjectAltName
+```
+
+### Wiring it up
+
+Reference the secret from the Ingress the chart creates (Route A in
+§HTTP/HTTPS applications):
+
+```yaml
+      chartValues:
+        ingress:
+          enabled: true
+          className: nginx
+          host: $sys.network.externalClusterEndpoint
+          tls:
+            enabled: true
+            secretName: google-public-ca-tls
+        # Anything the app renders links from must switch scheme too, or it will
+        # advertise http:// URLs from an https:// site:
+        app:
+          appUrl: "https://{{ $sys.network.externalClusterEndpoint }}"
+```
+
+`ingress.*` paths are chart-specific; what generalises is *an Ingress with a
+`tls` entry whose `secretName` is the platform-provisioned secret and whose host
+matches the certificate's wildcard*.
+
+Verify from **outside** the cluster, without `-k` — `-k` hides exactly the
+failure you are testing for:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://<endpoint>/          # expect 200
+echo | openssl s_client -connect <endpoint>:443 -servername <endpoint> 2>/dev/null \
+  | openssl x509 -noout -issuer -dates
+curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' http://<endpoint>/   # expect 301 -> https
+```
+
+nginx adds the HTTP→HTTPS redirect itself once a `tls` block exists; you do not
+configure it.
+
+### Failure mode: a healthy certificate nobody serves
+
+**Omitting the `tls` block does not error.** The Certificate is `READY`, the
+secret exists, the endpoint is HEALTHY, the instance reaches `RUNNING` — and
+nginx serves **plain HTTP**, because nothing told it which secret to present. The
+only symptom is that `https://<endpoint>` fails or falls back to the ingress
+controller's default self-signed certificate while `http://` works fine.
+
+Do not conclude "this cell has no TLS" from that. Check for the Certificate
+first. Related trap: if the plan's rendered `appUrl`/`APP_URL`-style value still
+says `http://`, the app will hand users insecure links even after TLS works.
+
+---
+
 ## Storage
 
 There is no Omnistrate-provisioned storage on BYOC-K8s. Any PVC the plan creates
@@ -844,6 +1024,75 @@ binds against a **StorageClass the customer already has**.
 - A missing or non-default StorageClass is the most common BYOC-K8s failure: PVCs
   stay `Pending`, pods never schedule, the instance never reaches RUNNING. See the
   `omnistrate-sre` skill.
+
+---
+
+## Rollouts on customer clusters (capacity, not Helm)
+
+Customer clusters are frequently small — a single node is normal for BYOC-K8s
+evaluations — and the **Kubernetes default rolling-update strategy deadlocks a
+single-replica Deployment on a full node.** This surfaces as a stuck Helm
+operation and is routinely misdiagnosed as a platform or agent fault.
+
+The rounding is the whole problem. With `replicas: 1`:
+
+| Default | 25% of 1 | Effect |
+|---|---|---|
+| `maxSurge: 25%` | rounds **up** to 1 | a second pod *must* be created before the old one goes |
+| `maxUnavailable: 25%` | rounds **down** to 0 | the old pod *may not* be removed to make room |
+
+On a node with no spare capacity both cannot hold: the replacement pod is
+unschedulable, the old pod may not be evicted, and the upgrade waits forever.
+
+**Diagnostic signature** — all four together mean capacity, not Helm:
+
+```
+kubectl get pods -n <instance-id>        # new pod Pending, old pod still Running
+kubectl describe pod <new-pod> -n <ns>   # FailedScheduling: Insufficient cpu, Insufficient memory
+helm history <release> -n <ns>           # latest revision stuck "pending-upgrade"
+kubectl logs -n dataplane-agent deploy/dp-agent | grep "not ready"
+#   -> "Deployment is not ready: <ns>/<name>. 0 out of 1 expected pods are ready"
+```
+
+That dp-agent line is **correct reporting, not an error** — it is blocked on the
+scheduler. Check node pressure before touching anything else:
+
+```bash
+kubectl describe node | sed -n '/Allocated resources:/,/Events:/p'
+```
+
+Requests near 100% (observed: `cpu 1850m (92%)`, `memory 3756Mi (98%)` on a
+2-vCPU/4 GiB node carrying only the amenity floor plus one small app) mean no
+replacement pod will ever schedule.
+
+**Fix — make replacement surge-free** in the chart's Deployment:
+
+```yaml
+spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0          # never need capacity for an extra pod
+      maxUnavailable: 1    # allowed to remove the old pod first
+```
+
+Costs a few seconds of downtime per upgrade and always converges. Verified: the
+identical upgrade that hung indefinitely completed in ~90s with `maxSurge: 0`.
+
+**To unstick a live one** without waiting out `timeoutNanos`, delete the **old**
+pod so the replacement can schedule; the rollout then completes and the Helm
+release leaves `pending-upgrade`. Prefer this over `helm rollback` — the platform
+owns the release.
+
+Two related habits for customer clusters:
+
+- **Keep requests low.** The deployment-cell amenities alone can consume most of
+  a small node's allocatable CPU. Requests are what the scheduler reserves, so
+  over-requesting blocks upgrades even when actual usage is tiny.
+- **`runtimeConfiguration.wait: true` makes this visible rather than silent** —
+  the instance stays `DEPLOYING` instead of reporting success over a half-applied
+  release. Keep it on, and treat a long `DEPLOYING` as a scheduling question
+  first.
 
 ---
 
@@ -1079,6 +1328,15 @@ cells:
 
 | Pitfall | Correction |
 |---|---|
+| **Using a Docker Compose spec for BYOC-K8s** | It validates, builds, produces a `BYOA` plan, and `instance create` is accepted — then never deploys and the instance namespace is never created. BYOC-K8s is ServicePlanSpec-only. An empty instance namespace means the spec format, not the cluster. |
+| Debugging an empty instance namespace as an agent/amenity/egress problem | Check the spec format first. A connected agent and `READY` account with a namespace that was never created points at compose. |
+| **Assuming no TLS because the endpoint serves HTTP** | The cell auto-provisions a Google-Trust-Services `Certificate` per instance (`google-public-ca` → secret `google-public-ca-tls`). Serving HTTP just means the Ingress has no `tls` block. See §TLS. |
+| Verifying HTTPS with `curl -k` | `-k` suppresses exactly the trust failure you are testing. Verify without it. |
+| Leaving an app's `APP_URL`-style value on `http://` after enabling TLS | The app then advertises insecure links from an HTTPS site. Switch the scheme in the same change. |
+| Trusting this file's external-dns `--source` list | Read the deployment's actual args. A cell was observed with **both** `--source=service` and `--source=ingress`; the Ingress route is simpler where available. |
+| An Ingress host outside external-dns's `--domain-filter` | No record is created, silently. The host must sit under the filtered domain. |
+| **Default rolling-update strategy on a single-replica Deployment** | Deadlocks on a full node: `maxSurge 25%` rounds up to 1, `maxUnavailable 25%` rounds down to 0. Set `maxSurge: 0` / `maxUnavailable: 1`. See §Rollouts. |
+| Reading `Deployment is not ready: 0 out of 1 expected pods are ready` as a dp-agent fault | It is accurate reporting of a blocked scheduler. Check `describe node` for requests near 100%. |
 | **ClusterIP Service with no external-dns annotation** | **The #1 silent failure.** Endpoint stays UNHEALTHY, Monitoring never completes, instance hangs in `DEPLOYING` with a green Deployment step and a Running pod. Add `external-dns.alpha.kubernetes.io/internal-hostname`. |
 | Using the `hostname` annotation on a ClusterIP Service | Use `internal-hostname` — plain `hostname` is skipped without `--publish-internal-services`. |
 | Copying `compute.instanceTypes` into a BYOC-K8s plan | Omit `compute` — no nodes are provisioned. |

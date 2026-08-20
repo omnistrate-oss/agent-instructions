@@ -83,7 +83,36 @@ alternative only when the user has asked to work through MCP.)
 
 Model selection, account setup, BYOC/BYOC-K8s/air-gapped flows: see `DEPLOYMENT_MODELS_REFERENCE.md`.
 
-Build the `deployment:` block for the model(s) chosen in intake Q2 (see `SKILL.md` Phase 0) — never silently default. **One plan per deployment model**: a compose spec defines a single plan, so offering several models means one spec (and one build) per model — never combine deployment blocks in one spec. `hostedDeployment` is shown below only as the example syntax; `byoaDeployment` (BYOC / BYO-VPC / PrivateLink / BYOC-K8s) and `onPremDeployment` (air-gapped) are documented in `DEPLOYMENT_MODELS_REFERENCE.md`.
+### Which models the compose path actually supports
+
+**Compose covers hosted and BYOC-*Account* only.** Two models are NOT compose paths:
+
+| Deployment model | Compose spec |
+|---|---|
+| Hosted (`hostedDeployment`) | ✅ supported |
+| BYOC-Account / BYO-VPC / PrivateLink (`byoaDeployment`) | ✅ supported |
+| **BYOC-K8s** (`byoaDeployment` deployed `--cloud-provider byoc-onprem`) | ❌ **builds, then never deploys** |
+| **Air-gapped** (`onPremDeployment`) | ❌ not a compose path — `onPremDeployment` is a ServicePlanSpec-only block |
+
+> **Why this is dangerous rather than merely unsupported.** A compose spec
+> carrying `byoaDeployment` and deployed to `byoc-onprem` passes every check you
+> would normally trust: `omctl docs compose-spec "x-omnistrate-service-plan"`
+> documents `byoaDeployment`, `omctl docs validate` reports the file valid,
+> `omnistrate-ctl build` succeeds and creates a plan whose `tenancy_type` is
+> `BYOA` with a correct resource graph, and `instance create
+> --cloud-provider byoc-onprem --region on-prem` is accepted. The instance then
+> stays in `DEPLOYING` **with its namespace never created** — no pods, no Helm
+> release, no error anywhere. Verified against a cell with a connected agent and
+> a `READY` account.
+>
+> **If intake Q2 chose BYOC-K8s or air-gapped, stop and switch formats.** Bundle
+> the workload into a Helm chart and use a ServicePlanSpec
+> (`HELM_ONBOARDING_REFERENCE.md`, `BYOC_K8S_REFERENCE.md`,
+> `ONPREM_INSTALLER_REFERENCE.md`). Do not spend time debugging the cluster,
+> the agent, or the amenities — the empty namespace is the spec format, not the
+> infrastructure.
+
+Build the `deployment:` block for the model(s) chosen in intake Q2 (see `SKILL.md` Phase 0) — never silently default. **One plan per deployment model**: a compose spec defines a single plan, so offering several models means one spec (and one build) per model — never combine deployment blocks in one spec. `hostedDeployment` is shown below only as the example syntax; `byoaDeployment` for **BYOC-Account variants** is documented in `DEPLOYMENT_MODELS_REFERENCE.md`.
 
 Compose spec syntax (lowerCamel fields — see `DEPLOYMENT_MODELS_REFERENCE.md` for the full field reference and casing rules):
 

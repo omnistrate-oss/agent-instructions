@@ -194,9 +194,10 @@ intake, never defaulted (`DEPLOYMENT_MODELS_REFERENCE.md` §BYOC).
 
 ## Decision Matrix
 
-Pick the row for the user's artifact (intake Q1). The **deployment model**
-(intake Q2) is orthogonal: **every** row also reads
-`DEPLOYMENT_MODELS_REFERENCE.md` for the `deployment:` block and account setup.
+Pick the row for the user's artifact (intake Q1), then check it against the
+deployment model (intake Q2) in the constraint table below. **Every** row also
+reads `DEPLOYMENT_MODELS_REFERENCE.md` for the `deployment:` block and account
+setup.
 
 | Artifact | Spec format | Build command | Guide |
 |---|---|---|---|
@@ -212,6 +213,33 @@ ServicePlanSpec builds all share `--spec-type ServicePlanSpec`; the compose path
 is the exception (plain `omnistrate-ctl build --file <compose-file>`, no `--spec-type`).
 Exact flags and skeletons live in the per-format references — do not reconstruct
 them here.
+
+### Artifact × deployment-model constraints (check before writing any spec)
+
+Artifact and deployment model are **not** freely combinable. The compose path
+does not cover every model:
+
+| Deployment model | Compose spec | ServicePlanSpec |
+|---|---|---|
+| Hosted | ✅ supported | ✅ supported |
+| BYOC-Account / BYO-VPC / PrivateLink | ✅ supported | ✅ supported |
+| **BYOC-K8s** (`byoc-onprem`) | ❌ **builds but never deploys** | ✅ **required** |
+| **Air-gapped** (`onPremDeployment`) | ❌ not a compose path | ✅ **required** |
+
+> **The compose + BYOC-K8s trap.** Nothing fails early. `omctl docs compose-spec`
+> documents `byoaDeployment` as a real compose field, `omctl docs validate`
+> passes, `omnistrate-ctl build` succeeds, and the generated plan correctly
+> reports `tenancy_type: BYOA` with the full resource graph. `instance create`
+> is accepted and returns an instance ID. Then the instance sits in `DEPLOYING`
+> **with the instance namespace never created at all** — no pods, no Helm
+> release, no error surfaced. Observed for 10+ minutes on a healthy cell whose
+> agent was connected and whose account was `READY`.
+>
+> So schema validation cannot protect you here, and neither can a successful
+> build. **If intake Q2 selected BYOC-K8s or air-gapped, the artifact must become
+> a ServicePlanSpec — convert a compose file to a Helm chart first.** An empty
+> instance namespace on `byoc-onprem` is the signature of this mistake; do not
+> debug it as a cluster or agent problem.
 
 ## Universal Workflow (method-agnostic)
 
@@ -360,6 +388,8 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
 | "Helm / Terraform / Kustomize isn't supported by this skill." | It is. Use `HELM_ONBOARDING_REFERENCE.md` / `TERRAFORM_KUSTOMIZE_REFERENCE.md`. |
 | "This is an operator, I'll write the workflows here." | Hand off to **omnistrate-operator** — it owns `systemWorkflows`. |
 | "I'll default to `hostedDeployment`." | Ask intake Q2 first. The model is a decision, not a default. |
+| "The user has a compose file and wants BYOC-K8s / air-gapped — the model is orthogonal to the artifact." | It is not. Compose covers hosted and BYOC-*Account* only. BYOC-K8s and air-gapped are ServicePlanSpec-only; convert to a Helm chart first. See §Artifact × deployment-model constraints. |
+| "`docs validate` passed and the build succeeded, so the compose spec is fine for BYOC-K8s." | Both pass and it still never deploys — the instance namespace is never created, with no error. Validation cannot catch this. |
 | "I remember the field name / that ctl flag exists." | Grep the reference files; confirm fields with `omctl docs compose-spec "<tag>"` or `omctl docs json-schema <type>`, and flags with `--help`. |
 | "The build rejected an extension I'm sure exists." | Run `omctl docs compose-spec` and match the exact spelling — the platform's error text points there for a reason. |
 | "Air-gapped needs an always-on agent phoning home." | No. Air-gapped is a self-contained *installer* artifact — no live control-plane link (`onPremDeployment`). |
@@ -388,7 +418,11 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
   operational flows for hosted / BYOC (BYO-VPC, PrivateLink) / BYOC-K8s /
   air-gapped, plus customer-account onboarding, tenancy, and the ISV-phrasing
   FAQ. Read this for **every** onboarding path.
-- **`BYOC_K8S_REFERENCE.md`** — BYOC-K8s depth: trust/egress model and the
+- **`BYOC_K8S_REFERENCE.md`** — BYOC-K8s depth. **ServicePlanSpec-only: a compose
+  spec builds but never deploys on `byoc-onprem`.** Covers **TLS** (the cell
+  auto-provisions a publicly-trusted per-instance certificate — public HTTPS is
+  one `tls:` block), **rollouts on small clusters** (the single-replica
+  `maxSurge`/`maxUnavailable` deadlock), the trust/egress model and the
   customer allowlist, target-cluster prerequisites, the `account customer create
   --cluster-name` install-kit onboarding flow, `--cloud-provider byoc-onprem
   --region on-prem`, endpoints without a cloud LB, storage, native logs,
