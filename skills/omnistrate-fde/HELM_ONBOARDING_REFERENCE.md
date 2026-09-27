@@ -1017,6 +1017,105 @@ Rules:
 
 ## Exposing endpoints
 
+### Read this first: nothing in the spec creates DNS or routing for a Helm plan
+
+`endpointConfiguration` is **metadata only**: it tells the portal and API what
+to show and which host to health-check. For a Helm plan, **the chart itself must
+create an object that `external-dns` turns into a DNS record**, or every
+endpoint stays UNHEALTHY and the instance sits in `DEPLOYING` forever, even though
+every pod is `Running` and the Helm release is green. There is no error in any
+log.
+
+**`loadBalancers.https` did not help here.** One observed case (hosted AWS cell,
+2026-09):
+- The Helm plan declared `loadBalancers.https` entries with the correct
+  `targetKubernetesServiceName`, but no Ingress, LoadBalancer Service or DNS
+  record appeared in the instance namespace.
+- Compose-based instances on the same cell do get Omnistrate-generated
+  `<lb-name>-tls-proxy` Ingresses.
+- Don't assume that carries over to Helm. Check with
+  `kubectl get ingress,svc -n <instance-id>` after the first deploy, and if
+  nothing is there, create the routing in the chart as below.
+
+Checklist for every PUBLIC endpoint of a Helm plan:
+
+1. **Find out what the cell's external-dns watches** (read-only, via
+   `omctl deployment-cell update-kubeconfig <cell> --kubeconfig /tmp/cell.kc`):
+   ```bash
+   kubectl --kubeconfig /tmp/cell.kc get deploy -n external-dns-ns external-dns \
+     -o jsonpath='{.spec.template.spec.containers[0].args}'
+   ```
+   Hosted AWS cells run `--source=service --source=ingress`,
+   `--domain-filter=<cell domain>` and no `--publish-internal-services`.
+   - An **Ingress host** or a **`type: LoadBalancer` Service with the
+     `hostname` annotation** produces a public record.
+   - A ClusterIP Service only gets a record through `internal-hostname`.
+   - A ClusterIP Service carrying the plain `hostname` annotation is silently
+     skipped.
+2. **Give every endpoint its own hostname.** `$sys.network.externalClusterEndpoint`
+   resolves to one host per resource, `r-<resourceId>.instance-<id>.<cell domain>`.
+   Two endpoints that both use it bare collide: both show the same host and
+   neither is healthy. Derive the others with a prefix.
+3. **Keep each hostname one label deep under `instance-<id>`.** On hosted AWS
+   cells Omnistrate issues a cert-manager `Certificate` named `google-public-ca`
+   in the instance namespace, with Secret `google-public-ca-tls`. Its
+   `dnsNames` are the **single-level wildcard** `*.instance-<id>.<cell domain>`.
+   - `n8n-r-abc.instance-<id>…` is covered.
+   - `n8n.r-abc.instance-<id>…` is two labels deep, so TLS fails.
+
+   Check with:
+   `kubectl -n <instance-id> get certificate google-public-ca -o jsonpath='{.spec.dnsNames}'`.
+4. **Put HTTPS on the cell's nginx Ingress with that secret.** This is the pattern
+   the platform's own generated Ingresses use on the same cell:
+   ```yaml
+   apiVersion: networking.k8s.io/v1
+   kind: Ingress
+   metadata:
+     name: {{ .Release.Name }}-api
+     annotations:
+       nginx.org/proxy-read-timeout: "300s"
+       nginx.org/proxy-send-timeout: "300s"
+       nginx.org/client-max-body-size: "0"
+   spec:
+     ingressClassName: nginx
+     tls:
+       - hosts: [{{ .Values.publicEndpoint | quote }}]
+         secretName: google-public-ca-tls          # issued by Omnistrate per instance
+     rules:
+       - host: {{ .Values.publicEndpoint | quote }}
+         http:
+           paths:
+             - path: /
+               pathType: Prefix
+               backend:
+                 service:
+                   name: my-api                    # the chart's ClusterIP Service
+                   port: { number: 8080 }
+   ```
+   external-dns creates the record from `spec.rules[].host`, so the Service can
+   stay ClusterIP.
+5. **Build derived hostnames in the chart, not with `{{ }}` in `chartValues`.**
+   Pass the bare value once (`publicEndpoint: $sys.network.externalClusterEndpoint`)
+   and derive the rest in templates, e.g. `{{ printf "admin-%s" .Values.publicEndpoint }}`.
+   The `{{ }}` concatenation form is documented for `endpointConfiguration.host`;
+   use it there so the declared host matches what the chart renders:
+   ```yaml
+   endpointConfiguration:
+     api:   { host: "$sys.network.externalClusterEndpoint",         ports: [443], primary: true,  networkingType: PUBLIC }
+     admin: { host: "admin-{{ $sys.network.externalClusterEndpoint }}", ports: [443], primary: false, networkingType: PUBLIC }
+   ```
+6. **Point apps that build their own URLs** (OAuth issuers, editor base URLs,
+   webhook URLs shown to users) at the public `https://<host>`. In-cluster
+   callbacks can keep using the ClusterIP Service DNS name.
+7. **Verify after deploy:**
+   ```bash
+   omctl instance describe <id> -o json | jq '.. | objects | select(has("additionalEndpoints")) | .additionalEndpoints'
+   kubectl --kubeconfig /tmp/cell.kc -n <id> get ingress,svc,certificate
+   kubectl --kubeconfig /tmp/cell.kc -n external-dns-ns logs deploy/external-dns --tail=50 | grep <id>
+   ```
+   Endpoints turn HEALTHY and the instance leaves `DEPLOYING` once the records
+   exist. No redeploy is needed if you fix it by upgrading the chart.
+
 ### LoadBalancer service with external-dns (per-instance hostname)
 
 In `chartValues`, set a LoadBalancer annotation pointing to `$sys.network.externalClusterEndpoint` (bare, no `{{ }}`):
@@ -1091,6 +1190,12 @@ should never be externally reachable. `endpointConfiguration` then surfaces the
 customer-relevant subset with per-endpoint `networkingType`.
 
 ### Plan-level L7 HTTPS load balancer
+
+> **Verify it actually materialises before relying on it for a Helm plan.** In
+> one observed case the block below produced no Ingress or DNS record, and the
+> chart-created Ingress in "Read this first" above was what made the endpoints
+> healthy. If you keep this block, check `kubectl get ingress -n <instance-id>`
+> after the first deploy.
 
 Use `loadBalancers.https` with `targetKubernetesServiceName` pinned to the **exact name** of the
 Kubernetes Service created by the chart. Omitting it causes Omnistrate to synthesize a backend
@@ -1439,3 +1544,6 @@ coverage — pricing dimensions, Stripe vs metering export, exporters — is in
 | `chartValues` and `layeredChartValues` both set | Build validation error | They are mutually exclusive; choose one per service |
 | `authProvider` set for private Amazon ECR OCI repo | ECR credential resolution may fail or conflict | Omit `authProvider` for ECR OCI repos; Omnistrate resolves ECR credentials via IAM |
 | `artifactRelativePath` combined with `chartRepoName`/`chartRepoURL` | Ambiguous artifact source; build error | Use one or the other, never both |
+| Helm plan relies on `endpointConfiguration` / `loadBalancers.https` alone for a PUBLIC endpoint | Pods Running, release green, endpoints UNHEALTHY, instance stuck in `DEPLOYING` with no error | Have the chart create the DNS-producing object: an nginx Ingress (TLS secret `google-public-ca-tls`) or a `type: LoadBalancer` Service with the `hostname` annotation (see "Read this first" under Exposing endpoints) |
+| Two endpoints both use bare `$sys.network.externalClusterEndpoint` | Same host for both, neither healthy | One endpoint per hostname; derive the others with a single-label prefix (`admin-{{ $sys.network.externalClusterEndpoint }}`) |
+| Derived hostname nested as `name.<externalClusterEndpoint>` | TLS failure: the per-instance cert is the single-level wildcard `*.instance-<id>.<cell domain>` | Use a dash prefix (`name-<endpoint>`) so the host stays one label under `instance-<id>` |

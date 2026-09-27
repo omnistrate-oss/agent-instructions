@@ -623,6 +623,12 @@ services:
 
 ### L7 HTTPS LB onto a chart-created Service (KubeAI pattern)
 
+> Confirm with `kubectl get ingress,svc -n <instance-id>` that this produced an
+> Ingress or DNS record. In one observed Helm-plan case it produced neither,
+> and a chart-created nginx Ingress using the per-instance
+> `google-public-ca-tls` secret was needed. See the FDE skill's
+> `HELM_ONBOARDING_REFERENCE.md` → "Exposing endpoints" → "Read this first".
+
 ```yaml
 loadBalancers:
   https:

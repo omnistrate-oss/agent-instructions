@@ -221,6 +221,20 @@ The customer owns the cluster, nodes, storage, routing, and endpoint exposure; O
   1. **The external-dns amenity is not installed on the cell** (`kubectl get ns external-dns-ns`). A trimmed `byoc-onprem` deployment-cell template can omit it, and then no endpoint on that cell can ever go healthy. Removals cannot be undone on a live cell — the cell must be re-onboarded with External DNS in the template.
   2. **The Service is missing the annotation.** Fix in the **spec**, not by hand: a ClusterIP Service needs `external-dns.alpha.kubernetes.io/internal-hostname: $sys.network.internalClusterEndpoint`. The plain `hostname` annotation is skipped for ClusterIP Services (external-dns runs `--source=service` without `--publish-internal-services`).
 
+  3. **Nothing in the chart produces a record at all.** The Helm plan relied on
+     `endpointConfiguration` or `loadBalancers.https` alone. Neither creates an
+     Ingress or DNS record for chart-created Services, so there's nothing for
+     external-dns to publish (`kubectl get ingress -n <instance-id>` is empty).
+     Related:
+     - **Two endpoints on the same host.** Both use bare
+       `$sys.network.externalClusterEndpoint`, so `additionalEndpoints` show
+       the same host and neither goes healthy.
+     - **Hostname nested one level too deep.** `name.<endpoint>` falls outside
+       the per-instance wildcard cert `*.instance-<id>.<cell domain>`.
+
+     Fix it in the chart and spec per the FDE skill's
+     `HELM_ONBOARDING_REFERENCE.md` → "Exposing endpoints" → "Read this first".
+
   Either way the instance recovers on its own once the record appears — no redeploy needed. See the FDE skill's `BYOC_K8S_REFERENCE.md` §Endpoints and §Trimming the amenity footprint.
 - **Confirm what actually landed in the cluster** — the **instance ID is the namespace**, so you can compare control-plane state against cluster state directly:
   ```bash
