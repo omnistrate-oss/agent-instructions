@@ -206,7 +206,7 @@ helmChartConfiguration:
 ### Variable forms — bare vs `{{ }}` (CRITICAL)
 
 **In `chartValues`**, `$var.*` and `$sys.*` appear **bare** (no `{{ }}`).
-**Concatenation and `layeredChartValues` scopes** require `{{ }}`.
+**Concatenation and `layeredChartValues` scopes** require `{{ }}`. Concatenation is supported in `chartValues` as well as `endpointConfiguration`, e.g. `"admin-{{ $sys.network.externalClusterEndpoint }}"`.
 
 This is exactly how they must appear:
 
@@ -229,8 +229,10 @@ chartValues:
                 operator: In
                 values:
                 - $sys.deploymentCell.region    # bare $sys
+  admin:
+    publicHost: "admin-{{ $sys.network.externalClusterEndpoint }}"   # concatenation — {{ }} is supported in chartValues too
 
-# {{ }} needed for concatenation or scope keys in layeredChartValues
+# {{ }} needed for concatenation (in chartValues or endpointConfiguration) or scope keys in layeredChartValues
 endpointConfiguration:
   admin:
     host: admin-{{ $sys.network.internalClusterEndpoint }}   # concatenation — needs {{ }}
@@ -1079,10 +1081,10 @@ Checklist for every PUBLIC endpoint of a Helm plan:
    spec:
      ingressClassName: nginx
      tls:
-       - hosts: [{{ .Values.publicEndpoint | quote }}]
+       - hosts: [{{ .Values.api.publicHost | quote }}]
          secretName: google-public-ca-tls          # issued by Omnistrate per instance
      rules:
-       - host: {{ .Values.publicEndpoint | quote }}
+       - host: {{ .Values.api.publicHost | quote }}
          http:
            paths:
              - path: /
@@ -1094,14 +1096,16 @@ Checklist for every PUBLIC endpoint of a Helm plan:
    ```
    external-dns creates the record from `spec.rules[].host`, so the Service can
    stay ClusterIP.
-5. **Build derived hostnames in the chart, not with `{{ }}` in `chartValues`.**
-   Pass the bare value once (`publicEndpoint: $sys.network.externalClusterEndpoint`)
-   and derive the rest in templates, e.g. `{{ printf "admin-%s" .Values.publicEndpoint }}`.
-   The `{{ }}` concatenation form is documented for `endpointConfiguration.host`;
-   use it there so the declared host matches what the chart renders:
+5. **Derive the extra hostnames with `{{ }}` concatenation, in `chartValues`
+   and `endpointConfiguration` alike.** Omnistrate supports this form in
+   `chartValues` for exactly this purpose, so the chart just consumes plain
+   host values:
    ```yaml
-   endpointConfiguration:
-     api:   { host: "$sys.network.externalClusterEndpoint",         ports: [443], primary: true,  networkingType: PUBLIC }
+   chartValues:
+     api:   { publicHost: $sys.network.externalClusterEndpoint }                # bare
+     admin: { publicHost: "admin-{{ $sys.network.externalClusterEndpoint }}" }  # concatenation
+   endpointConfiguration:               # must declare the same hosts the chart renders
+     api:   { host: "$sys.network.externalClusterEndpoint",           ports: [443], primary: true,  networkingType: PUBLIC }
      admin: { host: "admin-{{ $sys.network.externalClusterEndpoint }}", ports: [443], primary: false, networkingType: PUBLIC }
    ```
 6. **Point apps that build their own URLs** (OAuth issuers, editor base URLs,
