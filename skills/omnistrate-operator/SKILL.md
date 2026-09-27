@@ -246,7 +246,10 @@ then deploy instances with `--customer-account-id`).
 6. **The param that names the CR (`metadata.name`) must be
    `modifiable: false`** — otherwise modify re-applies under a new name and
    orphans the old CR. Prefer `{{ $sys.instanceId }}` as the CR name.
-7. **`defaultValue` is always a quoted string**, even for Float64.
+7. **`defaultValue` is always a quoted string**, even for Float64. **Never
+   name a parameter `replicaCount`:** the platform overrides a parameter with
+   that key during `start` (observed rendering as 1), so a start re-creates a
+   1-member cluster. Use a product-specific key (`memberCount`, `brokerCount`).
 8. **Only documented variables exist**: `$sys.*`, `$var.*`, `$func.*` — the
    real vocabulary is tabled in the reference (`$sys.instanceId`,
    `$sys.namespace`, `$sys.deploymentCell.region`, ...). `$sys.id` does not
@@ -313,4 +316,13 @@ Public sources to verify against:
 - Every declared lifecycle verb exercised at least once against a live
   instance (modify, stop→start, delete leaves nothing orphaned in the
   namespace)
+- For data services, **data verified around every verb**, not just instance
+  status: load a known dataset and record its checksum, run an external writer
+  that logs every client-acknowledged write, and after each operation re-read
+  the dataset (checksum unchanged) and check that every acknowledged write is
+  present. Verbs that legitimately lose data (e.g. backup-then-release stop)
+  must have that window measured and documented.
+- Anything exposed to the internet is **port-scanned from outside** after
+  create: only the intended ports answer (repeat each probe several times —
+  a leak through some nodes answers only part of the time)
 - Dev and prod specs differ only in accounts + metering bucket

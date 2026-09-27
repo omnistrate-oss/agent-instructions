@@ -455,6 +455,37 @@ consume `{{ $sys.restore.metadata.destination }}` in the restore CR's
 backup-source field. Name the backup CR/Job `{{ $sys.snapshot.id }}`
 so deleteBackup can address it later.
 
+**Job-computed values (no backup CR to read).** `outputParameters` can only
+read `$tasks.<task>.resource.status.*`, and a Job's status has no room for
+custom values. When the backup is a Job (e.g. it drives the operator's backup
+tool and learns a snapshot tag), install a tiny CRD as a cell amenity whose
+`status` carries the value, have the Job write it (`kubectl patch
+--subresource=status`), and gate a follow-up apply task on it:
+
+```yaml
+# amenity: a namespaced CRD with a status subresource
+#   spec.versions[0].subresources.status: {}
+#   status: {ready: boolean, snapshotTag: string, location: string}
+- name: apply-snapshot-record
+  resource:
+    action: apply
+    successCondition: status.ready == true          # the Job sets it
+    manifest: |
+      apiVersion: example.omnistrate.io/v1
+      kind: SnapshotRecord
+      metadata:
+        name: "{{inputs.parameters.snapshotId}}"
+        namespace: "{{inputs.parameters.namespace}}"
+      spec: {}
+# backup workflow:
+outputParameters:
+  snapshotTag: $tasks.recordsnapshot.resource.status.snapshotTag
+```
+
+The Job's ServiceAccount needs `get/create/patch` on the CRD and `patch` on
+its `/status` subresource. Restore then reads
+`{{ $sys.restore.metadata.snapshotTag }}`.
+
 ### Job-based verbs (operators without backup/restore CRs)
 
 When the operator has no Backup/Restore CRs, or triggers backups via
@@ -475,12 +506,42 @@ CronJobs, implement the verbs as batch/v1 Jobs gated on
   in place: delete the Job and recreate it with the SAME NAME and a working
   template — the workflow's gate watches the name and passes when
   `status.succeeded == 1`.
+- **Anything you set on the CR outside the spec is undone by the next
+  `modify`,** which re-applies the full CR from the spec. A restart implemented
+  by patching a field such as `spec.forceRedeploymentReason` gets silently
+  reverted, and then re-triggers on later applies. Implement restart as a Job
+  that deletes the operator's pods one at a time (waiting for each to be
+  ready), not as a CR patch.
 - **A failed deleteBackup wedges instance deletion**: the delete flow runs
   retention cleanup first, so a broken deleteBackup Job blocks the whole
   delete (workflow FAILED). Recovery: fix the underlying cause (e.g. a
   repository "expire" needs the repo's metadata to still exist), retry
   `instance delete` (allowed on FAILED), and if the workflow's own Job
   manifest is broken, replace the Job in place as above.
+
+### modify: instance-type changes with node-local volumes
+
+When the instance-type parameter changes, Omnistrate adds a node pool of the
+new type, and the operator rolls its pods onto it. Pods whose PersistentVolume
+is **node-local** (local NVMe / local SSD, `WaitForFirstConsumer` PVs bound to
+one node) cannot follow: the re-created pod is pinned by its PV's node affinity
+to a node of the old type. The modify workflow must therefore **replace** such
+members (fresh volume on a new node, data re-streamed from replicas), one at a
+time, using the operator's own replace mechanism. A reconcile Job that waits
+for the rollout handles two cases:
+
+- **Stranded:** the pod is `Pending` and its PV points at a node that is gone,
+  cordoned, or not of the desired type. Trigger the operator's replace for that
+  member.
+- **Left behind on a healthy node of the wrong type:** after an interrupted
+  change, a pod can start fine on an old-type node, so it never goes `Pending`.
+  Once every member is ready, cordon that node and delete the pod; it goes
+  `Pending` and the stranded path moves it.
+
+Pass the desired type into the Job (`$var.<instanceTypeParam>`) and check
+`node.kubernetes.io/instance-type` of each member's node. The Job only
+finishes when every member is ready **and** on the desired type. This needs
+2+ members and replication; refuse on a 1-member cluster.
 
 ### customWorkflows (provider-defined verbs)
 
@@ -536,6 +597,16 @@ Rules:
   create. Declaring the same key on both services yields one shared value
   (useful when the operator service's chartValues need `$var` from the CR
   service's create call).
+- **Never use the key `replicaCount`.** The platform overrides a parameter
+  with that key during `start` (observed rendering as 1). Use a
+  product-specific key such as `memberCount`.
+- **Adding a new `required` parameter breaks upgrades of existing
+  instances.** The upgrade's modify workflow fails to render with
+  `unresolved workflow input parameters: [$var.<key>]`, because instances
+  created on an older version have no value for it. A follow-up
+  `omctl instance modify <id> --param '{"<key>":"<value>"}'` on the new
+  version is accepted and completes the rollout. Tell existing customers to
+  set the parameter when they upgrade, or give it a safe `defaultValue`.
 - Optional nested YAML (args lists, env maps, nodeSelector) can't be built
   conditionally in the manifest — pass a pre-composed, **pre-indented** block
   string param placed at the target indent column; empty string collapses the
@@ -658,6 +729,55 @@ endpointConfiguration:
     primary: false
     networkingType: PUBLIC
 ```
+
+> **A prefixed host MUST use `{{ }}`.** The bare form
+> `$sys.network.externalClusterEndpoint` is interpolated only when it is the
+> whole value; `grafana.$sys.network.externalClusterEndpoint` is stored and
+> shown literally. The build passes, `list-endpoints` shows the literal text as
+> `UNHEALTHY`, and a **create** then hangs indefinitely on Omnistrate's own
+> "Monitoring" step (it probes the unresolvable host; observed for 40+ min
+> with no events). Modify/upgrade workflows don't run that step, so the bug
+> shows up only on fresh creates.
+
+### Per-member LoadBalancer Services created by the operator
+
+Some data services need every member reachable from outside, because
+token- or partition-aware drivers connect to each member directly (ScyllaDB /
+Cassandra, Kafka brokers). One shared L4 LB cannot serve that. Operators
+usually support it natively: a LoadBalancer Service per member, and members
+advertising the LB address to clients (ScyllaDB Operator
+`exposeOptions.nodeService.type: LoadBalancer` +
+`broadcastOptions.clients: ServiceLoadBalancerIngress`). Omnistrate does not
+manage these LBs, so the spec must handle what it normally would:
+
+- **DNS:** annotate each member Service with
+  `external-dns.alpha.kubernetes.io/hostname` inside the instance's zone
+  (e.g. `node-<n>.<zone>`, and the published `endpointConfiguration` host on
+  member 0 as the contact point). The zone is
+  `$sys.network.externalClusterEndpoint` minus its first label. Annotate from
+  an ops Job after the Services exist; see the FDE skill's
+  `HELM_ONBOARDING_REFERENCE.md` → "Exposing endpoints" for how the cell's
+  external-dns picks records up.
+- **Only the client ports reachable.** The operator's member Service
+  typically carries *every* port (inter-node, JMX, metrics, agent APIs), and
+  the cloud LB exposes all of them. Close the rest per cloud:
+
+| | AWS (NLB, AWS Load Balancer Controller) | GCP (GKE external passthrough LB) |
+|---|---|---|
+| Restrict ports | A security group from a Terraform resource in the plan, allowing only client ports from `0.0.0.0/0`, attached with `service.beta.kubernetes.io/aws-load-balancer-security-groups`; also list only those ports in `network.ports` (the node security group) | GKE's `k8s2-*` firewall rules open every Service port to `0.0.0.0/0` at priority 1000. Add, from a Terraform resource, an allow rule for the cell's own ranges (priority 900) and a deny rule from `0.0.0.0/0` (priority 950) on the internal ports, targeting the plan's node tag `product-tier-<lowercased planId>-id` |
+| Required Service settings | `loadBalancerClass: service.k8s.aws/nlb` in the operator's Service template: the controller sets it and it is immutable, so a mismatch leaves the CR `Degraded` forever | **`externalTrafficPolicy: Local`.** With `Cluster`, the LB also delivers to cell system nodes, which lack the plan tag, so the deny rule doesn't apply there and kube-proxy forwards the internal ports to the member. Observed: an internal port answering from the internet about half the time |
+| Other | `load_balancing.cross_zone.enabled=true` (members may advertise one per-AZ address); `preserve_client_ip.enabled=false` if in-cell components call members through their LB (a preserved-IP NLB can't hairpin) | `cloud.google.com/l4-rbs: enabled` for backend-service LBs |
+
+Terraform identity permissions: AWS needs EC2 security-group create/describe/
+authorize/revoke/delete; GCP needs `roles/compute.securityAdmin` and
+`roles/compute.networkViewer` (otherwise the apply fails on
+`compute.networks.get`). Useful Terraform variables:
+`$sys.deploymentCell.cloudProviderNetworkID`, `$sys.deploymentCell.cidrRange`,
+`$sys.deploymentCell.gcp.projectID`. These Service settings are usually
+immutable in the operator (`exposeOptions`), so a wrong value means
+re-creating the instance. **Verify from outside the VPC after create** by
+probing every port of every member several times; only the client ports may
+connect.
 
 ## 8. Compute and node placement
 
@@ -805,6 +925,22 @@ additionalPodAntiAffinity:               # CNPG spelling; adapt per operator
         topologyKey: "{{inputs.parameters.topologyKey}}"
 ```
 
+**The operator's auxiliary pods inherit the CR's placement.** Operators
+often copy the member placement into per-member Jobs (cleanup, repair,
+bootstrap). A hard pod anti-affinity meant as "one member per node" then also
+repels those Jobs, and each one forces an extra node from the pool. Scope the
+rule to the member pod type with `matchLabelKeys` on the operator's pod-type
+label:
+
+```yaml
+podAntiAffinity:
+  requiredDuringSchedulingIgnoredDuringExecution:
+    - labelSelector:
+        matchLabels: {scylla/cluster: "{{inputs.parameters.instanceId}}"}
+      matchLabelKeys: [scylla-operator.scylladb.com/pod-type]   # adapt per operator
+      topologyKey: kubernetes.io/hostname
+```
+
 For HA topologies expose placement knobs as params (topologyKey zone vs
 hostname, anti-affinity preferred vs required, PDB on/off) so single-node dev
 cells can still schedule.
@@ -876,6 +1012,11 @@ systematic version.
 | HA replica pod stuck ContainerCreating with `Multi-Attach error` | The operator creates a cluster-SHARED PVC (e.g. a common archive/backup volume) that every replica mounts — needs an RWX StorageClass, which cells don't ship by default. Either configure an RWX class (EFS/Filestore) as cell infra, or reconfigure the operator to use object storage instead and omit the shared volume (e.g. drop shared archive/backup volumes in favor of an object-storage backup repository). Check the operator's per-replica volume topology BEFORE enabling HA. |
 | create hangs forever at successCondition | Condition references a status field the operator never writes at this state (e.g. waiting on replicas with scale-to-zero). Check a live CR's actual status; drop or change the condition. |
 | CR is ready on-cluster but the task never completes | Unsupported condition syntax: conditions[] array queries (`#(type=="Ready")`) and dotted string literals (`== 1.1.0`) never match. Use a flat path with a numeric or dot-free string value (§3). |
+| Upgrade fails: `unresolved workflow input parameters: [$var.<key>]` | The new version added a `required` parameter that the instance never had. Run `omctl instance modify <id> --param '{"<key>":"..."}'` on the new version (§5). |
+| Endpoint shows a literal `…$sys.network.externalClusterEndpoint` and is `UNHEALTHY`; create stuck on the "Monitoring" step | Prefixed endpoint host without `{{ }}` (§7). Fix the host, rebuild, and re-create the instance. |
+| Delete task fails: `unsupported delete generic CRD flag` | Only `--ignore-not-found=true` is accepted in a delete task's `flags` (no `--cascade`, `--wait`, ...). |
+| CR `Degraded`: `spec.loadBalancerClass: Invalid value: null: may not change once set` (AWS) | The AWS Load Balancer Controller set `service.k8s.aws/nlb` on the operator's Service. Declare the same class in the CR's Service template (§7 per-member LBs); immutable, so re-create the instance. |
+| Internal ports of a per-member LB reachable from the internet (GCP), intermittently | `externalTrafficPolicy: Cluster` lets the LB land on untagged system nodes that your firewall rules don't cover. Use `Local` (§7 per-member LBs); immutable, so re-create the instance. |
 | stop/backup rejected with "conflicting operation is already in progress" | Another workflow on the instance still holds the lock — including a backup workflow whose steps all succeeded but whose parent record stays RUNNING (observed platform behavior). List workflows for the instance and wait or escalate; retrying immediately won't help. |
 
 ---

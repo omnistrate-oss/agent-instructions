@@ -98,6 +98,15 @@ omctl deployment-cell update-kubeconfig <cell-id> [flags]
 - `--role <role>`: Access role (default: cluster-reader, use cluster-admin for helm)
 - `--customer-email <email>`: Required when the cell belongs to a customer (BYOC / BYOC-K8s)
 
+### deployment-cell delete
+```bash
+omctl deployment-cell delete --id <cell-id> --customer-email <email> --force
+```
+**Purpose**: Delete a deployment cell (its Kubernetes cluster and node pools) once no instances run on it — check with `omctl deployment-cell list -o json` (`current_number_of_deployments`) and the cell's `instance-*` namespaces first.
+**Key Flags**:
+- `--customer-email`: always required by the CLI. For a customer's cell pass that customer's email; for a **provider-hosted cell** (described as "Host cluster for service provider …") pass an empty string, `--customer-email ""` — any real email returns `deployment cell … not found`.
+- `--force`: skip the confirmation prompt.
+
 ## `instance debug` Output Anatomy
 
 `omnistrate-ctl instance debug <instance-id>` shows the instance resource dependency graph; selecting a resource exposes different surfaces depending on its type. Use this table to know exactly which surface holds the evidence for a given failure.
@@ -411,6 +420,7 @@ Start
 - Non-critical background jobs failing (Helm)
 
 ### "FAILED" Status
+- A workflow on the instance was terminated (`omctl workflow terminate`): the instance is marked FAILED even when the workload is healthy. A no-op `omctl instance modify <id> --param '{"<existing-key>":"<same value>"}'` re-runs the modify workflow and returns it to RUNNING
 - VM allocation constraint failures
 - PersistentVolumeClaim provisioning issues
 - Node affinity/taint mismatches
