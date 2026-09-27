@@ -763,7 +763,7 @@ Key fields:
 | `type: kustomize` | Yes | Declares this service as a Kustomize deployment |
 | `kustomizeConfiguration.kustomizePath` | Yes | Directory inside the repo containing `kustomization.yaml` |
 | `kustomizeConfiguration.gitConfiguration` | Yes | Same sub-fields as Terraform: `repositoryUrl`, `reference`, optional `accessToken` |
-| `compute.instanceTypes` | Yes | One entry per cloud provider; use `name:` for a fixed type or `apiParam:` for customer-selectable |
+| `compute.instanceTypes` | Yes | **Every entry provisions its own node group** — including multiple entries sharing one `cloudProvider`, which is how a resource backs several machine sizes. Use `name:` for a fixed type or `apiParam:` for customer-selectable. (Compose is the opposite: first match per cloud wins.) See [`HELM_ONBOARDING_REFERENCE.md` §Compute: instance types and node groups](HELM_ONBOARDING_REFERENCE.md#compute-instance-types-and-node-groups). |
 | `network.ports` | No | Ports to expose; required if service needs inbound connectivity |
 
 ---

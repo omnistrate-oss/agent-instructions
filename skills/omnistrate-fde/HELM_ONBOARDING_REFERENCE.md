@@ -737,6 +737,106 @@ chartValues:
 
 ---
 
+## Compute: instance types and node groups
+
+### One resource can back several node groups
+
+In a **ServicePlanSpec**, `compute.instanceTypes` is a real list, not a per-cloud lookup
+table: **every entry provisions its own node group**, including multiple entries that
+share the same `cloudProvider`. A resource with two `cloudProvider: aws` entries gets two
+AWS node groups.
+
+> **Do not carry the compose rule over.** In a **compose** spec, `x-omnistrate-compute.instanceTypes`
+> is a per-cloud override table — the first entry matching the deployment's cloud provider wins
+> and additional same-cloud entries are ignored. **ServicePlanSpec is the opposite.** Assuming
+> compose semantics here is how agents end up inventing a second resource to get a second node
+> group. See `COMPOSE_ONBOARDING_REFERENCE.md` §Compute and Storage Configuration.
+
+This is the supported way to give one workload a choice of machine sizes — e.g. an
+always-on small pool plus a scale-from-zero large pool that Jobs can land on either way:
+
+```yaml
+services:
+  - name: Sync Jobs
+    compute:
+      instanceTypes:
+        - name: m7i.2xlarge                 # node group 1 — always-on
+          cloudProvider: aws
+          configurationOverrides:
+            labels:
+              acme.io/pool-size: small
+            WarmPoolConfiguration:
+              minimumNodesInPool: 1
+        - name: m7i.4xlarge                 # node group 2 — scale-from-zero
+          cloudProvider: aws
+          configurationOverrides:
+            labels:
+              acme.io/pool-size: large
+```
+
+**Pods are eligible for every node group of their resource, automatically.** The injected
+node affinity keys on `omnistrate.com/resource: <resourceID>` — per-*resource*, not
+per-node-group — so all of a resource's node groups match. Do **not** disable injection
+to achieve "either pool"; there is no per-instance-type pin to defeat.
+
+To bias placement toward the cheaper pool, add a *preferred* term only — injection merges
+rather than replaces, so this composes with the injected rules and needs no
+`chartAffinityControl`:
+
+```yaml
+chartValues:
+  job:
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+                - key: acme.io/pool-size
+                  operator: In
+                  values: [small]
+```
+
+That controls *placement* among existing nodes. Which node group the cell's autoscaler
+expands when none has room is not a spec-level choice — do not promise cluster-autoscaler
+expander behaviour.
+
+### configurationOverrides
+
+Per-instance-type, node-level settings. The `plan-spec` prose table documents only
+`OsFamily`, `acceleratorConfiguration`, and `GpuClusterID`, but the authoritative schema
+(`omctl docs json-schema service-plan`, `$defs.ConfigurationOverride`) carries more. Verified
+fields, in their **exact schema casing** — `additionalProperties: false` means wrong casing
+fails `omctl docs validate`:
+
+| Field | Casing | Purpose |
+|-------|--------|---------|
+| `labels` | lowerCamel | Node labels stamped on this instance type's node group |
+| `taints` | lowerCamel | Node taints (`key`/`value`/`effect`); needs matching tolerations in `chartValues` |
+| `acceleratorConfiguration` | lowerCamel | GCP N1 + Tesla GPU attachment (`type`, `count`) |
+| `migProfile`, `timeSlicingReplicas` | lowerCamel | GPU partitioning / sharing |
+| `WarmPoolConfiguration` | **UpperCamel** | `minimumNodesInPool` — always-on node floor; omit for scale-from-zero |
+| `OsFamily` | **UpperCamel** | `amazonlinux` for Amazon Linux 2023 on AWS |
+| `RootVolumeSizeGi`, `RootVolumeSizeGiAPIParam` | **UpperCamel** | Per-instance-type root volume override |
+| `InstanceLifecycleType` | **UpperCamel** | Node capacity type (pools report `ON_DEMAND` / `SPOT`) |
+| `LocalNvmeSsdBlockConfig`, `EphemeralStorageLocalSsdConfig` | **UpperCamel** | Local SSD configuration |
+| `GpuClusterID` | **UpperCamel** | Nebius-only GPU cluster placement |
+
+Two operational consequences, both from the platform docs:
+
+- **Changing `configurationOverrides` creates new node pools** and the old ones are not
+  deleted immediately. Check EKS managed-node-group quota before rolling, then clean up with
+  `omnistrate-ctl deployment-cell list-nodepools --id <cell-id>` /
+  `deployment-cell delete-nodepool`.
+- **CUSTOM_TENANCY plans (Helm/operator/Kustomize) do not get automatic node-pool
+  lifecycle management** — that is only for compose-imported `OMNISTRATE_*_TENANCY` plans.
+  Scale-down and stale-pool cleanup are manual via those same commands.
+
+Confirm labels/taints actually landed on the first deploy — `deployment-cell
+update-kubeconfig` then `kubectl get nodes --show-labels`.
+
+---
+
 ## Pod placement (CRITICAL)
 
 **Chart-created pods are NOT auto-placed by Omnistrate.** Omnistrate schedules only
@@ -770,8 +870,11 @@ helmChartConfiguration:
 Omnistrate merges its injected rules with any existing affinity in your chart values — your
 custom logic is preserved. Injection includes: `omnistrate.com/managed-by` (targets
 Omnistrate-managed nodes), `topology.kubernetes.io/region` (deployment region),
-`omnistrate.com/resource` (per-resource node group), `omnistrate.com/version` (node pool version),
-and `omnistrate.com/schedule-mode: exclusive` pod label.
+`omnistrate.com/resource` (resource identity — carried by **every** node group of the
+resource, so injection spans all of them), `omnistrate.com/version` (node pool version),
+and `omnistrate.com/schedule-mode: exclusive` pod label. Note that injection does **not**
+add a `node.kubernetes.io/instance-type` term, which is why a resource with several
+`instanceTypes` entries schedules across all its node groups out of the box.
 
 ### Option B: Manual affinity (disable injection; full control)
 
@@ -825,11 +928,14 @@ Labels and their purpose:
 |-------|---------|
 | `omnistrate.com/managed-by: omnistrate` | Only Omnistrate-provisioned worker nodes — keeps pods off cell system/control-plane capacity |
 | `topology.kubernetes.io/region` | The deployment cell's region |
-| `node.kubernetes.io/instance-type` | The customer-selected instance type |
-| `omnistrate.com/resource: <resourceID>` | The per-resource node group — separates instances under CUSTOM_TENANCY |
+| `node.kubernetes.io/instance-type` | A single instance type. **Omit this term if the resource declares more than one `instanceTypes` entry** — pinning to one type strands the workload on one of its node groups. Injection itself does not add this term. |
+| `omnistrate.com/resource: <resourceID>` | Resource identity — separates instances under CUSTOM_TENANCY. Carried by **all** node groups of the resource, so it spans multi-instance-type resources. |
 
 > **Tip:** You do NOT need to disable injection to add custom affinity rules.
 > Omnistrate merges; only Omnistrate-specific rules not already present are appended.
+> Prefer adding a `preferredDuringSchedulingIgnoredDuringExecution` term over disabling
+> injection — appended lists merge cleanly, whereas hand-written `required` terms replace
+> placement you probably wanted.
 
 ---
 

@@ -655,7 +655,14 @@ endpointConfiguration:
 
 ## 8. Compute and node placement
 
-Fixed type per cloud, or customer-selectable via a param:
+Fixed type per cloud, or customer-selectable via a param. **Every entry provisions its own
+node group** — including multiple entries sharing one `cloudProvider`, which is how one
+resource backs several machine sizes (e.g. an always-on small pool plus a scale-from-zero
+large pool). This is ServicePlanSpec behaviour; compose is the opposite, where the first
+entry matching the cloud wins and same-cloud duplicates are ignored. Per-node-group settings
+— `labels`, `taints`, `WarmPoolConfiguration.minimumNodesInPool` — go under each entry's
+`configurationOverrides`; see
+[`omnistrate-fde/HELM_ONBOARDING_REFERENCE.md` §Compute: instance types and node groups](../omnistrate-fde/HELM_ONBOARDING_REFERENCE.md#compute-instance-types-and-node-groups).
 
 ```yaml
 compute:
@@ -690,6 +697,13 @@ operator renders MUST carry the affinity below.
 | `region` | `{{ $sys.deploymentCell.region }}` |
 | `instanceType` | `{{ $sys.compute.node.instanceType }}` |
 | `resourceId` | `{{ $sys.deployment.resourceID }}` |
+
+> **Multi-instance-type resources: drop the `instanceType` term.**
+> `$sys.compute.node.instanceType` resolves to a single type, so a `required` match on
+> `node.kubernetes.io/instance-type` strands the workload on one of the resource's node
+> groups. When the resource declares more than one `instanceTypes` entry, omit that key and
+> rely on `omnistrate.com/resource` (`resourceId`), which every node group of the resource
+> carries.
 
 **Step 2 — render this required node affinity** into the CR wherever the
 operator forwards pod placement:
@@ -735,8 +749,8 @@ What each label enforces:
 |---|---|
 | `omnistrate.com/managed-by: omnistrate` | only Omnistrate-provisioned worker nodes — keeps pods off cell system/control-plane capacity |
 | `topology.kubernetes.io/region` | the deployment cell's region |
-| `node.kubernetes.io/instance-type` / `nebius.com/resource-preset` | the paid instance type/preset the customer selected |
-| `omnistrate.com/resource: <resourceID>` | the per-resource node group — this is what separates one instance's nodes from another's under CUSTOM_TENANCY |
+| `node.kubernetes.io/instance-type` / `nebius.com/resource-preset` | the paid instance type/preset the customer selected — **omit when the resource declares several `instanceTypes` entries**, or the workload is stranded on one of its node groups |
+| `omnistrate.com/resource: <resourceID>` | resource identity — what separates one instance's nodes from another's under CUSTOM_TENANCY. Carried by **all** node groups of the resource, so it spans multi-instance-type resources. |
 
 **Where to put it** depends on how the CRD forwards placement to pods — check
 the operator's API: a dedicated affinity block (CNPG `spec.affinity.nodeAffinity`),

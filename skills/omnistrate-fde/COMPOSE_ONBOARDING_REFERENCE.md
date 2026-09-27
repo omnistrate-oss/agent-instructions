@@ -551,6 +551,18 @@ environment:
 
 ## Compute and Storage Configuration
 
+> **`instanceTypes` is a per-cloud override table in compose — one node group.** The entry
+> whose `cloudProvider` matches the deployment wins; **additional entries for the same cloud
+> are ignored.** A compose service always backs exactly one node group, so you cannot give a
+> workload a choice of machine sizes here.
+>
+> **ServicePlanSpec is the opposite:** every `compute.instanceTypes` entry provisions its own
+> node group, same-cloud duplicates included. Never carry this compose rule into a Helm /
+> Terraform / Kustomize / operator spec — see
+> [`HELM_ONBOARDING_REFERENCE.md` §Compute: instance types and node groups](HELM_ONBOARDING_REFERENCE.md#compute-instance-types-and-node-groups).
+> If a compose-based workload genuinely needs two machine sizes, that is a reason to move it
+> to a ServicePlanSpec, not to duplicate the service.
+
 ### Compute - Customer Choice
 ```yaml
 x-omnistrate-compute:
