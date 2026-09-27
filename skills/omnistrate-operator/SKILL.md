@@ -145,6 +145,14 @@ their workflow anatomy, not their install method.
   the chart/operator-created Service name** — omit it and Omnistrate
   synthesizes a backend from the resource key, which never exists
 - Stable client endpoints (writer/reader) → `endpointConfiguration`
+- **Neither `endpointConfiguration` nor `loadBalancers.*` creates DNS for
+  chart/operator-created Services.** Something in the cluster has to produce a
+  record: an Ingress host, a `type: LoadBalancer` Service with the `hostname`
+  annotation, or `internal-hostname` on a ClusterIP Service. Otherwise
+  endpoints stay UNHEALTHY and the instance hangs in `DEPLOYING` with all pods
+  Running. Give each endpoint its own host, one label deep under
+  `instance-<id>`, to match the per-instance wildcard cert. See the FDE skill's
+  `HELM_ONBOARDING_REFERENCE.md` → "Exposing endpoints" → "Read this first".
 
 ## Workflow
 

@@ -385,6 +385,7 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
 
 | Thought | Reality |
 |---|---|
+| "I declared `endpointConfiguration` / `loadBalancers.https`, so the Helm endpoint is exposed." | Neither creates DNS or routing for chart-created Services. The chart must create an Ingress (TLS via the per-instance `google-public-ca-tls` secret) or a LoadBalancer Service with the `hostname` annotation. Otherwise endpoints stay UNHEALTHY and the instance hangs in `DEPLOYING`. Each endpoint gets its own one-label host. See `HELM_ONBOARDING_REFERENCE.md` → "Exposing endpoints" → "Read this first". |
 | "Helm / Terraform / Kustomize isn't supported by this skill." | It is. Use `HELM_ONBOARDING_REFERENCE.md` / `TERRAFORM_KUSTOMIZE_REFERENCE.md`. |
 | "This is an operator, I'll write the workflows here." | Hand off to **omnistrate-operator** — it owns `systemWorkflows`. |
 | "I'll default to `hostedDeployment`." | Ask intake Q2 first. The model is a decision, not a default. |
