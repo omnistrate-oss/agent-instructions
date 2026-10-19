@@ -30,12 +30,17 @@ Use the syntax required by the rendering context:
 
 | Context | Correct reference |
 |---|---|
-| Helm `chartValues`, including Kubernetes manifests embedded as chart values | `$sys.deployment.imagePullSecretName` |
-| Values inside a `layeredChartValues` layer | `$sys.deployment.imagePullSecretName` |
+| Structured Helm `chartValues` maps, lists, and scalar fields | `$sys.deployment.imagePullSecretName` |
+| Structured values inside a `layeredChartValues` layer | `$sys.deployment.imagePullSecretName` |
+| YAML/JSON/TOML text stored inside a Helm string value | `{{ $sys.deployment.imagePullSecretName }}` |
 | Kustomize source YAML/TOML files | `{{ $sys.deployment.imagePullSecretName }}` |
 
 In Helm, only `layeredChartValues.scope` keys use `{{ ... }}`. The values inside
-the selected layer retain the ordinary bare Helm `chartValues` form.
+the selected layer retain the ordinary bare Helm `chartValues` form. A
+Kubernetes manifest represented as structured maps and lists—for example an
+`extraDeploy` list—also uses the bare form. If a chart instead accepts that
+manifest as a literal block string, the parameter is embedded in surrounding
+text and must use `{{ ... }}`.
 
 ## Before writing the plan
 
@@ -92,6 +97,11 @@ helmChartConfiguration:
   chartRepoURL: oci://<PROVIDER_ACCOUNT>.dkr.ecr.<REGION>.amazonaws.com/artifacts/charts
   # authProvider: omit for private ECR
   chartValues:
+    # Bitnami validates its known image registry. This opt-in is required when
+    # deliberately replacing that image with the provider's pinned ECR copy.
+    global:
+      security:
+        allowInsecureImages: true
     image:
       registry: <PROVIDER_ACCOUNT>.dkr.ecr.<REGION>.amazonaws.com
       repository: artifacts/app/redis
