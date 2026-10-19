@@ -150,7 +150,13 @@ configurationPerCloudProvider:
 All three fields (`serviceAccountID`, `publicKeyID`, `privateKeyPEM`) are required for Nebius.
 
 **BYOC custom policy:** for BYOC (customer-account) deployments you must declare the permissions
-your Terraform stack needs so Omnistrate can generate correct customer onboarding scripts:
+your Terraform stack needs so Omnistrate can generate correct customer onboarding scripts.
+The existing `policies.aws` field defines the role's inline policy. Use the additive
+`managedPolicies.aws` array when Terraform needs named customer-managed IAM policies; each entry
+requires `name`, `description`, and a JSON `policy` document. Omnistrate creates each managed policy
+and attaches it to the same per-model Terraform role. No feature gate is required. When both
+`policies.aws` and `managedPolicies.aws` are present, preserve both—do not replace or merge one into
+the other. `managedPolicies` currently supports AWS only.
 
 ```yaml
 features:
@@ -159,9 +165,20 @@ features:
       aws: |
         {
           "Statement": [
-            {"Action": ["rds:*","s3:*"], "Effect": "Allow", "Resource": "*"}
+            {"Action": ["rds:Describe*"], "Effect": "Allow", "Resource": "*"}
           ]
         }
+    managedPolicies:
+      aws:
+        - name: terraform-storage-management
+          description: Allow Terraform to manage application storage
+          policy: |
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {"Action": ["s3:*"], "Effect": "Allow", "Resource": "*"}
+              ]
+            }
     roles:
       gcp:
         - name: roles/cloudsql.admin
