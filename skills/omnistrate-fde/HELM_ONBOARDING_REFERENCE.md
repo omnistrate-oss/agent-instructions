@@ -133,6 +133,11 @@ services:
 
 ### Private Amazon ECR OCI repos
 
+This section covers chart retrieval. If the chart also runs application images
+from the provider's private ECR—especially on GCP, Azure, or connected
+BYOC-K8s—also read `APPLICATION_PRIVATE_ECR_REFERENCE.md`. Chart authentication
+and Kubernetes image pulls are separate.
+
 ```yaml
 helmChartConfiguration:
   chartName: redis

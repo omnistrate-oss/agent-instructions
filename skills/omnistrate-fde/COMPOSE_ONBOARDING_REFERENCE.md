@@ -327,7 +327,15 @@ rm -rf $TEMP_DOCKER_CONFIG
 - Ask: "What is your GitHub username or organization?"
 - Ask: "Please create a GitHub PAT at https://github.com/settings/tokens with `read:packages` scope. What should I name the username and token secrets?" (suggest: `GITHUB_USERNAME`, `GITHUB_TOKEN`)
 
-**AWS ECR / GCP Artifact Registry / Azure ACR / Custom registry**:
+**Provider private AWS ECR used across connected BYOC clouds**:
+- Do not ask for or store a static ECR password. Read
+  `APPLICATION_PRIVATE_ECR_REFERENCE.md` and use a Helm/Kustomize
+  ServicePlanSpec when the workload must explicitly consume the
+  Omnistrate-managed namespace pull Secret.
+- Do not copy the namespace-Secret pattern into Compose; Compose has no Pod
+  `imagePullSecrets` field.
+
+**Other AWS ECR / GCP Artifact Registry / Azure ACR / Custom registry**:
 - Ask: "What is the username for this registry?"
 - Ask: "What should I name the password secret?" (suggest: `REGISTRY_PASSWORD`)
 
