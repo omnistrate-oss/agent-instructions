@@ -214,6 +214,11 @@ is the exception (plain `omnistrate-ctl build --file <compose-file>`, no `--spec
 Exact flags and skeletons live in the per-format references — do not reconstruct
 them here.
 
+If a Helm or Kustomize application pulls charts/images from the provider's
+private Amazon ECR across AWS, GCP, Azure, or connected BYOC-K8s, also read
+`APPLICATION_PRIVATE_ECR_REFERENCE.md`. Its namespace-Secret flow is not the
+generic Compose/private-registry flow.
+
 ### Artifact × deployment-model constraints (check before writing any spec)
 
 Artifact and deployment model are **not** freely combinable. The compose path
@@ -402,6 +407,8 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
 | "BYOC-K8s will provision the customer's nodes." | It won't. The customer owns the cluster and infra; Omnistrate only deploys workloads via the dataplane agent. |
 | "I'll add all the parameters, then build once." | One change per build-deploy cycle. Batching hides which change broke it. |
 | "I'll add a custom pricing dimension / a `marketplace:` block to the spec." | Neither exists. Only cpu/memory/storage/replica/deploymentCell are billable dimensions; everything else is the metering-export path (`BILLING_METERING_REFERENCE.md`). |
+| "A private-ECR application is RUNNING, so registry access is proven." | `RUNNING` alone is insufficient. Check the actual Pod digest and pull-Secret mode, then force a controlled replacement Pod. Do not assume replica count creates a fresh node. See `APPLICATION_PRIVATE_ECR_REFERENCE.md`. |
+| "Omnistrate creates the ECR Secret, so it will attach it to every Pod or ServiceAccount." | It will not. Secret-mode Helm hooks and workload Pods must explicitly reference `$sys.deployment.imagePullSecretName`; Kustomize files use `{{ $sys.deployment.imagePullSecretName }}`. AWS-native mode must omit the Secret. |
 | "Billing is set up, so a CUSTOM_TENANCY Helm/operator plan will bill correctly." | Not without the `omnistrate.com/include-customer-billing: "true"` pod label — otherwise it silently bills zero. |
 | "I'll parameterize before the first deploy." | Zero-parameterization first (operator-CR excepted). Get to RUNNING for connected models or produce the installer artifact for air-gapped, then parameterize. |
 
@@ -417,6 +424,10 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
   git/local sources, execution identity, state, outputs) and Kustomize
   (`kustomizeConfiguration`, templating, workload affinity), plus combined
   terraform + helm/kustomize patterns.
+- **`APPLICATION_PRIVATE_ECR_REFERENCE.md`** — provider private Amazon ECR for
+  connected application charts/images across AWS, GCP, Azure, and BYOC-K8s:
+  native IAM versus namespace-Secret mode, Helm/Kustomize wiring, registry
+  scope, and runtime validation without false fresh-node assumptions.
 - **`DEPLOYMENT_MODELS_REFERENCE.md`** — the orthogonal `deployment:` block and
   operational flows for hosted / BYOC (BYO-VPC, PrivateLink) / BYOC-K8s /
   air-gapped, plus customer-account onboarding, tenancy, and the ISV-phrasing

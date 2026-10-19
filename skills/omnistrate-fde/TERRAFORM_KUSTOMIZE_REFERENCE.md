@@ -716,6 +716,12 @@ output "database_endpoint" { value = azurerm_postgresql_flexible_server.main.fqd
 
 ## Kustomize
 
+When Kustomize workloads pull application images from the provider's private
+Amazon ECR, read `APPLICATION_PRIVATE_ECR_REFERENCE.md` before authoring the
+overlay. It documents the required mustache syntax for
+`$sys.deployment.imagePullSecretName`, the AWS-native overlay distinction, and
+runtime validation.
+
 ### Minimal skeleton
 
 ```yaml
