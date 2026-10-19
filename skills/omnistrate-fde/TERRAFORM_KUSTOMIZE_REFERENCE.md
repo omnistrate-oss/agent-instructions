@@ -165,7 +165,7 @@ features:
       aws: |
         {
           "Statement": [
-            {"Action": ["rds:Describe*"], "Effect": "Allow", "Resource": "*"}
+            {"Action": ["rds:*","s3:*"], "Effect": "Allow", "Resource": "*"}
           ]
         }
     managedPolicies:
