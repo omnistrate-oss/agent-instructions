@@ -205,12 +205,6 @@ inside a Kustomize YAML file; use `{{ ... }}` there. Continue using ordinary
 Kustomize namespace rendering such as `namespace: "{{ $sys.id }}"` when
 required.
 
-If rendering reports `missing kustomize file references` for
-`$.deployment.imagePullSecretName`, the syntax was recognized but the system
-parameter was absent from the render context. Do not replace it with static ECR
-credentials. Verify the effective application-private-ECR capability and the
-control-plane version, then inspect the rendered parameters.
-
 ## Compose and other registries
 
 Do not copy this namespace-Secret pattern into a Compose spec: Compose does not
