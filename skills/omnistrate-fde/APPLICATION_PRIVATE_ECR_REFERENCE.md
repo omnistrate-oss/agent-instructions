@@ -8,6 +8,35 @@ targets.
 This reference is only for application charts and images. Generic customer
 registries and air-gapped installer image copying use different flows.
 
+## Platform contract
+
+For this application-private-ECR flow, Omnistrate:
+
+- creates `artifacts-pull-secret` in every Omnistrate-managed namespace on the
+  participating connected deployment cell, including namespaces that already
+  exist and namespaces created later;
+- refreshes the Secret automatically so workloads do not depend on a static ECR
+  token;
+- exposes the stable Secret name through
+  `$sys.deployment.imagePullSecretName` when rendering each application; and
+- keeps the Secret contents platform-owned. Plans consume only the name and
+  never receive or persist registry credentials.
+
+The system parameter resolves to the Kubernetes Secret **name**, not its data.
+Workload Pods and Helm hooks must still reference that name explicitly;
+Omnistrate does not rewrite arbitrary customer Pod or ServiceAccount specs.
+
+Use the syntax required by the rendering context:
+
+| Context | Correct reference |
+|---|---|
+| Helm `chartValues`, including Kubernetes manifests embedded as chart values | `$sys.deployment.imagePullSecretName` |
+| Values inside a `layeredChartValues` layer | `$sys.deployment.imagePullSecretName` |
+| Kustomize source YAML/TOML files | `{{ $sys.deployment.imagePullSecretName }}` |
+
+In Helm, only `layeredChartValues.scope` keys use `{{ ... }}`. The values inside
+the selected layer retain the ordinary bare Helm `chartValues` form.
+
 ## Before writing the plan
 
 1. Confirm the ECR registry belongs to the provider-side AWS account configured
@@ -26,24 +55,24 @@ registries and air-gapped installer image copying use different flows.
 
 4. Do not create a static `aws ecr get-login-password` Secret, copy a token
    between namespaces, or put ECR credentials in `$secret.*`. Omnistrate owns
-   creation and rotation of the namespace pull Secret where Secret mode applies.
+   creation and rotation of the namespace pull Secret.
 
 The ECR account and region come from the provider/provisioner registry source,
 not from the consumer dataplane region. A GCP, Azure, or AWS workload may pull
 from an ECR registry in a different region.
 
-## Authentication by target cloud
+## Authentication across target clouds
 
-| Target | Application-image authentication | Workload configuration |
-|---|---|---|
-| AWS BYOC, native mode | Customer node IAM plus provider ECR repository access | Do **not** attach a pull Secret. A Secret can mask broken native IAM. |
-| AWS BYOC, namespace-Secret mode | Omnistrate-minted ECR credentials in the instance namespace | Explicitly reference `$sys.deployment.imagePullSecretName`. |
-| GCP BYOC | Omnistrate-minted ECR credentials in the instance namespace | Explicitly reference `$sys.deployment.imagePullSecretName`. |
-| Azure BYOC | Omnistrate-minted ECR credentials in the instance namespace | Explicitly reference `$sys.deployment.imagePullSecretName`. |
-| Connected BYOC-K8s | Omnistrate-minted ECR credentials in the instance namespace | Explicitly reference `$sys.deployment.imagePullSecretName`. The public installer/agent bootstrap is a separate concern. |
+Omnistrate-minted namespace credentials are the default application-image path
+for AWS, GCP, Azure, and connected BYOC-K8s. The plan explicitly references
+`$sys.deployment.imagePullSecretName` on every supported target.
 
-The rendered Secret name is currently `artifacts-pull-secret`, but plans should
-use the system parameter rather than depending on the concrete name.
+Do not expose an authentication-mode choice to end customers. Provider
+bootstrap permissions and credential minting are platform
+implementation details—not customer API parameters or chart values.
+
+The rendered Secret name is `artifacts-pull-secret`, but plans should use the
+system parameter rather than depending on the concrete name.
 
 Omnistrate does not mutate arbitrary customer Pods or ServiceAccounts to add
 the Secret. Every Pod that pulls privately—including Helm hooks—must carry the
@@ -81,13 +110,71 @@ spec:
     - name: "$sys.deployment.imagePullSecretName"
 ```
 
-For AWS native mode, omit these pull-Secret values so the test and runtime do
-not silently fall back from node IAM to Secret authentication.
+When a plan targets only AWS, GCP, Azure, and connected BYOC-K8s, the common
+`chartValues` block above is intentionally valid for every target because the
+Secret is created and rotated in every managed namespace. No cloud or
+end-customer auth-mode selector is required.
+
+If the same Helm resource also targets a cloud outside this flow, do not apply
+the pull Secret globally. Replace `chartValues` with `layeredChartValues` and
+scope the pull-secret value to each supported target. Helm can select these
+values at runtime by cloud:
+
+```yaml
+layeredChartValues:
+  - scope:
+      "{{ $sys.deploymentCell.cloudProviderName }}": "aws"
+    values:
+      image:
+        pullSecrets:
+          - $sys.deployment.imagePullSecretName
+  - scope:
+      "{{ $sys.deploymentCell.cloudProviderName }}": "gcp"
+    values:
+      image:
+        pullSecrets:
+          - $sys.deployment.imagePullSecretName
+  - scope:
+      "{{ $sys.deploymentCell.cloudProviderName }}": "azure"
+    values:
+      image:
+        pullSecrets:
+          - $sys.deployment.imagePullSecretName
+  - scope:
+      "{{ $sys.deploymentCell.cloudProviderName }}": "byoc-onprem"
+    values:
+      image:
+        pullSecrets:
+          - $sys.deployment.imagePullSecretName
+```
+
+`chartValues` and `layeredChartValues` are mutually exclusive. Keep all other
+required chart values inside the selected structure; the example isolates only
+the pull-secret decision.
 
 ## Kustomize ServicePlanSpec
 
+Kustomize does not have Helm's `layeredChartValues`. The plan selects an overlay
+through `kustomizeConfiguration.kustomizePath`. Because the minted Secret is the
+default on AWS, GCP, Azure, and connected BYOC-K8s, those targets can share one
+private-ECR overlay:
+
+```yaml
+kustomizeConfiguration:
+  kustomizePath: /kustomize/private-ecr
+  gitConfiguration:
+    repositoryUrl: https://github.com/<org>/<repo>.git
+    reference: refs/tags/<version>
+```
+
+If a repository keeps both private-ECR and non-private overlays, select the
+path while building the plan (or publish separate plan variants). Do not expect
+Kustomize to choose the path dynamically at runtime, and do not expose the
+overlay or authentication choice as an end-customer parameter. Helm plans can
+instead use the cloud-scoped `layeredChartValues` pattern above.
+
 Kustomize source files use mustache-style rendering for system parameters. In
-the Secret-enabled overlay:
+the selected private-ECR overlay:
 
 ```yaml
 apiVersion: apps/v1
@@ -103,10 +190,10 @@ spec:
           imagePullPolicy: Always
 ```
 
-Keep a separate AWS-native overlay with no `imagePullSecrets` entry. Do not use
-the bare unrendered string `$sys.deployment.imagePullSecretName` inside a
-Kustomize YAML file; use `{{ ... }}` there. Continue using ordinary Kustomize
-namespace rendering such as `namespace: "{{ $sys.id }}"` when required.
+Do not use the bare unrendered string `$sys.deployment.imagePullSecretName`
+inside a Kustomize YAML file; use `{{ ... }}` there. Continue using ordinary
+Kustomize namespace rendering such as `namespace: "{{ $sys.id }}"` when
+required.
 
 If rendering reports `missing kustomize file references` for
 `$.deployment.imagePullSecretName`, the syntax was recognized but the system
@@ -134,8 +221,8 @@ For each enabled target cloud:
 1. Deploy the private application image as the initial workload—do not use a
    public bootstrap image and switch later.
 2. Require the Pod to be Running and Ready with the exact expected digest.
-3. Confirm Secret-mode Pods explicitly reference the rendered namespace Secret;
-   confirm AWS-native Pods do not reference one.
+3. Confirm Pods on every supported target explicitly reference the rendered
+   namespace Secret.
 4. Trigger a controlled Deployment/StatefulSet template rollout and require a
    new Pod UID with the same private digest and `imagePullPolicy: Always`. This
    proves another authenticated pull without assuming that an application

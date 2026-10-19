@@ -408,7 +408,7 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
 | "I'll add all the parameters, then build once." | One change per build-deploy cycle. Batching hides which change broke it. |
 | "I'll add a custom pricing dimension / a `marketplace:` block to the spec." | Neither exists. Only cpu/memory/storage/replica/deploymentCell are billable dimensions; everything else is the metering-export path (`BILLING_METERING_REFERENCE.md`). |
 | "A private-ECR application is RUNNING, so registry access is proven." | `RUNNING` alone is insufficient. Check the actual Pod digest and pull-Secret mode, then force a controlled replacement Pod. Do not assume replica count creates a fresh node. See `APPLICATION_PRIVATE_ECR_REFERENCE.md`. |
-| "Omnistrate creates the ECR Secret, so it will attach it to every Pod or ServiceAccount." | It will not. Secret-mode Helm hooks and workload Pods must explicitly reference `$sys.deployment.imagePullSecretName`; Kustomize files use `{{ $sys.deployment.imagePullSecretName }}`. AWS-native mode must omit the Secret. |
+| "Omnistrate creates the ECR Secret, so it will attach it to every Pod or ServiceAccount." | It will not. Helm hooks and workload Pods must explicitly reference `$sys.deployment.imagePullSecretName`; Kustomize files use `{{ $sys.deployment.imagePullSecretName }}`. This minted path is the application default across AWS, GCP, Azure, and connected BYOC-K8s; do not expose an auth-mode choice to customers. |
 | "Billing is set up, so a CUSTOM_TENANCY Helm/operator plan will bill correctly." | Not without the `omnistrate.com/include-customer-billing: "true"` pod label — otherwise it silently bills zero. |
 | "I'll parameterize before the first deploy." | Zero-parameterization first (operator-CR excepted). Get to RUNNING for connected models or produce the installer artifact for air-gapped, then parameterize. |
 
@@ -426,8 +426,9 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
   terraform + helm/kustomize patterns.
 - **`APPLICATION_PRIVATE_ECR_REFERENCE.md`** — provider private Amazon ECR for
   connected application charts/images across AWS, GCP, Azure, and BYOC-K8s:
-  native IAM versus namespace-Secret mode, Helm/Kustomize wiring, registry
-  scope, and runtime validation without false fresh-node assumptions.
+  minted namespace credentials, cloud-scoped Helm values, Kustomize overlay
+  selection, registry scope, and runtime validation without false fresh-node
+  assumptions.
 - **`DEPLOYMENT_MODELS_REFERENCE.md`** — the orthogonal `deployment:` block and
   operational flows for hosted / BYOC (BYO-VPC, PrivateLink) / BYOC-K8s /
   air-gapped, plus customer-account onboarding, tenancy, and the ISV-phrasing
