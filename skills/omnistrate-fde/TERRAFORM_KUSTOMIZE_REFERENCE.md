@@ -152,11 +152,19 @@ All three fields (`serviceAccountID`, `publicKeyID`, `privateKeyPEM`) are requir
 **BYOC custom policy:** for BYOC (customer-account) deployments you must declare the permissions
 your Terraform stack needs so Omnistrate can generate correct customer onboarding scripts.
 The existing `policies.aws` field defines the role's inline policy. Use the additive
-`managedPolicies.aws` array when Terraform needs named customer-managed IAM policies; each entry
-requires `name`, `description`, and a JSON `policy` document. Omnistrate creates each managed policy
-and attaches it to the same per-model Terraform role. No feature gate is required. When both
-`policies.aws` and `managedPolicies.aws` are present, preserve both—do not replace or merge one into
-the other. `managedPolicies` currently supports AWS only.
+`managedPolicies.aws` array to create customer-managed IAM policies or attach existing policies:
+
+- **Create:** supply `name` + a JSON `policy` document. `description` is optional; omit it unless
+  the user wants one. When omitted, the onboarding renderer generates a description.
+- **Attach existing:** supply `arn` alone, for an AWS-managed or customer-managed IAM policy.
+  Do not add `name`, `policy`, or `description` to an ARN entry. Customer-managed references
+  must already exist in the account where the execution role is created. Omnistrate only attaches
+  these policies; it does not create, update, or delete them.
+
+Both alternatives attach to the same per-model Terraform role. No feature gate is required.
+When both `policies.aws` and `managedPolicies.aws` are present, preserve both—do not replace or
+merge one into the other. `managedPolicies` currently supports AWS only; non-AWS provider keys
+are rejected. Existing GCP/Azure roles and OCI permissions remain supported in their own fields.
 
 ```yaml
 features:
@@ -171,7 +179,6 @@ features:
     managedPolicies:
       aws:
         - name: terraform-storage-management
-          description: Allow Terraform to manage application storage
           policy: |
             {
               "Version": "2012-10-17",
@@ -179,6 +186,8 @@ features:
                 {"Action": ["s3:*"], "Effect": "Allow", "Resource": "*"}
               ]
             }
+        - arn: arn:aws:iam::aws:policy/AmazonRDSFullAccess
+        - arn: arn:aws:iam::123456789012:policy/custom-terraform-policy
     roles:
       gcp:
         - name: roles/cloudsql.admin
@@ -188,6 +197,45 @@ features:
       oci:
         - "manage queues"
 ```
+
+**Expected result:** the role keeps its inline permissions, receives the new
+`terraform-storage-management` policy with a generated description, and attaches the two
+existing policy ARNs without taking ownership of those policies. Existing tightened-v2 handling
+of `policies.aws` is unchanged.
+
+**Spec/API placement:** the example above uses root-level `features` in a standalone
+ServicePlanSpec. In Compose, put the same feature configuration under
+`x-omnistrate-service-plan.features`, for example:
+
+```yaml
+x-omnistrate-service-plan:
+  features:
+    CUSTOM_TERRAFORM_POLICY:
+      policies:
+        aws: |
+          {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"ec2:DescribeInstances","Resource":"*"}]}
+      managedPolicies:
+        aws:
+          - name: terraform-storage-management
+            policy: |
+              {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}
+          - arn: arn:aws:iam::aws:policy/AmazonRDSFullAccess
+          - arn: arn:aws:iam::123456789012:policy/custom-terraform-policy
+```
+
+Direct service-model create/enable APIs use the `CUSTOM_TERRAFORM_POLICY` contents as the
+feature's `configuration` (without the `features` wrapper).
+Compose create/build/re-import (including legacy create) and ServicePlanSpec
+prepare/build/re-import support both forms. Model/plan describe APIs preserve the configuration,
+and the version-set spec API preserves the supplied YAML. Re-importing an existing tier updates
+its policy configuration rather than retaining stale entries; these are model-level onboarding
+permissions, not tier feature snapshots.
+
+The separate typed customer-onboarding `terraformExecutionPolicies` metadata builder currently
+exposes inline documents, roles, and permissions only. Do not invent a managed-policy field there;
+use supplied Compose/ServicePlanSpec YAML for this feature until that API is extended. Verify the
+target platform's published schema before building; related implementation PRs may not yet be
+deployed there.
 
 ---
 
