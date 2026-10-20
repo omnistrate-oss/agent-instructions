@@ -396,7 +396,8 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
 | "I'll default to `hostedDeployment`." | Ask intake Q2 first. The model is a decision, not a default. |
 | "The user has a compose file and wants BYOC-K8s / air-gapped — the model is orthogonal to the artifact." | It is not. Compose covers hosted and BYOC-*Account* only. BYOC-K8s and air-gapped are ServicePlanSpec-only; convert to a Helm chart first. See §Artifact × deployment-model constraints. |
 | "`docs validate` passed and the build succeeded, so the compose spec is fine for BYOC-K8s." | Both pass and it still never deploys — the instance namespace is never created, with no error. Validation cannot catch this. |
-| "`instanceTypes` is one entry per cloud provider, so a resource gets one node group." | Compose only. In a **ServicePlanSpec** every entry provisions its own node group, same-cloud duplicates included — that is the supported way to back one workload with several machine sizes. Never invent a second resource or a shared custom label to get a second node group. See `HELM_ONBOARDING_REFERENCE.md` §Compute: instance types and node groups. |
+| "`instanceTypes` is one entry per cloud provider, so a resource gets one node group." | Compose only. In a **ServicePlanSpec** every entry requests its own node group, same-cloud duplicates included — that is the supported way to back one workload with several machine sizes. Azure pool creation also checks zone placement policy. Never invent a second resource or a shared custom label to get a second node group. See `HELM_ONBOARDING_REFERENCE.md` §Compute: instance types and node groups. |
+| "`bestEffort` allows a multi-zone Resource to use one AZ or moves a custom-AZ Resource to another AZ." | It skips unavailable Azure pools per instance type. Multi-zone still needs at least two eligible AZs; custom placement stays in the requested AZ. Read [zonePlacementPolicy](HELM_ONBOARDING_REFERENCE.md#zoneplacementpolicy) when configuring Azure instance types with limited AZ availability. |
 | "Pods need custom affinity to reach a resource's second node group." | They don't. Injected affinity keys on `omnistrate.com/resource` — per-*resource*, carried by all its node groups. Don't set `enableInjection: false` to defeat a pin that isn't there; add a `preferred` term if you want to bias placement. |
 | "I remember the field name / that ctl flag exists." | Grep the reference files; confirm fields with `omctl docs compose-spec "<tag>"` or `omctl docs json-schema <type>`, and flags with `--help`. |
 | "The build rejected an extension I'm sure exists." | Run `omctl docs compose-spec` and match the exact spelling — the platform's error text points there for a reason. |
@@ -419,7 +420,10 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
   parameters, compute/storage, load balancers, action hooks, build/debug.
 - **`HELM_ONBOARDING_REFERENCE.md`** — Helm ServicePlanSpec:
   `helmChartConfiguration`, `runtimeConfiguration`, values templating, pod
-  placement/affinity, multi-service `dependsOn`, endpoints, lifecycle.
+  placement/affinity, multi-service `dependsOn`, endpoints, lifecycle. Includes
+  [zonePlacementPolicy](HELM_ONBOARDING_REFERENCE.md#zoneplacementpolicy) for Azure
+  Resource AZ selection and per-type pool creation; read it for limited-AZ GPU
+  types or mixed instance-type policies.
 - **`TERRAFORM_KUSTOMIZE_REFERENCE.md`** — Terraform (`terraformConfigurations`,
   git/local sources, execution identity, state, outputs) and Kustomize
   (`kustomizeConfiguration`, templating, workload affinity), plus combined

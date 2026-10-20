@@ -765,6 +765,16 @@ x-omnistrate-capabilities:
 - SLA requirements
 - Pro/Business tiers
 
+For managed Azure AKS compute, account for each instance type's AZ availability when
+designing HA. `zonePlacementPolicy` is a per-instance-type `configurationOverrides`
+setting: `strict` (default) requires every selected Resource AZ; `bestEffort` permits
+skipping unavailable pools if other types cover those AZs. Multi-zone Resources still
+need at least two eligible AZs. A CPU type spanning three AZs can cover a Resource
+while a best-effort GPU type has a pool in only one AZ, or none; this does not establish
+GPU workload HA. Check the GPU workload's own availability requirement and target
+platform support before recommending the policy. Syntax and selection rules are in
+[the compute guide](https://docs.omnistrate.com/infra-guides/compute/#availability-zones-and-instance-types).
+
 **Advanced** (Multi-region):
 - Configure multiple deployment cells across regions
 - Active-active or active-passive
