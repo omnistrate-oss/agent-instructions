@@ -261,6 +261,9 @@ No live control-plane link — you cannot use `instance debug` or the remote tun
 - VM allocation failures with restrictive constraints (AZ + Network + Size)
 - PersistentVolumeClaim not found / StorageClass missing
 - Node taints/affinity issues
+- Azure AKS AZ-selection errors or skipped pools: use
+  [Azure AKS zone placement](OMNISTRATE_SRE_REFERENCE.md#azure-aks-zone-placement)
+  to distinguish strict validation failures from expected best-effort omissions.
 
 ### Container Lifecycle
 - Back-off restarting failed container

@@ -593,6 +593,35 @@ x-omnistrate-compute:
   replicaCount: 3
 ```
 
+### configurationOverrides — zonePlacementPolicy
+
+For Azure AKS, the selected instance type can set `zonePlacementPolicy` to `strict`
+(default) or `bestEffort`. Resource zone flags remain under
+`x-omnistrate-capabilities`; put the policy on the compute instance type:
+
+```yaml
+services:
+  inference:
+    image: ghcr.io/example/inference:latest
+    x-omnistrate-compute:
+      instanceTypes:
+        - name: Standard_NC6s_v3
+          cloudProvider: azure
+          configurationOverrides:
+            zonePlacementPolicy: bestEffort
+```
+
+With both zone capability flags omitted, this Resource uses a single eligible AZ.
+`bestEffort` does not allow a multi-zone Resource to fall back to one AZ. It skips
+unavailable pools within selected Resource AZs, and every selected AZ still needs an
+eligible type. Custom placement stays in the customer's requested AZ.
+
+Verify support with `omctl docs json-schema x-omnistrate-compute` and
+`omctl docs compose-spec "x-omnistrate-compute"`. This policy does not change Compose's
+instance-type selection rules described above. For placement, availability metadata,
+and multi-type ServicePlanSpec examples, see
+[zonePlacementPolicy](HELM_ONBOARDING_REFERENCE.md#zoneplacementpolicy).
+
 ### Storage Configuration
 ```yaml
 volumes:

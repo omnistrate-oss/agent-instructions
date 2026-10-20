@@ -781,10 +781,11 @@ connect.
 
 ## 8. Compute and node placement
 
-Fixed type per cloud, or customer-selectable via a param. **Every entry provisions its own
+Fixed type per cloud, or customer-selectable via a param. **Every entry requests its own
 node group** — including multiple entries sharing one `cloudProvider`, which is how one
 resource backs several machine sizes (e.g. an always-on small pool plus a scale-from-zero
-large pool). This is ServicePlanSpec behaviour; compose is the opposite, where the first
+large pool). On Azure, unavailable best-effort types can have pools skipped in some or
+all selected AZs. This is ServicePlanSpec behaviour; compose is the opposite, where the first
 entry matching the cloud wins and same-cloud duplicates are ignored. Per-node-group settings
 — `labels`, `taints`, `WarmPoolConfiguration.minimumNodesInPool` — go under each entry's
 `configurationOverrides`; see
@@ -807,6 +808,18 @@ compute:
       configurationOverrides:
         timeSlicingReplicas: 8     # GPU time-slicing (aws/gcp/nebius)
 ```
+
+### zonePlacementPolicy
+
+For Azure Resources, configure `zonePlacementPolicy` alongside other per-instance-type
+`configurationOverrides`. `strict` (default) needs a pool in every selected Resource
+AZ; `bestEffort` skips unavailable pools, provided other types cover those AZs.
+`capabilities.enableMultiZone` still requires at least two eligible AZs, and
+`capabilities.enableCustomZone` keeps the requested AZ. See
+[zonePlacementPolicy](../omnistrate-fde/HELM_ONBOARDING_REFERENCE.md#zoneplacementpolicy)
+for syntax, AZ selection with multiple types, and zero-availability cases. A GPU type
+can have only one pool or no pools; make the operator's CR scheduling constraints
+compatible with the available pools before promising multi-zone GPU availability.
 
 ### Pinning operator-created pods to Omnistrate-managed node groups
 
