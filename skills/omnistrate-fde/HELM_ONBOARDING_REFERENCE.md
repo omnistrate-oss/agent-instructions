@@ -133,6 +133,11 @@ services:
 
 ### Private Amazon ECR OCI repos
 
+This section covers chart retrieval. If the chart also runs application images
+from the provider's private ECR—especially on GCP, Azure, or connected
+BYOC-K8s—also read `APPLICATION_PRIVATE_ECR_REFERENCE.md`. Chart authentication
+and Kubernetes image pulls are separate.
+
 ```yaml
 helmChartConfiguration:
   chartName: redis
@@ -744,9 +749,10 @@ chartValues:
 ### One resource can back several node groups
 
 In a **ServicePlanSpec**, `compute.instanceTypes` is a real list, not a per-cloud lookup
-table: **every entry provisions its own node group**, including multiple entries that
+table: **every entry requests its own node group**, including multiple entries that
 share the same `cloudProvider`. A resource with two `cloudProvider: aws` entries gets two
-AWS node groups.
+AWS node groups. Azure pool creation also considers each entry's zone placement policy;
+an unavailable best-effort type can contribute no pools (see below).
 
 > **Do not carry the compose rule over.** In a **compose** spec, `x-omnistrate-compute.instanceTypes`
 > is a per-cloud override table — the first entry matching the deployment's cloud provider wins
@@ -805,17 +811,18 @@ expander behaviour.
 
 ### configurationOverrides
 
-Per-instance-type, node-level settings. The `plan-spec` prose table documents only
-`OsFamily`, `acceleratorConfiguration`, and `GpuClusterID`, but the authoritative schema
-(`omctl docs json-schema service-plan`, `$defs.ConfigurationOverride`) carries more. Verified
-fields, in their **exact schema casing** — `additionalProperties: false` means wrong casing
-fails `omctl docs validate`:
+Per-instance-type, node-level settings. The `plan-spec` prose table documents a subset
+of the available overrides. Check the authoritative schema
+(`omctl docs json-schema service-plan`, `$defs.ConfigurationOverride`) for support on
+the target platform. Use each field's **exact schema casing** —
+`additionalProperties: false` means wrong casing fails `omctl docs validate`:
 
 | Field | Casing | Purpose |
 |-------|--------|---------|
 | `labels` | lowerCamel | Node labels stamped on this instance type's node group |
 | `taints` | lowerCamel | Node taints (`key`/`value`/`effect`); needs matching tolerations in `chartValues` |
 | `acceleratorConfiguration` | lowerCamel | GCP N1 + Tesla GPU attachment (`type`, `count`) |
+| `zonePlacementPolicy` | lowerCamel | Azure AKS pools: `strict` (default) requires every selected AZ; `bestEffort` skips unavailable AZs |
 | `migProfile`, `timeSlicingReplicas` | lowerCamel | GPU partitioning / sharing |
 | `WarmPoolConfiguration` | **UpperCamel** | `minimumNodesInPool` — always-on node floor; omit for scale-from-zero |
 | `OsFamily` | **UpperCamel** | `amazonlinux` for Amazon Linux 2023 on AWS |
@@ -826,7 +833,7 @@ fails `omctl docs validate`:
 
 Two operational consequences, both from the platform docs:
 
-- **Changing `configurationOverrides` creates new node pools** and the old ones are not
+- **Changing node settings such as `OsFamily` creates new node pools** and the old ones are not
   deleted immediately. Check EKS managed-node-group quota before rolling, then clean up with
   `omnistrate-ctl deployment-cell list-nodepools --id <cell-id>` /
   `deployment-cell delete-nodepool`.
@@ -836,6 +843,82 @@ Two operational consequences, both from the platform docs:
 
 Confirm labels/taints actually landed on the first deploy — `deployment-cell
 update-kubeconfig` then `kubectl get nodes --show-labels`.
+
+#### zonePlacementPolicy
+
+Azure AKS per-instance-type pool placement. Use the exact values `strict` and
+`bestEffort`; omission defaults to `strict`. Verify target-platform support with
+`omctl docs json-schema service-plan` (`$defs.ConfigurationOverride`) and
+`omctl docs plan-spec "Compute schema"` before adding it to a spec. If the field is
+absent, support on that target is unverified; do not invent a top-level placement
+property. The [compute guide](https://docs.omnistrate.com/infra-guides/compute/#availability-zones-and-instance-types)
+explains the feature.
+
+```yaml
+services:
+  - name: inference
+    capabilities:
+      enableMultiZone: true
+    compute:
+      instanceTypes:
+        - name: Standard_D4s_v3
+          cloudProvider: azure
+          configurationOverrides:
+            zonePlacementPolicy: strict
+        - name: Standard_NC6s_v3
+          cloudProvider: azure
+          configurationOverrides:
+            zonePlacementPolicy: bestEffort
+```
+
+This is a Resource fragment; add the workload's chart or other deployment
+configuration. Place the policy alongside `labels`, `taints`, and other overrides.
+Resource placement remains in `capabilities`: omit both zone flags or set both to
+`false` for an Omnistrate-selected single AZ; use `enableMultiZone: true` for multiple
+AZs, or `enableCustomZone: true` for the customer's requested AZ. The flags are
+mutually exclusive.
+
+There are two decisions: select Resource AZs, then create eligible pools in those AZs.
+For initial placement, use availability in the selected Azure region and account:
+
+| Instance-type policies | Candidate Resource AZs |
+|------------------------|------------------------|
+| All strict | Intersection of available AZs across the strict types |
+| Mixed strict and best effort | Intersection across strict types; best-effort types do not constrain it |
+| All best effort | Union of available AZs across the types |
+
+Restrict the candidates to the deployment cell's eligible AZs. Single-zone placement
+selects one; multi-zone selects all eligible AZs and requires at least two; custom
+placement validates the exact requested AZ. For each selected AZ, strict types
+require pools there; best-effort types create pools only where available. Validate
+coverage before any pool creation: every selected AZ needs at least one eligible type.
+
+Assume the CPU type is available in AZs `1`, `2`, `3`, the GPU type only in `3`, and
+all three AZs are eligible for the cell:
+
+| Configuration | Result |
+|---------------|--------|
+| Both strict, multi-zone | Fails: the intersection contains only AZ `3` |
+| CPU strict, GPU best effort, multi-zone | CPU pools in `1`, `2`, `3`; GPU pool only in `3` |
+| Both best effort, multi-zone | Same pools; the union covers `1`, `2`, `3` |
+| Both best effort, customer requests `1` | CPU pool in `1`; GPU pool skipped; no fallback to `3` |
+| GPU best effort alone, multi-zone | Fails: one eligible AZ does not satisfy multi-zone placement |
+| A type unavailable in every AZ, best effort | Skip all its pools; another type must cover each selected AZ |
+
+If every configured type is unavailable, provisioning fails. Missing availability
+metadata retains unfiltered behavior for that type; metadata reporting no available
+AZs means unavailable. An unavailable strict type fails validation even if another
+type covers the AZ.
+
+Existing Resource AZs are retained on update, start, restart, and add-capacity.
+Managed Azure hosts that have not been adopted refresh availability for create and
+these operations; changes can alter eligible pools without moving Resource AZs.
+Cleanup still considers all configured types, including now-unavailable ones.
+
+**Resource AZ coverage does not establish GPU workload HA.** A best-effort GPU type
+may have one pool or none. Chart/CR GPU requests, replicas, affinity, and topology
+constraints must allow the workload to use the pools actually available. Confirm GPU
+pool availability before promising an inference/training SLA.
 
 ---
 

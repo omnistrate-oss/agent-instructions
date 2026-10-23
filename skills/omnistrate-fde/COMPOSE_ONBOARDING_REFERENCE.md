@@ -327,7 +327,15 @@ rm -rf $TEMP_DOCKER_CONFIG
 - Ask: "What is your GitHub username or organization?"
 - Ask: "Please create a GitHub PAT at https://github.com/settings/tokens with `read:packages` scope. What should I name the username and token secrets?" (suggest: `GITHUB_USERNAME`, `GITHUB_TOKEN`)
 
-**AWS ECR / GCP Artifact Registry / Azure ACR / Custom registry**:
+**Provider private AWS ECR used across connected BYOC clouds**:
+- Do not ask for or store a static ECR password. Read
+  `APPLICATION_PRIVATE_ECR_REFERENCE.md` and use a Helm/Kustomize
+  ServicePlanSpec when the workload must explicitly consume the
+  Omnistrate-managed namespace pull Secret.
+- Do not copy the namespace-Secret pattern into Compose; Compose has no Pod
+  `imagePullSecrets` field.
+
+**Other AWS ECR / GCP Artifact Registry / Azure ACR / Custom registry**:
 - Ask: "What is the username for this registry?"
 - Ask: "What should I name the password secret?" (suggest: `REGISTRY_PASSWORD`)
 
@@ -584,6 +592,35 @@ x-omnistrate-compute:
       name: t3.xlarge
   replicaCount: 3
 ```
+
+### configurationOverrides — zonePlacementPolicy
+
+For Azure AKS, the selected instance type can set `zonePlacementPolicy` to `strict`
+(default) or `bestEffort`. Resource zone flags remain under
+`x-omnistrate-capabilities`; put the policy on the compute instance type:
+
+```yaml
+services:
+  inference:
+    image: ghcr.io/example/inference:latest
+    x-omnistrate-compute:
+      instanceTypes:
+        - name: Standard_NC6s_v3
+          cloudProvider: azure
+          configurationOverrides:
+            zonePlacementPolicy: bestEffort
+```
+
+With both zone capability flags omitted, this Resource uses a single eligible AZ.
+`bestEffort` does not allow a multi-zone Resource to fall back to one AZ. It skips
+unavailable pools within selected Resource AZs, and every selected AZ still needs an
+eligible type. Custom placement stays in the customer's requested AZ.
+
+Verify support with `omctl docs json-schema x-omnistrate-compute` and
+`omctl docs compose-spec "x-omnistrate-compute"`. This policy does not change Compose's
+instance-type selection rules described above. For placement, availability metadata,
+and multi-type ServicePlanSpec examples, see
+[zonePlacementPolicy](HELM_ONBOARDING_REFERENCE.md#zoneplacementpolicy).
 
 ### Storage Configuration
 ```yaml

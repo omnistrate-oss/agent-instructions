@@ -167,6 +167,28 @@ Each entry: **symptom → evidence location → fix.** Organized by resource typ
 | Substitution failure / unresolved values | Workflow events; live rendered yaml via tunnel (`kubectl get -o yaml`) | Fix parameter mapping; republish |
 | Pod Pending: missing StorageClass/PVC | Rendered yaml + `kubectl get storageclass`/`get pvc` via tunnel | Ensure StorageClass exists on the cell (amenity or customer prerequisite) |
 
+### Azure AKS zone placement
+
+Use this branch for AZ-selection failures, skipped Azure pools, or unexpected pool
+counts. Inspect the Resource's selected AZs, per-instance-type
+`configurationOverrides.zonePlacementPolicy`, and availability reasons in workflow
+events. Check actual pools through `deployment-cell list-nodepools` and workload
+scheduling through the existing remote tunnel. Full configuration and selection rules:
+[the compute guide](https://docs.omnistrate.com/infra-guides/compute/#availability-zones-and-instance-types).
+
+| Symptom | Interpretation / next step |
+|---------|----------------------------|
+| `not enough AZs available` | Initial placement intersects strict types, or unions all-best-effort types, then restricts to cell AZs. Multi-zone needs at least two. Inspect SKU availability and the selected region/account. |
+| `instance type ... with strict zone placement policy is not available in selected AZ ...` | Strict pool validation failed. Existing Resource AZs are retained on subsequent actions; inspect current availability. Do not treat restart as AZ reselection. |
+| `no instance type is available for node-pool creation in selected AZ ...` | Every type was skipped in that AZ. Another eligible type must cover it; best effort does not remove the Resource AZ. |
+| Missing pool for a best-effort type | Expected when unavailable there, including zero pools across all AZs. Verify another type covers each selected Resource AZ. |
+| GPU pod Pending while CPU pools exist | Resource coverage does not provide GPU capacity. Inspect GPU pools, resource requests, and chart/CR affinity and topology constraints. |
+| Customer requested an AZ where the GPU is unavailable | Best effort skips that GPU pool if another type covers the requested AZ. No fallback to another AZ; a strict unavailable type or no eligible type fails. |
+
+Missing availability metadata preserves unfiltered pool creation for that type;
+explicit metadata with no available AZs makes it unavailable. Pool validation happens
+before creation is dispatched. Cleanup still includes types that are now unavailable.
+
 ### By Deployment Model
 
 #### Hosted

@@ -214,6 +214,11 @@ is the exception (plain `omnistrate-ctl build --file <compose-file>`, no `--spec
 Exact flags and skeletons live in the per-format references — do not reconstruct
 them here.
 
+If a Helm or Kustomize application pulls charts/images from the provider's
+private Amazon ECR across AWS, GCP, Azure, or connected BYOC-K8s, also read
+`APPLICATION_PRIVATE_ECR_REFERENCE.md`. Its namespace-Secret flow is not the
+generic Compose/private-registry flow.
+
 ### Artifact × deployment-model constraints (check before writing any spec)
 
 Artifact and deployment model are **not** freely combinable. The compose path
@@ -391,7 +396,8 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
 | "I'll default to `hostedDeployment`." | Ask intake Q2 first. The model is a decision, not a default. |
 | "The user has a compose file and wants BYOC-K8s / air-gapped — the model is orthogonal to the artifact." | It is not. Compose covers hosted and BYOC-*Account* only. BYOC-K8s and air-gapped are ServicePlanSpec-only; convert to a Helm chart first. See §Artifact × deployment-model constraints. |
 | "`docs validate` passed and the build succeeded, so the compose spec is fine for BYOC-K8s." | Both pass and it still never deploys — the instance namespace is never created, with no error. Validation cannot catch this. |
-| "`instanceTypes` is one entry per cloud provider, so a resource gets one node group." | Compose only. In a **ServicePlanSpec** every entry provisions its own node group, same-cloud duplicates included — that is the supported way to back one workload with several machine sizes. Never invent a second resource or a shared custom label to get a second node group. See `HELM_ONBOARDING_REFERENCE.md` §Compute: instance types and node groups. |
+| "`instanceTypes` is one entry per cloud provider, so a resource gets one node group." | Compose only. In a **ServicePlanSpec** every entry requests its own node group, same-cloud duplicates included — that is the supported way to back one workload with several machine sizes. Azure pool creation also checks zone placement policy. Never invent a second resource or a shared custom label to get a second node group. See `HELM_ONBOARDING_REFERENCE.md` §Compute: instance types and node groups. |
+| "`bestEffort` allows a multi-zone Resource to use one AZ or moves a custom-AZ Resource to another AZ." | It skips unavailable Azure pools per instance type. Multi-zone still needs at least two eligible AZs; custom placement stays in the requested AZ. Read [zonePlacementPolicy](HELM_ONBOARDING_REFERENCE.md#zoneplacementpolicy) when configuring Azure instance types with limited AZ availability. |
 | "Pods need custom affinity to reach a resource's second node group." | They don't. Injected affinity keys on `omnistrate.com/resource` — per-*resource*, carried by all its node groups. Don't set `enableInjection: false` to defeat a pin that isn't there; add a `preferred` term if you want to bias placement. |
 | "I remember the field name / that ctl flag exists." | Grep the reference files; confirm fields with `omctl docs compose-spec "<tag>"` or `omctl docs json-schema <type>`, and flags with `--help`. |
 | "The build rejected an extension I'm sure exists." | Run `omctl docs compose-spec` and match the exact spelling — the platform's error text points there for a reason. |
@@ -402,6 +408,8 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
 | "BYOC-K8s will provision the customer's nodes." | It won't. The customer owns the cluster and infra; Omnistrate only deploys workloads via the dataplane agent. |
 | "I'll add all the parameters, then build once." | One change per build-deploy cycle. Batching hides which change broke it. |
 | "I'll add a custom pricing dimension / a `marketplace:` block to the spec." | Neither exists. Only cpu/memory/storage/replica/deploymentCell are billable dimensions; everything else is the metering-export path (`BILLING_METERING_REFERENCE.md`). |
+| "A private-ECR application is RUNNING, so registry access is proven." | `RUNNING` alone is insufficient. Check the actual Pod digest and pull-Secret mode, then force a controlled replacement Pod. Do not assume replica count creates a fresh node. See `APPLICATION_PRIVATE_ECR_REFERENCE.md`. |
+| "Omnistrate creates the ECR Secret, so it will attach it to every Pod or ServiceAccount." | It will not. Helm hooks and workload Pods must explicitly reference `$sys.deployment.imagePullSecretName`; Kustomize files use `{{ $sys.deployment.imagePullSecretName }}`. This minted path is the application default across AWS, GCP, Azure, and connected BYOC-K8s; do not expose an auth-mode choice to customers. |
 | "Billing is set up, so a CUSTOM_TENANCY Helm/operator plan will bill correctly." | Not without the `omnistrate.com/include-customer-billing: "true"` pod label — otherwise it silently bills zero. |
 | "I'll parameterize before the first deploy." | Zero-parameterization first (operator-CR excepted). Get to RUNNING for connected models or produce the installer artifact for air-gapped, then parameterize. |
 
@@ -412,11 +420,19 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
   parameters, compute/storage, load balancers, action hooks, build/debug.
 - **`HELM_ONBOARDING_REFERENCE.md`** — Helm ServicePlanSpec:
   `helmChartConfiguration`, `runtimeConfiguration`, values templating, pod
-  placement/affinity, multi-service `dependsOn`, endpoints, lifecycle.
+  placement/affinity, multi-service `dependsOn`, endpoints, lifecycle. Includes
+  [zonePlacementPolicy](HELM_ONBOARDING_REFERENCE.md#zoneplacementpolicy) for Azure
+  Resource AZ selection and per-type pool creation; read it for limited-AZ GPU
+  types or mixed instance-type policies.
 - **`TERRAFORM_KUSTOMIZE_REFERENCE.md`** — Terraform (`terraformConfigurations`,
   git/local sources, execution identity, state, outputs) and Kustomize
   (`kustomizeConfiguration`, templating, workload affinity), plus combined
   terraform + helm/kustomize patterns.
+- **`APPLICATION_PRIVATE_ECR_REFERENCE.md`** — provider private Amazon ECR for
+  connected application charts/images across AWS, GCP, Azure, and BYOC-K8s:
+  minted namespace credentials, cloud-scoped Helm values, Kustomize overlay
+  selection, registry scope, and runtime validation without false fresh-node
+  assumptions.
 - **`DEPLOYMENT_MODELS_REFERENCE.md`** — the orthogonal `deployment:` block and
   operational flows for hosted / BYOC (BYO-VPC, PrivateLink) / BYOC-K8s /
   air-gapped, plus customer-account onboarding, tenancy, and the ISV-phrasing

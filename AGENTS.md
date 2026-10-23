@@ -35,6 +35,20 @@ All skills default to the `omnistrate-ctl` CLI (alias `omctl`) — install it an
 - **The compose schema accepts any `x-*` key** (`patternProperties: {"^x-": {}}`), so schema validation cannot catch a misspelled extension name. Only the `omctl docs compose-spec` tag list can.
 - **`docs search` wants prose phrases, not identifiers.** `docs search "api parameter types"` works; `docs search "instanceTypes cloudProvider apiParam required"` returns unrelated pages. Use `--limit 15` — the syntax-bearing sections often rank 8–12, below the prose overview pages.
 
+### Azure instance-type zone placement
+
+For Azure AKS, `zonePlacementPolicy` belongs in each instance type's
+`configurationOverrides` (`compute.instanceTypes` in ServicePlanSpec;
+`x-omnistrate-compute.instanceTypes` in Compose). Resource placement stays under
+`enableMultiZone` / `enableCustomZone` in the capabilities block. `strict` is the
+default; `bestEffort` skips pools in unavailable selected AZs, provided other types
+cover those AZs. Multi-zone Resources still require at least two eligible AZs;
+custom placement stays in the requested AZ. See
+[the compute reference](skills/omnistrate-fde/HELM_ONBOARDING_REFERENCE.md#zoneplacementpolicy)
+when designing or debugging this configuration. Verify the field in the target
+platform's schema before using it; if absent, report support as unverified rather
+than moving it into capabilities or network settings.
+
 ## Skill Routing Guide
 
 Use the table below to select the right skill for each request. All four deployment models — **hosted** (provider cloud), **BYOC** including BYO-VPC and PrivateLink (customer cloud accounts), **BYOC-K8s** (customer-managed Kubernetes / `byoc-onprem`), and **air-gapped** (`onPremDeployment` installer) — are supported across all artifact types (the air-gapped installer packages Helm chart(s), so non-Helm stacks must first be bundled into chart(s)).
