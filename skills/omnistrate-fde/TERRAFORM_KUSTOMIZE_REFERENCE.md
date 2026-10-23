@@ -150,7 +150,25 @@ configurationPerCloudProvider:
 All three fields (`serviceAccountID`, `publicKeyID`, `privateKeyPEM`) are required for Nebius.
 
 **BYOC custom policy:** for BYOC (customer-account) deployments you must declare the permissions
-your Terraform stack needs so Omnistrate can generate correct customer onboarding scripts:
+your Terraform stack needs so Omnistrate can generate correct customer onboarding scripts.
+For AWS, use `policies.aws` for an inline policy and `managedPolicies.aws` to create
+customer-managed IAM policies or attach existing policies:
+
+- **Create:** supply `name` and a JSON `policy` document. `Version` defaults to `2012-10-17`;
+  if specified, it must use that value. `description` is optional and generated when omitted.
+  Names must be unique within the model, contain only letters, numbers, or `_+=,.@-`, and be
+  at most 128 characters. Use model-specific names unless intentionally sharing identical policy
+  documents and descriptions across models. Descriptions can contain at most 1,000 characters.
+- **Attach existing:** supply `arn` alone, for an AWS-managed or customer-managed IAM policy.
+  Do not add `name`, `policy`, or `description` to an ARN entry. Customer-managed references
+  must already exist in the account where the execution role is created. Omnistrate only attaches
+  these policies; it does not create, update, or delete them.
+
+When both `policies.aws` and `managedPolicies.aws` are configured, the AWS Terraform execution
+role receives permissions from both. Managed policies are supported only for AWS; use `roles`
+for GCP/Azure and `permissions` for OCI.
+All created and referenced managed policies count toward the AWS IAM role's managed-policy
+attachment limit.
 
 ```yaml
 features:
@@ -162,6 +180,18 @@ features:
             {"Action": ["rds:*","s3:*"], "Effect": "Allow", "Resource": "*"}
           ]
         }
+    managedPolicies:
+      aws:
+        - name: terraform-storage-management
+          policy: |
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {"Action": ["s3:*"], "Effect": "Allow", "Resource": "*"}
+              ]
+            }
+        - arn: arn:aws:iam::aws:policy/AmazonRDSFullAccess
+        - arn: arn:aws:iam::123456789012:policy/custom-terraform-policy
     roles:
       gcp:
         - name: roles/cloudsql.admin
@@ -171,6 +201,33 @@ features:
       oci:
         - "manage queues"
 ```
+
+**Expected result:** the AWS Terraform execution role receives permissions from `policies.aws`,
+the new `terraform-storage-management` policy, and the two policies referenced by ARN.
+Referenced policies remain externally managed.
+
+**Spec placement:** the example above uses root-level `features` in a standalone
+ServicePlanSpec. In Compose, put the same feature configuration under
+`x-omnistrate-service-plan.features`, for example:
+
+```yaml
+x-omnistrate-service-plan:
+  features:
+    CUSTOM_TERRAFORM_POLICY:
+      policies:
+        aws: |
+          {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"ec2:DescribeInstances","Resource":"*"}]}
+      managedPolicies:
+        aws:
+          - name: terraform-storage-management
+            policy: |
+              {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}
+          - arn: arn:aws:iam::aws:policy/AmazonRDSFullAccess
+          - arn: arn:aws:iam::123456789012:policy/custom-terraform-policy
+```
+
+Direct service-model create/enable APIs use the `CUSTOM_TERRAFORM_POLICY` contents as the
+feature's `configuration` (without the `features` wrapper).
 
 ---
 
