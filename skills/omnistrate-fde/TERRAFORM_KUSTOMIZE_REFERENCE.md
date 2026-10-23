@@ -154,10 +154,14 @@ your Terraform stack needs so Omnistrate can generate correct customer onboardin
 The existing `policies.aws` field defines the role's inline policy. Use the additive
 `managedPolicies.aws` array to create customer-managed IAM policies or attach existing policies:
 
-- **Create:** supply `name` + a JSON `policy` document. `description` is optional; omit it unless
-  the user wants one. When omitted, the onboarding renderer generates a description.
-  Names must be unique within the model, contain only letters, numbers, or `_+=,.@-`, and be
-  at most 128 characters. Descriptions can contain at most 1,000 characters.
+- **Create:** supply `name` + a JSON `policy` document. If `Version` is present, it must be
+  `2012-10-17`; omitting it is supported and the renderer adds that version. `description` is
+  optional; omit it unless the user wants one. When omitted, the onboarding renderer generates
+  a description. Names must be unique within the model, contain only letters, numbers, or
+  `_+=,.@-`, and be at most 128 characters. Across models in the same onboarding template, reuse
+  a name only when the policy and effective description are identical; otherwise use
+  model-specific names because conflicting definitions fail reconciliation. Descriptions can
+  contain at most 1,000 characters.
 - **Attach existing:** supply `arn` alone, for an AWS-managed or customer-managed IAM policy.
   Do not add `name`, `policy`, or `description` to an ARN entry. Customer-managed references
   must already exist in the account where the execution role is created. Omnistrate only attaches
