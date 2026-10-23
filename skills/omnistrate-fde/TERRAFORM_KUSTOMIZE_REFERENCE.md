@@ -156,6 +156,8 @@ The existing `policies.aws` field defines the role's inline policy. Use the addi
 
 - **Create:** supply `name` + a JSON `policy` document. `description` is optional; omit it unless
   the user wants one. When omitted, the onboarding renderer generates a description.
+  Names must be unique within the model, contain only letters, numbers, or `_+=,.@-`, and be
+  at most 128 characters. Descriptions can contain at most 1,000 characters.
 - **Attach existing:** supply `arn` alone, for an AWS-managed or customer-managed IAM policy.
   Do not add `name`, `policy`, or `description` to an ARN entry. Customer-managed references
   must already exist in the account where the execution role is created. Omnistrate only attaches
@@ -165,6 +167,8 @@ Both alternatives attach to the same per-model Terraform role. No feature gate i
 When both `policies.aws` and `managedPolicies.aws` are present, preserve both—do not replace or
 merge one into the other. `managedPolicies` currently supports AWS only; non-AWS provider keys
 are rejected. Existing GCP/Azure roles and OCI permissions remain supported in their own fields.
+All created and referenced managed policies count toward the AWS IAM role's managed-policy
+attachment limit.
 
 ```yaml
 features:
