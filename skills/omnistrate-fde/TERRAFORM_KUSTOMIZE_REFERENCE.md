@@ -151,26 +151,22 @@ All three fields (`serviceAccountID`, `publicKeyID`, `privateKeyPEM`) are requir
 
 **BYOC custom policy:** for BYOC (customer-account) deployments you must declare the permissions
 your Terraform stack needs so Omnistrate can generate correct customer onboarding scripts.
-The existing `policies.aws` field defines the role's inline policy. Use the additive
-`managedPolicies.aws` array to create customer-managed IAM policies or attach existing policies:
+For AWS, use `policies.aws` for an inline policy and `managedPolicies.aws` to create
+customer-managed IAM policies or attach existing policies:
 
-- **Create:** supply `name` + a JSON `policy` document. If `Version` is present, it must be
-  `2012-10-17`; omitting it is supported and the renderer adds that version. `description` is
-  optional; omit it unless the user wants one. When omitted, the onboarding renderer generates
-  a description. Names must be unique within the model, contain only letters, numbers, or
-  `_+=,.@-`, and be at most 128 characters. Across models in the same onboarding template, reuse
-  a name only when the policy and effective description are identical; otherwise use
-  model-specific names because conflicting definitions fail reconciliation. Descriptions can
-  contain at most 1,000 characters.
+- **Create:** supply `name` and a JSON `policy` document. `Version` defaults to `2012-10-17`;
+  if specified, it must use that value. `description` is optional and generated when omitted.
+  Names must be unique within the model, contain only letters, numbers, or `_+=,.@-`, and be
+  at most 128 characters. Use model-specific names unless intentionally sharing identical policy
+  documents and descriptions across models. Descriptions can contain at most 1,000 characters.
 - **Attach existing:** supply `arn` alone, for an AWS-managed or customer-managed IAM policy.
   Do not add `name`, `policy`, or `description` to an ARN entry. Customer-managed references
   must already exist in the account where the execution role is created. Omnistrate only attaches
   these policies; it does not create, update, or delete them.
 
-Both alternatives attach to the same per-model Terraform role. No feature gate is required.
-When both `policies.aws` and `managedPolicies.aws` are present, preserve both—do not replace or
-merge one into the other. `managedPolicies` currently supports AWS only; non-AWS provider keys
-are rejected. Existing GCP/Azure roles and OCI permissions remain supported in their own fields.
+When both `policies.aws` and `managedPolicies.aws` are configured, the AWS Terraform execution
+role receives permissions from both. Managed policies are supported only for AWS; use `roles`
+for GCP/Azure and `permissions` for OCI.
 All created and referenced managed policies count toward the AWS IAM role's managed-policy
 attachment limit.
 
@@ -206,12 +202,11 @@ features:
         - "manage queues"
 ```
 
-**Expected result:** the role keeps its inline permissions, receives the new
-`terraform-storage-management` policy with a generated description, and attaches the two
-existing policy ARNs without taking ownership of those policies. Existing tightened-v2 handling
-of `policies.aws` is unchanged.
+**Expected result:** the AWS Terraform execution role receives permissions from `policies.aws`,
+the new `terraform-storage-management` policy, and the two policies referenced by ARN.
+Referenced policies remain externally managed.
 
-**Spec/API placement:** the example above uses root-level `features` in a standalone
+**Spec placement:** the example above uses root-level `features` in a standalone
 ServicePlanSpec. In Compose, put the same feature configuration under
 `x-omnistrate-service-plan.features`, for example:
 
@@ -233,11 +228,6 @@ x-omnistrate-service-plan:
 
 Direct service-model create/enable APIs use the `CUSTOM_TERRAFORM_POLICY` contents as the
 feature's `configuration` (without the `features` wrapper).
-Compose create/build/re-import (including legacy create) and ServicePlanSpec
-prepare/build/re-import support both forms. Model/plan describe APIs preserve the configuration,
-and the version-set spec API preserves the supplied YAML. Re-importing an existing tier updates
-its policy configuration rather than retaining stale entries; these are model-level onboarding
-permissions, not tier feature snapshots.
 
 ---
 
