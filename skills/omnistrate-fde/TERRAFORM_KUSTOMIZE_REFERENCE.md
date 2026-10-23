@@ -239,12 +239,6 @@ and the version-set spec API preserves the supplied YAML. Re-importing an existi
 its policy configuration rather than retaining stale entries; these are model-level onboarding
 permissions, not tier feature snapshots.
 
-The separate typed customer-onboarding `terraformExecutionPolicies` metadata builder currently
-exposes inline documents, roles, and permissions only. Do not invent a managed-policy field there;
-use supplied Compose/ServicePlanSpec YAML for this feature until that API is extended. Verify the
-target platform's published schema before building; related implementation PRs may not yet be
-deployed there.
-
 ---
 
 ### State management
