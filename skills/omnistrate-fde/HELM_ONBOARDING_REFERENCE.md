@@ -147,7 +147,11 @@ helmChartConfiguration:
   # authProvider: omit — Omnistrate resolves ECR credentials at deploy time
 ```
 
-Keep `EnableECRHelmChartPull=true` in the ISV account's CloudFormation stack.
+Keep `EnableArtifactECRPull=true` in the ISV account's CloudFormation stack.
+This grants private chart/image reads; it does not enable managed-artifact
+publication or prove registry readiness. Existing stacks need the matching
+generated template before using the renamed parameter; confirm any stack update
+with the account owner before applying it.
 
 ### Local chart artifact
 
@@ -1416,7 +1420,7 @@ Non-obvious points:
   **`ExpandBoundaryForAWSServiceIntegrations=true`** in the provider AWS account's
   generated CloudFormation stack, or those credentials cannot be issued. Accounts
   onboarded before that parameter existed need their stack updated.
-- This is independent of **`EnableECRHelmChartPull=true`** (needed when the plan
+- This is independent of **`EnableArtifactECRPull=true`** (needed when the plan
   pulls a Helm OCI chart from the provider's private ECR — see §Private Amazon ECR
   OCI repos). A plan using both capabilities needs both flags set.
 - The network path may be public egress or private routed connectivity to a
