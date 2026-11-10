@@ -141,9 +141,10 @@ The cluster needs outbound HTTPS to:
 | Destination | Why | Needed by |
 |---|---|---|
 | `*.omnistrate.cloud` | Control-plane / agent connection; without it nothing deploys | Agent install |
-| Generated kit's registry and download hosts | Dataplane-agent chart/image: private ECR, provider public ECR, or the legacy public path, depending on enabled delivery | **Agent install — before any plan workload exists** |
+| Generated kit's registry and download hosts | Private managed-artifact dataplane-agent chart/image selected by the signed kit | **Agent install — before any plan workload exists** |
 | `get.helm.sh` | Only if `helm` is not already installed on the operator's machine | Agent install |
-| `registry.k8s.io`, `quay.io`, `docker.io`, `ghcr.io` | Deployment-cell amenity images (external-dns, cert-manager, prometheus, grafana, headlamp, dcgm-exporter) | Amenity install |
+| Selected private registry and download hosts | Deployment-cell managed amenity charts and images | Amenity install |
+| Registries used by custom amenities, if configured | Custom charts and images have separate registry requirements | Amenity install |
 | Container image registries used by **your plan** | Image pulls at deploy time — images are **not** pre-embedded on BYOC-K8s | Instance deploy |
 | Helm chart registries / OCI repos used by **your plan** | Chart pulls at deploy time | Instance deploy |
 | Regional AWS CloudWatch Logs endpoint | **Only if** the plan enables native logs — see §Native logs | Runtime |
@@ -154,9 +155,9 @@ install. Add your plan's actual registries to the generic list above — image-p
 failures on BYOC-K8s are almost always a missing allowlist entry.
 
 Derive the agent allowlist from a fresh kit, not a hardcoded GHCR hostname.
-Public ECR needs outbound internet access even when private ECR VPC endpoints
-exist. Private kits additionally contain short-lived pull credentials; handle
-their files and signed download URLs as credential material.
+The signed private installer needs access to its selected private ECR registry
+and download hosts. Kits contain short-lived pull credentials; handle their files
+and account-bound signed download URLs as credential material.
 
 ### What lands in the customer's cluster automatically
 
@@ -576,17 +577,15 @@ The installer creates the dataplane-agent resources only. Amenities and product
 workloads are installed later, by your control plane, over the agent connection —
 see §What lands in the customer's cluster automatically.
 
-Use the fresh kit's chart reference/version, image values, Helm authentication,
-and image-pull Secret instructions. A signed private kit uses the `byoc-onprem`
-release policy and requires a `READY` private sync on the selected provider
-provisioner; missing/unready copies fail generation without public/GHCR fallback.
-A legacy kit with public publication access uses the effective **AWS** policy
-and a `READY` provider-account public publication; an exact pin cannot fall back
-to another release or GHCR. Without public publication access the legacy default
-public path remains. These modes can therefore have different pins. Organization
-access, provider publication permissions, and registry readiness are separate.
-Re-download a private kit before reinstalling if its packaged credentials may
-have expired; do not substitute a registry/tag or report signed URLs/credentials.
+Use the fresh signed kit's chart reference/version, image values, Helm
+authentication, and image-pull Secret instructions. Enable signed installer and
+private managed-artifact access for the SaaS Provider organization before this
+flow. The kit uses the `byoc-onprem` release policy and requires a `READY` private
+sync on the selected provider AWS provisioner; missing/unready copies fail
+generation without public-source fallback. Organization access, provider private
+publication permissions, and registry readiness are separate prerequisites.
+Re-download before reinstalling if its packaged credentials may have expired;
+do not substitute a registry/tag or report signed URLs/credentials.
 
 Poll until the account configuration reports `READY`. The status is at
 **`.summary.account_status`** — a top-level `.account_status` does not exist, and
@@ -604,9 +603,11 @@ States you will see: **`VERIFYING`** → **`READY`** (and later
 
 ### Handing the install to a real customer
 
-Use the generated `result_params.byoc_onprem_install_command` when supplied,
-rather than reconstructing a download URL from the account-config ID. Signed
-downloads are account-bound and can expire. Deliver the fresh command/kit through
+Use the generated `result_params.byoc_onprem_install_command` when supplied.
+Its signed download URL is bound to the account configuration and can expire;
+never reconstruct it from an account-config ID or strip its signature/query
+parameters. If it expires, use the authenticated customer-account workflow below
+to request a fresh kit/command. Deliver the fresh command/kit through
 the customer's approved secure channel; do not commit it to a shared runbook or
 paste it into logs. Confirm the intended cluster and installation before running it.
 

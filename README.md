@@ -71,10 +71,10 @@ This repository organizes agent capabilities into specialized skills:
 #### [**skills/omnistrate-managed-artifacts/**](./skills/omnistrate-managed-artifacts/) - Managed Artifact Releases
 
 - **SKILL.md** - Managed amenity release inspection, template release policies,
-  private ECR synchronization, public ECR publication, and BYOC-K8s kit readiness.
+  private ECR synchronization, and signed private BYOC-K8s kit readiness.
 
-**Use when**: Inspecting managed releases or registry delivery, diagnosing install-kit
-artifact selection, or guiding an explicitly requested release-policy change.
+**Use when**: Inspecting managed releases or private registry delivery, diagnosing
+signed install-kit artifact selection, or guiding an explicitly requested release-policy change.
 Registry `READY` does not prove cell installation. Policy changes, IAM updates,
 installations, and rollouts require separate scope and confirmation.
 
@@ -147,7 +147,7 @@ Use this table to pick the right skill for a request:
 | Mixed stack (e.g., Terraform infra + Helm app) | hosted / BYOC / BYOC-K8s / air-gapped | **omnistrate-fde** |
 | Kubernetes operator (CRDs + controller) | hosted / BYOC / BYOC-K8s | **omnistrate-operator** |
 | Instance showing FAILED / DEPLOYING / probe errors | hosted / BYOC / BYOC-K8s / air-gapped | **omnistrate-sre** |
-| Managed amenity releases, policy, ECR synchronization/publication, or install-kit artifact readiness | provider registries / connected BYOC-K8s | **omnistrate-managed-artifacts** |
+| Managed amenity releases, policy, private ECR synchronization, or signed install-kit artifact readiness | provider registries / connected BYOC-K8s | **omnistrate-managed-artifacts** |
 
 **Deployment model quick-map** (all models available for all artifact types via the FDE skill; the air-gapped installer packages Helm chart(s), so non-Helm stacks must first be bundled into chart(s)):
 

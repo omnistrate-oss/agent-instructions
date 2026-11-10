@@ -244,9 +244,11 @@ The customer owns the cluster, nodes, storage, routing, and endpoint exposure; O
   An empty namespace with a healthy agent points at the workflow/plan; a populated namespace with a FAILED instance points at readiness conditions or endpoints.
 - **Agent connected but the account never went READY** — inspect account/workflow
   diagnostics before reinstalling. If the failure names managed artifact delivery,
-  distinguish a `READY` private sync from a `READY` provider public publication;
-  neither proves that the agent is installed. Signed private kits use the
-  `byoc-onprem` release policy; legacy public-ECR kits use the effective AWS policy.
+  check the selected provisioner's private synchronization and the `byoc-onprem`
+  release policy. A `READY` copy does not prove that the agent is installed. The
+  signed private installer requires provider organization access and the exact
+  private copy; it does not fall back to public-source artifacts. Preserve the
+  generated account-bound signed URL; request a fresh kit if it has expired.
   Copy registry/chart/image values from a fresh kit, not hardcoded GHCR references.
   After confirming a reinstall for the intended cluster, re-download with
   `omnistrate-ctl account customer install-kit <onboarding-instance-id>` when

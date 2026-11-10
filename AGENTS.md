@@ -60,7 +60,7 @@ Use the table below to select the right skill for each request. All four deploym
 | Onboard a Kubernetes operator (CRDs + controller, e.g. CloudNativePG, Strimzi, KubeAI) | **omnistrate-operator** |
 | Add pricing, billing, usage metering, or a marketplace/Chargebee/Clazar integration to an existing plan | **omnistrate-fde** (`BILLING_METERING_REFERENCE.md`) |
 | Debug a FAILED or stuck Omnistrate instance (any artifact type, any deployment model) | **omnistrate-sre** |
-| Inspect managed amenity releases, release policies, private ECR syncs, or public ECR publication/kit readiness | **omnistrate-managed-artifacts** |
+| Inspect managed amenity releases, release policies, private ECR syncs, or signed private install-kit readiness | **omnistrate-managed-artifacts** |
 
 ## Available Skills
 
@@ -68,10 +68,10 @@ Use the table below to select the right skill for each request. All four deploym
 **Location**: `skills/omnistrate-managed-artifacts/`
 
 Inspect managed amenity releases, organization-template release policy, private
-ECR synchronization, and provider-account public ECR publication. Distinguishes
-registry readiness from installed state and the private/public BYOC-K8s installer
-paths. Policy changes, IAM updates, installations, and rollouts require explicit
-scope and action-time confirmation; inspection never authorizes them. Not product
+ECR synchronization, and signed private BYOC-K8s install-kit readiness.
+Distinguishes registry readiness from installed state and preserves generated
+account-bound download URLs. Policy changes, IAM updates, installations, and
+rollouts require explicit scope and action-time confirmation; inspection never authorizes them. Not product
 image publishing, custom artifact onboarding, or an agent-upgrade workflow.
 
 ### Omnistrate Solutions Architect
