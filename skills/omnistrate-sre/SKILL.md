@@ -242,7 +242,13 @@ The customer owns the cluster, nodes, storage, routing, and endpoint exposure; O
   helm list -n <instance-id> --kubeconfig /tmp/kubeconfig
   ```
   An empty namespace with a healthy agent points at the workflow/plan; a populated namespace with a FAILED instance points at readiness conditions or endpoints.
-- **Agent connected but the account never went READY** — re-run the install kit (`./install.sh --non-interactive`), or re-download it with `omnistrate-ctl account customer install-kit <onboarding-instance-id>`, then re-check `omnistrate-ctl account customer describe <id>`.
+- **Agent connected but the account never went READY** — inspect account/workflow
+  diagnostics before reinstalling. If the failure names managed artifact delivery,
+  use `omnistrate-managed-artifacts` to check the `byoc-onprem` release policy and
+  private sync; re-download a fresh kit (`omnistrate-ctl account customer install-kit
+  <onboarding-instance-id>`) only after confirming a reinstall for the intended
+  cluster, then re-check `omnistrate-ctl account customer describe <id>`. Never log
+  kit credentials or signed URLs.
 
 For the deployment model itself — onboarding flow, egress allowlist, prerequisites, endpoint patterns — see the FDE skill's `BYOC_K8S_REFERENCE.md`.
 

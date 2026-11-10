@@ -13,7 +13,7 @@ That is all the skills require. An Omnistrate MCP server is an optional add-on (
 
 ## Installing the Skills
 
-Each skill is a self-contained directory under `skills/<skill-name>/` (SKILL.md + reference files + assets) in the open [Agent Skills](https://agentskills.io) format. Install the ones you need — `omnistrate-fde`, `omnistrate-operator`, `omnistrate-sre`, `omnistrate-sa`.
+Each skill is a self-contained directory under `skills/<skill-name>/` (SKILL.md + optional references/assets) in the open [Agent Skills](https://agentskills.io) format. Install the ones you need — `omnistrate-fde`, `omnistrate-operator`, `omnistrate-sre`, `omnistrate-sa`, `omnistrate-managed-artifacts`.
 
 ### Cross-agent (one command)
 
@@ -34,7 +34,7 @@ Skills load from `~/.claude/skills/` (personal, all projects) or `.claude/skills
 ```bash
 git clone https://github.com/omnistrate-oss/agent-instructions /tmp/agent-instructions
 mkdir -p ~/.claude/skills
-for s in omnistrate-fde omnistrate-operator omnistrate-sre omnistrate-sa; do
+for s in omnistrate-fde omnistrate-operator omnistrate-sre omnistrate-sa omnistrate-managed-artifacts; do
   cp -r "/tmp/agent-instructions/skills/$s" ~/.claude/skills/
 done
 ```
@@ -46,7 +46,7 @@ Codex CLI supports the same SKILL.md format from `~/.agents/skills/` (personal) 
 ```bash
 git clone https://github.com/omnistrate-oss/agent-instructions /tmp/agent-instructions
 mkdir -p ~/.agents/skills
-for s in omnistrate-fde omnistrate-operator omnistrate-sre omnistrate-sa; do
+for s in omnistrate-fde omnistrate-operator omnistrate-sre omnistrate-sa omnistrate-managed-artifacts; do
   cp -r "/tmp/agent-instructions/skills/$s" ~/.agents/skills/
 done
 ```
@@ -60,12 +60,26 @@ gh skill install omnistrate-oss/agent-instructions omnistrate-fde
 gh skill install omnistrate-oss/agent-instructions omnistrate-operator
 gh skill install omnistrate-oss/agent-instructions omnistrate-sre
 gh skill install omnistrate-oss/agent-instructions omnistrate-sa
+gh skill install omnistrate-oss/agent-instructions omnistrate-managed-artifacts
 # add --scope user for personal scope; project installs land in .github/skills/
 ```
 
 ### Skills
 
 This repository organizes agent capabilities into specialized skills:
+
+#### [**skills/omnistrate-managed-artifacts/**](./skills/omnistrate-managed-artifacts/) - Managed Artifact Releases
+
+- **SKILL.md** - Managed amenity release inspection, template release policies,
+  private ECR synchronization, and signed private BYOC-K8s kit readiness.
+
+**Use when**: Inspecting managed releases or private registry delivery, diagnosing
+signed install-kit artifact selection, or guiding an explicitly requested release-policy change.
+Registry `READY` does not prove cell installation. Policy changes, IAM updates,
+installations, and rollouts require separate scope and confirmation.
+
+This skill does not publish product images, onboard custom artifacts, or upgrade
+an installed agent.
 
 #### [**skills/omnistrate-sa/**](./skills/omnistrate-sa/) - Solutions Architect
 
@@ -133,6 +147,7 @@ Use this table to pick the right skill for a request:
 | Mixed stack (e.g., Terraform infra + Helm app) | hosted / BYOC / BYOC-K8s / air-gapped | **omnistrate-fde** |
 | Kubernetes operator (CRDs + controller) | hosted / BYOC / BYOC-K8s | **omnistrate-operator** |
 | Instance showing FAILED / DEPLOYING / probe errors | hosted / BYOC / BYOC-K8s / air-gapped | **omnistrate-sre** |
+| Managed amenity releases, policy, private ECR synchronization, or signed install-kit artifact readiness | hosted / BYOC / BYOC-K8s (connected) | **omnistrate-managed-artifacts** |
 
 **Deployment model quick-map** (all models available for all artifact types via the FDE skill; the air-gapped installer packages Helm chart(s), so non-Helm stacks must first be bundled into chart(s)):
 
