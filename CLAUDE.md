@@ -71,8 +71,9 @@ Inspect managed amenity releases, organization-template release policy, private
 ECR synchronization, and signed private BYOC-K8s install-kit readiness.
 Distinguishes registry readiness from installed state and preserves generated
 account-bound download URLs. Policy changes, IAM updates, installations, and
-rollouts require explicit scope and action-time confirmation; inspection never authorizes them. Not product
-image publishing, custom artifact onboarding, or an agent-upgrade workflow.
+rollouts require explicit scope and action-time confirmation; inspection never
+authorizes them. Not product image publishing, custom artifact onboarding, or an
+agent-upgrade workflow.
 
 ### Omnistrate Solutions Architect
 **Location**: `skills/omnistrate-sa/`

@@ -244,20 +244,11 @@ The customer owns the cluster, nodes, storage, routing, and endpoint exposure; O
   An empty namespace with a healthy agent points at the workflow/plan; a populated namespace with a FAILED instance points at readiness conditions or endpoints.
 - **Agent connected but the account never went READY** — inspect account/workflow
   diagnostics before reinstalling. If the failure names managed artifact delivery,
-  check the selected provisioner's private synchronization and the `byoc-onprem`
-  release policy. A `READY` copy does not prove that the agent is installed. The
-  signed private installer requires provider organization access and the exact
-  private copy; it does not fall back to public-source artifacts. Preserve the
-  generated account-bound signed URL; request a fresh kit if it has expired.
-  Copy registry/chart/image values from a fresh kit, not hardcoded GHCR references.
-  After confirming a reinstall for the intended cluster, re-download with
-  `omnistrate-ctl account customer install-kit <onboarding-instance-id>` when
-  packaged private credentials may have expired, follow its authentication and
-  image-pull Secret instructions, and re-check
-  `omnistrate-ctl account customer describe <id>`. Do not log kit credentials or
-  signed URLs. Use `omnistrate-managed-artifacts` when available for detailed
-  release/policy/registry inspection; these checks do not authorize IAM changes
-  or a rollout.
+  use `omnistrate-managed-artifacts` to check the `byoc-onprem` release policy and
+  private sync; re-download a fresh kit (`omnistrate-ctl account customer install-kit
+  <onboarding-instance-id>`) only after confirming a reinstall for the intended
+  cluster, then re-check `omnistrate-ctl account customer describe <id>`. Never log
+  kit credentials or signed URLs.
 
 For the deployment model itself — onboarding flow, egress allowlist, prerequisites, endpoint patterns — see the FDE skill's `BYOC_K8S_REFERENCE.md`.
 

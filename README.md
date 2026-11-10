@@ -147,7 +147,7 @@ Use this table to pick the right skill for a request:
 | Mixed stack (e.g., Terraform infra + Helm app) | hosted / BYOC / BYOC-K8s / air-gapped | **omnistrate-fde** |
 | Kubernetes operator (CRDs + controller) | hosted / BYOC / BYOC-K8s | **omnistrate-operator** |
 | Instance showing FAILED / DEPLOYING / probe errors | hosted / BYOC / BYOC-K8s / air-gapped | **omnistrate-sre** |
-| Managed amenity releases, policy, private ECR synchronization, or signed install-kit artifact readiness | provider registries / connected BYOC-K8s | **omnistrate-managed-artifacts** |
+| Managed amenity releases, policy, private ECR synchronization, or signed install-kit artifact readiness | hosted / BYOC / BYOC-K8s (connected) | **omnistrate-managed-artifacts** |
 
 **Deployment model quick-map** (all models available for all artifact types via the FDE skill; the air-gapped installer packages Helm chart(s), so non-Helm stacks must first be bundled into chart(s)):
 

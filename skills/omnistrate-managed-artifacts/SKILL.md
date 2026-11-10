@@ -40,10 +40,12 @@ backend availability as unverified when the requested inspection cannot confirm 
 | `release list` / `release describe` | Published release and managed amenity inventory |
 | `policy describe` | Selection for one organization/environment/cloud template |
 | Private `sync list` / `sync describe` | Private delivery to an execution provisioner |
-| Cell configuration and lifecycle/workflow results | Application to a particular cell |
+| `deployment-cell describe` `current_managed_artifact_version` | Release currently serving a particular cell |
+| Cell configuration and lifecycle/workflow results | Why a cell has or has not applied the selection |
 
 `READY` is registry readiness, not installed state. `effectiveBundleVersion` is
-template selection, not the version running in a cell. Automatic runtime selection
+template selection, not the version running in a cell; use the cell's
+`current_managed_artifact_version` for that. Automatic runtime selection
 can lag the newest published release while the relevant private copy is
 unready. Do not turn a release pin into an unrequested upgrade or rollback.
 
@@ -56,7 +58,8 @@ omnistrate-ctl managed-artifact release list --limit 20 --output json
 omnistrate-ctl managed-artifact release describe \
   --bundle-version <bundle-version> --output json
 
-# Omitted registry selection inspects PRIVATE_ECR only.
+# Omitted registry selection inspects PRIVATE_ECR only. Public ECR publication
+# (--registry-type public_ecr, sppap- IDs) is out of scope for this skill.
 omnistrate-ctl managed-artifact sync list \
   --bundle-version <bundle-version> --output json
 omnistrate-ctl managed-artifact sync describe --id <sync-id> --output json
@@ -178,6 +181,10 @@ This does not relax the signed private installer's no-fallback requirement.
   record ID, execution target if present, and sanitized failure category. Do not
   infer a specific customer-VPC fault from a generic failure category.
 - Investigate installed cell state only when that target and access are requested.
+  `omnistrate-ctl deployment-cell describe <cell-id> -o json` reports
+  `current_managed_artifact_version` (release serving the cell; pending/failed
+  updates keep the previous value, permission fallback reports its resolved
+  release) and `effective_managed_artifact_version` (template selection).
   Template sync/apply operations are separate live changes needing confirmation.
 
 AWS provider onboarding uses `EnableArtifactECRPull` for private chart/image reads,
