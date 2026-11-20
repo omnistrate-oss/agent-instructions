@@ -1,6 +1,6 @@
 ---
 name: omnistrate-fde
-description: Guide users through onboarding any application onto the Omnistrate platform and turning it into a managed SaaS offering. Covers Docker Compose, Helm charts, Terraform/OpenTofu modules, Kustomize, and mixed stacks, across all deployment models - hosted (your cloud), BYOC (customer cloud accounts, incl. BYO-VPC and PrivateLink), BYOC-K8s (customer-managed Kubernetes, no infra provisioning), and air-gapped/on-prem installers. Also covers monetization - pricing, Stripe end-to-end billing, usage metering export, custom billing dimensions, and cloud-marketplace/Chargebee/Clazar integrations. Use when a customer/ISV wants to onboard, "SaaS-ify", productize, or offer their software as a managed service, asks about BYOC / bring-your-own-cloud / on-prem / air-gapped delivery, or asks how to charge, meter, or bill for it. For Kubernetes operator-based services (CRDs + controller) use omnistrate-operator; for designing an architecture from scratch use omnistrate-sa; for debugging failed instances use omnistrate-sre.
+description: Onboard applications to Omnistrate and turn them into managed SaaS offerings. Supports Docker Compose, Helm, Terraform/OpenTofu, Kustomize, and mixed stacks across hosted, BYOC, BYOC-K8s, and air-gapped deployment models. Use for onboarding or productizing software, extending Helm-backed Plans with custom workflows, ContainerSet or HTTP templates, and post-operation Validation, or configuring pricing, billing, and metering. For Kubernetes operators use omnistrate-operator; for architecture design use omnistrate-sa; for failed-instance debugging use omnistrate-sre.
 ---
 
 # Onboarding Services to Omnistrate
@@ -60,7 +60,7 @@ from the platform. **These subcommands need no `omnistrate-ctl login`** (they do
 
 **Caveats — each one was observed breaking a real agent run. Do not skip.**
 
-- **`docs system-parameters` does not list workflow-context variables.** Its root has only `backup`, `compute`, `deployment`, `deploymentCell`, `id`, `network`, `storage`, `tenant`, `deterministicSeedValue`. `$sys.namespace`, `$sys.instanceId`, `$sys.restore.*`, `$sys.sourceInstanceId` and `$sys.targetInstanceId` are **absent from it but real** — they appear throughout the platform's own workflow examples. Never delete a `$sys.*` path merely because `system-parameters` omits it; confirm with `omctl docs search "workflow context system parameters" --limit 15`.
+- **`docs system-parameters` does not list workflow-context variables.** Its root has only `backup`, `compute`, `deployment`, `deploymentCell`, `id`, `network`, `storage`, `tenant`, `deterministicSeedValue`. `$sys.namespace`, `$sys.instanceId`, `$sys.restore.*`, `$sys.sourceInstanceId`, `$sys.targetInstanceId`, and `$sys.validation.operation` are **absent from it but real** — they appear throughout the platform's own workflow examples. Never delete a `$sys.*` path merely because `system-parameters` omits it; confirm with `omctl docs search "workflow context system parameters" --limit 15`.
 - **Casing: follow the doc examples.** The platform decodes specs through `encoding/json`, which matches field names case-insensitively, so `awsAccountId` and `AwsAccountId` both build. The generated schema now uses the documented lowerCamel spelling for the blocks that had drifted (`ActionHook`, `Deployment`/`OnPremDeployment`, `configurationOverrides.acceleratorConfiguration`). A few fields are documented UpperCamel and stay that way — `OsFamily`, `GpuClusterID`, and `CustomDNSConfig`'s `TargetKubernetesService`/`TargetName`/`TargetPort`. When in doubt copy the doc example; use the schema to decide whether a field exists at all.
 - **Enum coverage is partial.** `tenancyType`, `cloudProvider`, api-param `type`, and action-hook `type`/`scope` now carry `enum` in the schema, so `omctl docs validate` catches a wrong value there. Everything else — storage types (`instanceStorageType`), `cpuArchitecture`, `networkingType` — is still a bare `{"type": "string"}`, so a wrong value passes silently. For those, get legal values from the prose (`omctl docs compose-spec "<tag>"` / `omctl docs plan-spec "<section>"`).
 - **Check the finished spec, do not just look fields up.** `omctl docs validate --file spec.yaml` validates a compose spec or ServicePlanSpec against the authoritative schema and reports every violation with its path. Run it before every build — it catches unknown, misplaced and mistyped fields without touching your account, and exits non-zero so it works in a pre-commit hook or CI step. `additionalProperties` errors mask nested ones, so re-run after each fix until it comes back clean.
@@ -336,6 +336,13 @@ identical), add additional clouds, and additional deployment models (one plan
 per model). For air-gapped targets the deliverable is the installer artifact
 rather than a running instance — see `DEPLOYMENT_MODELS_REFERENCE.md`
 §Air-gapped.
+For Helm-backed Resources, add provider-invoked `customWorkflows` or automatic
+`systemWorkflows.validation` only after the base Helm lifecycle is stable. The
+Validation system workflow runs after successful create, modify, and restore;
+patches, parameter updates, and version upgrades surface as `MODIFY`. Use the
+supported named `dag`, `resource`, `containerSet`, and `http` templates from
+`HELM_ONBOARDING_REFERENCE.md` — plain Argo `container` templates and inline
+task templates are not supported.
 **Billing/metering lands here, not earlier** — and only when monetization was
 requested. Implement the path chosen in intake Q6: `pricing` +
 `billingProviders` for end-to-end Stripe billing, or the `metering` export (+
@@ -392,6 +399,8 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
 |---|---|
 | "I declared `endpointConfiguration` / `loadBalancers.https`, so the Helm endpoint is exposed." | Neither creates DNS or routing for chart-created Services. The chart must create an Ingress (TLS via the per-instance `google-public-ca-tls` secret) or a LoadBalancer Service with the `hostname` annotation. Otherwise endpoints stay UNHEALTHY and the instance hangs in `DEPLOYING`. Each endpoint gets its own one-label host. See `HELM_ONBOARDING_REFERENCE.md` → "Exposing endpoints" → "Read this first". |
 | "Helm / Terraform / Kustomize isn't supported by this skill." | It is. Use `HELM_ONBOARDING_REFERENCE.md` / `TERRAFORM_KUSTOMIZE_REFERENCE.md`. |
+| "A Helm custom workflow will run automatically after install or upgrade." | Custom workflows are explicit provider/customer actions. Automatic post-operation logic belongs under `systemWorkflows.validation`; it runs after successful create, modify, and restore and can fail the parent operation. |
+| "I'll use a plain Argo `container` template or define the template inline in a DAG task." | The supported subset is named `dag`, `resource`, `containerSet`, and `http` templates. Use a one-container ContainerSet instead of `container`, and reference every leaf by `template`. |
 | "This is an operator, I'll write the workflows here." | Hand off to **omnistrate-operator** — it owns `systemWorkflows`. |
 | "I'll default to `hostedDeployment`." | Ask intake Q2 first. The model is a decision, not a default. |
 | "The user has a compose file and wants BYOC-K8s / air-gapped — the model is orthogonal to the artifact." | It is not. Compose covers hosted and BYOC-*Account* only. BYOC-K8s and air-gapped are ServicePlanSpec-only; convert to a Helm chart first. See §Artifact × deployment-model constraints. |
@@ -420,7 +429,10 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
   parameters, compute/storage, load balancers, action hooks, build/debug.
 - **`HELM_ONBOARDING_REFERENCE.md`** — Helm ServicePlanSpec:
   `helmChartConfiguration`, `runtimeConfiguration`, values templating, pod
-  placement/affinity, multi-service `dependsOn`, endpoints, lifecycle. Includes
+  placement/affinity, multi-service `dependsOn`, endpoints, lifecycle,
+  provider-invoked `customWorkflows`, automatic `systemWorkflows.validation`,
+  and the supported Argo-compatible `containerSet` / `http` template subset.
+  Includes
   [zonePlacementPolicy](HELM_ONBOARDING_REFERENCE.md#zoneplacementpolicy) for Azure
   Resource AZ selection and per-type pool creation; read it for limited-AZ GPU
   types or mixed instance-type policies.

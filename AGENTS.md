@@ -27,7 +27,7 @@ All skills default to the `omnistrate-ctl` CLI (alias `omctl`) — install it an
 
 **Caveats — each one was observed breaking a real agent run. Do not skip.**
 
-- **`docs system-parameters` does not list workflow-context variables.** Its root has only `backup`, `compute`, `deployment`, `deploymentCell`, `id`, `network`, `storage`, `tenant`, `deterministicSeedValue`. `$sys.namespace`, `$sys.instanceId`, `$sys.restore.*`, `$sys.sourceInstanceId` and `$sys.targetInstanceId` are **absent from it but real** — they appear throughout the platform's own workflow examples. Never delete a `$sys.*` path merely because `system-parameters` omits it; confirm with `omctl docs search "workflow context system parameters" --limit 15`.
+- **`docs system-parameters` does not list workflow-context variables.** Its root has only `backup`, `compute`, `deployment`, `deploymentCell`, `id`, `network`, `storage`, `tenant`, `deterministicSeedValue`. `$sys.namespace`, `$sys.instanceId`, `$sys.restore.*`, `$sys.sourceInstanceId`, `$sys.targetInstanceId`, and `$sys.validation.operation` are **absent from it but real** — they appear throughout the platform's own workflow examples. Never delete a `$sys.*` path merely because `system-parameters` omits it; confirm with `omctl docs search "workflow context system parameters" --limit 15`.
 - **Casing: follow the doc examples.** The platform decodes specs through `encoding/json`, which matches field names case-insensitively, so `awsAccountId` and `AwsAccountId` both build. The generated schema now uses the documented lowerCamel spelling for the blocks that had drifted (`ActionHook`, `Deployment`/`OnPremDeployment`, `configurationOverrides.acceleratorConfiguration`). A few fields are documented UpperCamel and stay that way — `OsFamily`, `GpuClusterID`, and `CustomDNSConfig`'s `TargetKubernetesService`/`TargetName`/`TargetPort`. When in doubt copy the doc example; use the schema to decide whether a field exists at all.
 - **Enum coverage is partial.** `tenancyType`, `cloudProvider`, api-param `type`, and action-hook `type`/`scope` now carry `enum` in the schema, so `omctl docs validate` catches a wrong value there. Everything else — storage types (`instanceStorageType`), `cpuArchitecture`, `networkingType` — is still a bare `{"type": "string"}`, so a wrong value passes silently. For those, get legal values from the prose (`omctl docs compose-spec "<tag>"` / `omctl docs plan-spec "<section>"`).
 - **Check the finished spec, do not just look fields up.** `omctl docs validate --file spec.yaml` validates a compose spec or ServicePlanSpec against the authoritative schema and reports every violation with its path. Run it before every build — it catches unknown, misplaced and mistyped fields without touching your account, and exits non-zero so it works in a pre-commit hook or CI step. `additionalProperties` errors mask nested ones, so re-run after each fix until it comes back clean.
@@ -117,7 +117,7 @@ The primary onboarding skill for all artifact types and all deployment models. R
 **Key capabilities**:
 - Intake interview: artifact type → method selection; deployment-model discovery
 - Compose spec transformation with `x-omnistrate-*` extensions (`COMPOSE_ONBOARDING_REFERENCE.md`)
-- Helm `helmChartConfiguration`, values templating, multi-service `dependsOn` (`HELM_ONBOARDING_REFERENCE.md`)
+- Helm `helmChartConfiguration`, values templating, multi-service `dependsOn`, `customWorkflows`, automatic `systemWorkflows.validation`, and ContainerSet/HTTP templates (`HELM_ONBOARDING_REFERENCE.md`)
 - Terraform/OpenTofu and Kustomize ServicePlanSpec (`TERRAFORM_KUSTOMIZE_REFERENCE.md`)
 - Deployment model `deployment:` blocks and customer account onboarding (`DEPLOYMENT_MODELS_REFERENCE.md`)
 - Zero-parameterization initial builds; incremental API parameter addition
@@ -135,7 +135,7 @@ The primary onboarding skill for all artifact types and all deployment models. R
 ### Kubernetes Operator Onboarding
 **Location**: `skills/omnistrate-operator/`
 
-Deep-dive onboarding for Kubernetes operator-based services (CRDs + controller). Owns `systemWorkflows` and lifecycle verb mapping; does NOT handle Docker Compose services.
+Deep-dive onboarding for Kubernetes operator-based services (CRDs + controller). Owns `systemWorkflows`, lifecycle verb mapping, post-operation Validation, and advanced workflow templates; does NOT handle Docker Compose services.
 
 **When to use**:
 - Onboarding an operator-managed service (CloudNativePG, Strimzi, KubeAI, ECK, RabbitMQ operator, etc.)
@@ -148,7 +148,8 @@ Deep-dive onboarding for Kubernetes operator-based services (CRDs + controller).
 
 **Key capabilities**:
 - `systemWorkflows` and `customWorkflows` authoring
-- Lifecycle verb mapping (create/modify/stop/delete/backup/restore)
+- Lifecycle verb mapping (create/modify/stop/delete/backup/restore/validation)
+- ContainerSet and HTTP templates, parameter/output threading, and workflow diagnostics
 - `operatorCRDConfiguration` and `helmChartConfiguration` for the operator deployment
 - `successCondition` and `outputParameters` design
 - Canonical examples and schema-verified spec fragments
