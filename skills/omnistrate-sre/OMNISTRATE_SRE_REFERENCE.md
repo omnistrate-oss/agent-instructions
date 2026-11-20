@@ -210,6 +210,10 @@ before creation is dispatched. Cleanup still includes types that are now unavail
 | Image-pull / agent-connect failures | Pod events + agent logs | Open outbound egress to control-plane endpoints + image/Helm registries |
 | Pod Pending: missing StorageClass | `kubectl get storageclass` via tunnel | Customer/amenity must pre-create required StorageClasses |
 | Endpoint unreachable but instance healthy | `instance list-endpoints <id>` + customer network | **Customer-side**: ingress/LB/firewall/DNS routing — not a platform failure |
+| Cell bootstrap (AWS): cellInfra fails with `InvalidIdentityToken` on `AssumeRoleWithWebIdentity` | cellInfra Terraform events | The customer's IAM OIDC provider must list `https://kubernetes.default.svc` as a client ID |
+| Cell bootstrap (AWS): `InvalidTerraformExecutionIdentity` | Deploy workflow events | The rendered `terraformExecutionIdentity` must be an IAM role ARN; fix the role ARN parameter |
+| Cell bootstrap: agent pod `ImagePullBackOff`, "no basic auth credentials" | Pod events on the VM | Pass the `agent_registry_*` variables and create the `dp-agent-ecr` pull secret in the stack |
+| Cell bootstrap: cell stays `PENDING`, workloads never start | cellInfra Terraform output; cluster bootstrap logs (`/var/log/cloud-init-output.log` with the reference module) | cellInfra did not install a connected agent; fix the stack or its cloud-init |
 
 #### Air-gapped (on-prem installer)
 | Symptom | Evidence location | Fix |

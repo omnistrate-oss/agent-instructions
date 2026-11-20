@@ -715,6 +715,30 @@ services:
 Only define the cloud-provider entry that executes the stack — no placeholder entries for other
 clouds are needed.
 
+On AWS, `terraformExecutionIdentity` of a ControlPlane resource may be a template with exactly one
+`{{ $var.<key> }}` or `{{ $sys.<path> }}` reference, for example
+`terraformExecutionIdentity: "{{ $var.customerRoleArn }}"`. A `$var` must be a declared API
+parameter of the resource. The rendered value must be an IAM role ARN, or the deploy fails with the
+non-retryable error `InvalidTerraformExecutionIdentity`. Omnistrate injects credentials into the
+Terraform pod only through this AWS path. GCP, Azure, OCI and Nebius reject a templated identity, so
+a stack for another target authenticates itself, for example with the service account token at
+`terraformIdentity.tokenFile` and the cloud's workload identity federation.
+
+A ControlPlane resource runs on the Omnistrate-generated Control Plane cluster in your account and
+keeps `$sys.deploymentCell` pointed at the Control Plane cluster. When
+the instance is on a BYOC on-prem cell, the resource reads the customer's cell under
+`$sys.deploymentCell.customerDeploymentCell.*`, with the same keys a resource on the cell reads
+directly: `clusterName`, `agent.namespace`, `agent.releaseName`, `agent.chart.repository`,
+`agent.chart.version`, `agent.helmValuesBase64`, the `agent.registry.*` group (`host`, `username`,
+`password`, `dockerConfigJSONBase64`, `pullSecretName`, `expiresAt`), and the
+`terraformIdentity.*` group (`oidcIssuerURL`, `subject`, `audience`, `tokenFile`). The
+`agent.registry` group renders only for organizations whose agent installs from private ECR.
+
+These two features let a BYOC on-prem plan create its own Kubernetes cluster and agent from a
+ControlPlane resource, in any cloud account or on-premises environment that the stack can reach.
+The plan shape, the AWS example and the pitfalls are in
+[BYOC_K8S_REFERENCE.md § Plans that bootstrap their own cell](BYOC_K8S_REFERENCE.md#plans-that-bootstrap-their-own-cell).
+
 ---
 
 ### Multi-cloud parity

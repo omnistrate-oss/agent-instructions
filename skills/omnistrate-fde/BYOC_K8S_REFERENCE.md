@@ -20,6 +20,10 @@ instance namespace on `byoc-onprem` is the signature of a compose spec, not of a
 cluster, agent or amenity fault. Bundle the workload into a Helm chart first
 (`HELM_ONBOARDING_REFERENCE.md`).
 
+When the customer has no cluster, a BYOC on-prem plan can create the
+Kubernetes cluster and install the dataplane agent before it deploys the
+workload. See §Plans that bootstrap their own cell.
+
 Deployment-model selection (which of hosted / BYOC-Account / BYO-VPC /
 PrivateLink / BYOC-K8s / air-gapped to offer) lives in
 `DEPLOYMENT_MODELS_REFERENCE.md`. This file is the operational depth for BYOC-K8s
@@ -1309,12 +1313,279 @@ cells:
 
 ---
 
+## Plans that bootstrap their own cell
+
+A BYOC on-prem plan can create the customer's Kubernetes cluster itself. The plan
+carries an internal Terraform resource with `deploymentTarget.account: ControlPlane`
+(called `cellInfra` here). Terraform for that resource runs on the
+Omnistrate-generated Control Plane cluster in your account while the customer's
+BYOC on-prem cell is still `PENDING`. The stack creates a Kubernetes cluster and
+installs the dataplane agent with the values that Omnistrate provides. The
+cluster can be of any kind: EKS, GKE, AKS, or a cluster on on-premises hardware.
+The reference module creates one VM with k3s as an example. When the agent connects, the platform
+moves the cell to `RUNNING` and installs the cell amenities, and the workload
+resources, which `dependsOn` cellInfra, deploy on the new cell.
+
+### When to use it
+
+Use this pattern when the customer wants the plan to create the Kubernetes
+cluster and the agent for them in an environment that the Terraform can reach,
+instead of running the install kit on an existing cluster. When the customer
+already runs a cluster, use the install-kit flow in
+§Onboarding a customer cluster. When the customer wants Omnistrate to build and
+operate a full cloud cell (EKS, VPC, node pools), use a BYOC account plan from
+`DEPLOYMENT_MODELS_REFERENCE.md`.
+
+The location of the cell does not depend on where the Control Plane cluster
+runs. The cell can be in any cloud account or in an on-premises data center,
+as long as the Terraform stack can reach and authenticate to that environment
+and the agent on the new cluster can reach the control plane.
+
+Omnistrate injects cloud credentials into the Terraform pod only for AWS,
+through a templated `terraformExecutionIdentity` (§Execution identity). GCP,
+Azure, OCI and Nebius entries reject a templated identity. The AWS path is the
+one tested end to end, and the plan shape, skeleton and customer setup below
+use it as the example. For other targets the stack authenticates itself
+(§Authentication for other targets).
+
+### Plan shape
+
+- `deployment.byoaDeployment` with the Control Plane account values, as in
+  §Plan spec.
+- One internal Terraform resource with `deploymentTarget.account: ControlPlane`.
+  In the AWS example it sets
+  `terraformExecutionIdentity: "{{ $var.customerRoleArn }}"`. Its
+  `variablesValuesFileOverride` passes the customer cell's values from
+  `$sys.deploymentCell.customerDeploymentCell.*` to the module.
+- The workload resources (Helm charts, usually) with `dependsOn: [cellInfra]`.
+  The root resource declares the customer-facing API parameters and forwards
+  them to cellInfra with `parameterDependencyMap`.
+
+Each resource waits for its own target host cluster. The ControlPlane resource
+waits for the Control Plane cluster, so it can run while the cell is `PENDING`, and every
+other resource waits for the cell to reach `RUNNING`.
+
+The public reference module is `terraform/aws-ec2-k3s-cell` in
+`https://github.com/omnistrate-community/terraform-byok` at tag `v1.0.1`. It
+is the AWS example: it creates an EC2 VM and a security group, and renders cloud-init that installs
+k3s and the agent.
+
+### Spec skeleton
+
+This skeleton is the AWS example. The optional module inputs
+(`subnet_id`, `instance_type`, `root_volume_size_gb`, `ssh_authorized_keys`,
+`ingress_cidrs`) follow the same pattern as `region`: declare the parameter on
+both resources, map it with `parameterDependencyMap`, and pass it in the
+override.
+
+```yaml
+name: BYOC OnPrem PostgreSQL (cell bootstrap)
+deployment:
+  byoaDeployment:
+    awsAccountId: '<control-plane-aws-account-id>'
+    awsBootstrapRoleAccountArn: 'arn:aws:iam::<control-plane-aws-account-id>:role/omnistrate-bootstrap-role'
+services:
+  - name: postgres
+    dependsOn:
+      - cellInfra
+    helmChartConfiguration:
+      chartName: postgresql
+      chartVersion: 16.7.27
+      chartRepoName: bitnamicharts
+      chartRepoURL: oci://ghcr.io/omnistrate/charts
+      chartValues: {}
+    apiParameters:
+      - key: customerRoleArn
+        name: Customer role ARN
+        description: ARN of the role that Terraform assumes in the customer account
+        type: String
+        required: true
+        modifiable: false
+        export: false
+        parameterDependencyMap:
+          cellInfra: customerRoleArn
+      - key: awsRegion
+        name: AWS region
+        description: Region of the k3s VM
+        type: String
+        required: true
+        modifiable: false
+        export: false
+        parameterDependencyMap:
+          cellInfra: awsRegion
+
+  - name: cellInfra
+    internal: true
+    deploymentTarget:
+      account: ControlPlane
+    apiParameters:
+      - key: customerRoleArn
+        name: Customer role ARN
+        description: ARN of the role that Terraform assumes in the customer account
+        type: String
+        required: true
+        modifiable: false
+        export: false
+      - key: awsRegion
+        name: AWS region
+        description: Region of the k3s VM
+        type: String
+        required: true
+        modifiable: false
+        export: false
+    terraformConfigurations:
+      configurationPerCloudProvider:
+        aws:
+          terraformPath: /terraform/aws-ec2-k3s-cell
+          gitConfiguration:
+            reference: refs/tags/v1.0.1
+            repositoryUrl: https://github.com/omnistrate-community/terraform-byok.git
+          terraformExecutionIdentity: "{{ $var.customerRoleArn }}"
+          variablesValuesFileOverride: |
+            deployment_id            = "{{ $sys.id }}"
+            cell_name                = "{{ $sys.deploymentCell.customerDeploymentCell.clusterName }}"
+            region                   = "{{ $var.awsRegion }}"
+            agent_chart_repository   = "{{ $sys.deploymentCell.customerDeploymentCell.agent.chart.repository }}"
+            agent_chart_version      = "{{ $sys.deploymentCell.customerDeploymentCell.agent.chart.version }}"
+            agent_namespace          = "{{ $sys.deploymentCell.customerDeploymentCell.agent.namespace }}"
+            agent_release_name       = "{{ $sys.deploymentCell.customerDeploymentCell.agent.releaseName }}"
+            agent_helm_values_base64 = "{{ $sys.deploymentCell.customerDeploymentCell.agent.helmValuesBase64 }}"
+            agent_registry_host                      = "{{ $sys.deploymentCell.customerDeploymentCell.agent.registry.host }}"
+            agent_registry_username                  = "{{ $sys.deploymentCell.customerDeploymentCell.agent.registry.username }}"
+            agent_registry_password                  = "{{ $sys.deploymentCell.customerDeploymentCell.agent.registry.password }}"
+            agent_registry_docker_config_json_base64 = "{{ $sys.deploymentCell.customerDeploymentCell.agent.registry.dockerConfigJSONBase64 }}"
+            agent_registry_pull_secret_name          = "{{ $sys.deploymentCell.customerDeploymentCell.agent.registry.pullSecretName }}"
+          requiredOutputs:
+            - key: vm_id
+              exported: true
+            - key: vm_public_ip
+              exported: true
+            - key: vm_private_ip
+              exported: true
+```
+
+For a ControlPlane resource, `$sys.deploymentCell` describes the Control Plane cluster, and
+the customer's cell is under `$sys.deploymentCell.customerDeploymentCell`. A
+resource that runs on the cell reads the same keys directly under
+`$sys.deploymentCell` and has no nested `customerDeploymentCell`.
+
+| Key under `customerDeploymentCell` | Value |
+|---|---|
+| `clusterName` | The `--cluster-name` of the BYOC on-prem account instance |
+| `agent.namespace` | `dataplane-agent` |
+| `agent.releaseName` | `dp-agent` |
+| `agent.chart.repository`, `agent.chart.version` | The agent chart, resolved at render time |
+| `agent.helmValuesBase64` | Base64 Helm values for the agent, including its client certificate. This value is a secret. |
+| `agent.registry.host` | Private ECR host. The `agent.registry` group renders only for organizations whose agent installs from private ECR (`BYOC_ON_PREM_SIGNED_INSTALLER`). |
+| `agent.registry.username` | `AWS` |
+| `agent.registry.password` | ECR token with a 12 hour lifetime. This value is a secret. |
+| `agent.registry.dockerConfigJSONBase64` | A dockerconfigjson that holds the token. This value is a secret. |
+| `agent.registry.pullSecretName` | `dp-agent-ecr` |
+| `agent.registry.expiresAt` | RFC 3339 expiry of the token |
+| `terraformIdentity.oidcIssuerURL`, `.subject`, `.audience`, `.tokenFile` | The identity of the Terraform pod: its OIDC issuer, service account subject, audience, and the path of its service account token |
+
+The agent certificate is minted once per cell, stored encrypted, and re-minted
+within 30 days of its expiry.
+
+### Execution identity
+
+This section describes the AWS example. `terraformExecutionIdentity` on an AWS ControlPlane resource may be a template
+with exactly one `{{ $var.<key> }}` or `{{ $sys.<path> }}` reference. A `$var`
+must be a declared API parameter of that resource. The rendered value must be an
+IAM role ARN; any other value fails the deploy with the non-retryable error
+`InvalidTerraformExecutionIdentity`.
+
+The Terraform pod runs in the `dataplane-agent` namespace of the Control Plane
+cluster under the service account `tf-<accountInstanceId>`, with the default
+automounted token. The agent sets `AWS_ROLE_ARN` to the rendered role and
+`AWS_WEB_IDENTITY_TOKEN_FILE` to the token file, and the AWS provider calls
+`sts:AssumeRoleWithWebIdentity`. The flow uses no external ID and no
+`sts:AssumeRole` hop. Configure the module's `provider "aws"` with a region
+only; an `assume_role` block or static keys would replace the injected
+credentials. Terraform state stays in the Control Plane cluster, in the
+`omnistrate-terraform` namespace with the Kubernetes backend.
+
+### Authentication for other targets
+
+For a target other than AWS, leave `terraformExecutionIdentity` unset and let
+the stack authenticate itself. The Terraform pod has its service account token
+at the path in `$sys.deploymentCell.customerDeploymentCell.terraformIdentity.tokenFile`,
+and the customer receives the issuer, subject and audience as account instance
+outputs (§Account instance outputs). A GCP or Azure stack can exchange that
+token through the cloud's workload identity federation. An on-premises stack can
+take provider credentials as API parameters or secrets.
+
+### Account instance outputs
+
+Create the BYOC on-prem account instance with `account customer create
+--cluster-name` as in §Onboarding a customer cluster. The customer does not run
+the install kit, because cellInfra installs the agent. Every new BYOC on-prem
+account instance publishes three outputs, which `omnistrate-ctl account customer
+describe <onboarding-instance-id>` shows:
+
+| Output | Value |
+|---|---|
+| `terraform_identity_oidc_issuer_url` | OIDC issuer of the Control Plane cluster (`https://...`) |
+| `terraform_identity_subject` | `system:serviceaccount:dataplane-agent:tf-<accountInstanceId>` |
+| `terraform_identity_audience` | `https://kubernetes.default.svc` |
+
+Account instances created before this feature shipped have no outputs. Create a
+new account instance for them.
+
+### Customer role setup in the AWS example
+
+In the AWS example, the customer creates two things in the AWS account that will hold the VM:
+
+1. An IAM OIDC provider for the issuer URL, with the audience as its client ID.
+2. A role that trusts that provider for `sts:AssumeRoleWithWebIdentity`, with
+   `StringEquals` conditions `<issuer-host>:sub` = subject and
+   `<issuer-host>:aud` = audience, and the EC2 permissions the module needs.
+
+The reference CloudFormation template is
+`customer-setup/aws/cell-terraform-role.yaml` in `terraform-byok` at `v1.0.1`.
+Its parameters are `OIDCIssuerURL`, `Subject`, `Audience`,
+`ExistingOIDCProviderArn` and `RoleName`, and its output `CellTerraformRoleArn`
+is the value the customer enters as the `customerRoleArn` parameter when
+creating the deployment.
+
+The default is one role per account instance with an exact subject. A provider
+that runs many account instances against one role, such as a CI account, can use
+`StringLike` on `system:serviceaccount:dataplane-agent:tf-instance-*`. That
+condition trusts every account instance on the same control plane.
+
+### Delete behavior
+
+Deleting the deployment runs Terraform destroy, which removes the cluster that the stack created. The
+cleanup steps that target the cell then fail after their timeouts, and the
+deployment remains in that state. To start over, the customer deletes the BYOC
+on-prem account instance and creates a new one. The cell does not return to
+`PENDING`.
+
+### Pitfalls
+
+The first five rows apply to the AWS example and the reference module.
+
+| Pitfall | Correction |
+|---|---|
+| cellInfra fails with `InvalidIdentityToken` from `AssumeRoleWithWebIdentity` | An AWS account holds one IAM OIDC provider per issuer. When a provider for the issuer already exists, pass its ARN as `ExistingOIDCProviderArn` and make sure it lists `https://kubernetes.default.svc` as a client ID (`aws iam add-client-id-to-open-id-connect-provider`). A provider that lists only `sts.amazonaws.com` makes STS reject the token. |
+| The agent pod on the VM fails with `ImagePullBackOff` and "no basic auth credentials" | The organization installs the agent from private ECR and the stack does not create the pull secret. Pass all five `agent_registry_*` variables from `customerDeploymentCell.agent.registry.*`. The module must log Helm in to the registry for the chart and create the `dp-agent-ecr` pull secret in the agent namespace before the Helm install. |
+| Every modify or upgrade replaces the VM | The ECR token changes on every render, so the cloud-init user data changes too. Add `lifecycle { ignore_changes = [user_data] }` (or `user_data_base64`, whichever attribute the instance sets) to the instance. The reference module also ignores `ami`. |
+| The module renders cloud-init with `templatefile()` from a separate `.tpl` or `.yaml` file | Omnistrate loads only Terraform files from a module in Git, so the template file is missing when Terraform runs. Keep the template inside a `.tf` file as a heredoc, as the reference module does in `cloud-init.tf`. |
+| The deploy fails with `InvalidTerraformExecutionIdentity` | The rendered `terraformExecutionIdentity` is not an IAM role ARN. Check the `customerRoleArn` value, and check that the template references exactly one declared API parameter of the ControlPlane resource. |
+| The cell stays `PENDING` and the workloads never start | cellInfra did not install a connected agent. Read the cellInfra Terraform output, and with the reference module, the VM's cloud-init log (`/var/log/cloud-init-output.log`). |
+| A templated identity on GCP, Azure, OCI or Nebius | The build rejects it. Leave the identity unset and have the stack authenticate itself (§Authentication for other targets). |
+| The AWS module configures `assume_role` or static keys | Those settings replace the web identity credentials that the agent injects. Set only the region. |
+
+---
+
 ## Limitations
 
 - The cluster **must** have outbound connectivity to your control plane. BYOC-K8s
   is not for air-gapped environments — use `ONPREM_INSTALLER_REFERENCE.md`.
 - Each customer onboarding instance maps to **one** Kubernetes cluster.
-- Omnistrate provisions no nodes, storage, load balancers, or DNS.
+- Omnistrate provisions no nodes, storage, load balancers, or DNS. The exception
+  is a plan that bootstraps its own cell, where the plan's own Terraform creates
+  the cluster (§Plans that bootstrap their own cell).
 - Endpoint reachability depends entirely on the customer's DNS, firewall, load
   balancer, and routing.
 - There is no ISV cloud account for a Terraform resource to target, so

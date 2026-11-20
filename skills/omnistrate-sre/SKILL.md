@@ -244,6 +244,15 @@ The customer owns the cluster, nodes, storage, routing, and endpoint exposure; O
   An empty namespace with a healthy agent points at the workflow/plan; a populated namespace with a FAILED instance points at readiness conditions or endpoints.
 - **Agent connected but the account never went READY** — re-run the install kit (`./install.sh --non-interactive`), or re-download it with `omnistrate-ctl account customer install-kit <onboarding-instance-id>`, then re-check `omnistrate-ctl account customer describe <id>`.
 
+- **Plans that bootstrap their own cell.** An internal ControlPlane Terraform resource (often named `cellInfra`) runs on the Omnistrate-generated Control Plane cluster in your account. While the cell is `PENDING`, it creates a Kubernetes cluster in any environment the stack can reach and installs the agent. Read the cellInfra Terraform events first. The first three items below apply to the AWS example.
+  - cellInfra fails on `AssumeRoleWithWebIdentity` with `InvalidIdentityToken`: the customer's IAM OIDC provider for the Control Plane cluster issuer does not list `https://kubernetes.default.svc` as a client ID. The customer adds it with `aws iam add-client-id-to-open-id-connect-provider`.
+  - The deploy fails with `InvalidTerraformExecutionIdentity`: the rendered `terraformExecutionIdentity` is not an IAM role ARN. Check the role ARN parameter. The error is not retried.
+  - The agent pod on the VM reports `ImagePullBackOff` with "no basic auth credentials": the organization installs the agent from private ECR and the stack did not receive the `agent_registry_*` variables or did not create the `dp-agent-ecr` pull secret.
+  - The cell stays `PENDING` and the workloads never start: cellInfra never installed a connected agent. Check the cellInfra Terraform output, then the cluster bootstrap logs (with the reference module, the VM's `/var/log/cloud-init-output.log`).
+  - After a delete, the cell cleanup steps fail after their timeouts once Terraform destroy has removed the cluster. The customer deletes the account instance to start over.
+
+  See the FDE skill's `BYOC_K8S_REFERENCE.md` §Plans that bootstrap their own cell.
+
 For the deployment model itself — onboarding flow, egress allowlist, prerequisites, endpoint patterns — see the FDE skill's `BYOC_K8S_REFERENCE.md`.
 
 ### Air-gapped (on-prem installer)
