@@ -445,7 +445,10 @@ managed services, fill customer parameters); the `.md` embeds it. Onboarding is
   customer allowlist, target-cluster prerequisites, the `account customer create
   --cluster-name` install-kit onboarding flow, `--cloud-provider byoc-onprem
   --region on-prem`, endpoints without a cloud LB, storage, native logs,
-  operators on customer clusters, day-2 ops, adopted deployment cells, the
+  operators on customer clusters, day-2 ops, adopted deployment cells, plans
+  that bootstrap their own cell (any Kubernetes cluster that the Terraform can
+  reach, in any cloud account or on premises) through a ControlPlane Terraform
+  resource on the Omnistrate-generated Control Plane cluster in your account, the
   canonical **BYOC-K8s vs air-gapped** disambiguation table, and **trimming the
   amenity footprint** via a `--cloud byoc-onprem` deployment-cell template
   (BYOC-K8s cells only, without touching other clouds) — start with all amenities
