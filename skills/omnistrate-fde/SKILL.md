@@ -1,6 +1,6 @@
 ---
 name: omnistrate-fde
-description: Onboard applications to Omnistrate and turn them into managed SaaS offerings. Supports Docker Compose, Helm, Terraform/OpenTofu, Kustomize, and mixed stacks across hosted, BYOC, BYOC-K8s, and air-gapped deployment models. Use for onboarding or productizing software, extending Helm-backed Plans with custom workflows, ContainerSet or HTTP templates, and post-operation Validation, or configuring pricing, billing, and metering. For Kubernetes operators use omnistrate-operator; for architecture design use omnistrate-sa; for failed-instance debugging use omnistrate-sre.
+description: Onboard applications to Omnistrate and turn them into managed SaaS offerings. Covers Docker Compose, Helm, Terraform/OpenTofu, Kustomize, and mixed stacks across hosted, BYOC (including BYO-VPC and PrivateLink), BYOC-K8s, and air-gapped deployment models. Use when onboarding, SaaS-ifying, or productizing software; configuring pricing, Stripe billing, usage metering, or marketplace integrations; or extending Helm-backed Plans with custom workflows, ContainerSet or HTTP templates, and post-operation Validation. For Kubernetes operators use omnistrate-operator; for architecture design use omnistrate-sa; for failed-instance debugging use omnistrate-sre.
 ---
 
 # Onboarding Services to Omnistrate
