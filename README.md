@@ -86,7 +86,7 @@ The primary onboarding skill. Runs an intake interview, selects the right artifa
 
 - **SKILL.md** - Universal onboarding router, Decision Matrix, and phased workflow
 - **COMPOSE_ONBOARDING_REFERENCE.md** - Docker Compose path: `x-omnistrate-*` transformation, API parameters, compute/storage, lifecycle
-- **HELM_ONBOARDING_REFERENCE.md** - Helm `helmChartConfiguration`, values templating, multi-service `dependsOn`
+- **HELM_ONBOARDING_REFERENCE.md** - Helm `helmChartConfiguration`, values templating, multi-service `dependsOn`, Custom workflows, automatic Validation, and ContainerSet/HTTP templates
 - **TERRAFORM_KUSTOMIZE_REFERENCE.md** - Terraform/OpenTofu and Kustomize ServicePlanSpec, combined patterns
 - **DEPLOYMENT_MODELS_REFERENCE.md** - Hosted / BYOC / BYOC-K8s / air-gapped `deployment:` blocks, customer account onboarding, ISV-phrasing FAQ
 - **ONPREM_INSTALLER_REFERENCE.md** - Generic air-gapped/on-prem installer setup: multiple Helm releases, image registry copy resources, action hooks, runtime skips, and operator runbooks
@@ -101,9 +101,10 @@ The primary onboarding skill. Runs an intake interview, selects the right artifa
 
 #### [**skills/omnistrate-operator/**](./skills/omnistrate-operator/) - Kubernetes Operator Onboarding
 
-Deep-dive onboarding for Kubernetes operator-based services (CRDs + controller). Owns `systemWorkflows` and lifecycle verb mapping.
+Deep-dive onboarding for Kubernetes operator-based services (CRDs + controller). Owns `systemWorkflows`, lifecycle verb mapping, post-operation Validation, and ContainerSet/HTTP templates.
 
-- **SKILL.md** - Operator integration workflow, `systemWorkflows` authoring, canonical examples
+- **SKILL.md** - Operator integration workflow, `systemWorkflows` authoring, Validation behavior, and advanced template routing
+- **OPERATOR_ONBOARDING_REFERENCE.md** - Canonical lifecycle, ContainerSet, HTTP, Validation, and operator deployment examples
 
 **Use when**: Onboarding an operator-managed service (CloudNativePG, Strimzi, KubeAI, ECK, RabbitMQ operator, etc.) or writing/extending a ServicePlanSpec with `systemWorkflows`.
 

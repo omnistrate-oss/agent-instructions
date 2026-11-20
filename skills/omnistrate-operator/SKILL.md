@@ -1,6 +1,6 @@
 ---
 name: omnistrate-operator
-description: Use when onboarding a Kubernetes operator-based service (CRDs + controller, e.g. CloudNativePG, Strimzi, KubeAI, ECK) onto the Omnistrate platform; when writing or reviewing an Omnistrate ServicePlanSpec with systemWorkflows; or when an operator/Helm+CR deployment must become a managed SaaS offering with create/modify/stop/backup/restore lifecycle. For Docker-Compose services use omnistrate-fde; for debugging failed instances use omnistrate-sre.
+description: Use when onboarding a Kubernetes operator-based service (CRDs + controller, e.g. CloudNativePG, Strimzi, KubeAI, ECK) onto the Omnistrate platform; when writing or reviewing an Omnistrate ServicePlanSpec with systemWorkflows, customWorkflows, ContainerSet or HTTP templates, or post-operation Validation; or when an operator/Helm+CR deployment must become a managed SaaS offering with create/modify/stop/backup/restore lifecycle. For Docker-Compose services use omnistrate-fde; for debugging failed instances use omnistrate-sre.
 ---
 
 # Onboarding Kubernetes Operators to Omnistrate
@@ -55,8 +55,8 @@ omctl docs json-schema service-plan -o json | jq '.["$defs"].CreateWorkflowConfi
 # 3. the verb keys (additionalProperties:false, so this list is exhaustive)
 omctl docs json-schema service-plan -o json | jq '.["$defs"].SystemWorkflowsConfiguration'
 
-# 4. the DAG itself
-omctl docs json-schema service-plan -o json | jq '.["$defs"].WorkflowSpec, .["$defs"].Template, .["$defs"].DAGTemplate, .["$defs"].DAGTask, .["$defs"].Arguments'
+# 4. the DAG and advanced templates
+omctl docs json-schema service-plan -o json | jq '.["$defs"].WorkflowSpec, .["$defs"].Template, .["$defs"].DAGTemplate, .["$defs"].DAGTask, .["$defs"].Arguments, .["$defs"].ContainerSet, .["$defs"].ContainerSetRetryStrategy, .["$defs"].HTTPTemplate, .["$defs"].Outputs'
 
 # 5. the CR config and the apply task
 omctl docs json-schema service-plan -o json | jq '.["$defs"].OperatorCRDConfiguration, .["$defs"].ResourceTemplate'
@@ -75,7 +75,8 @@ one level too high — this is the single most common structural mistake here.
 **`docs system-parameters` does NOT cover workflow-context variables.** Its root
 has only `backup`, `compute`, `deployment`, `deploymentCell`, `id`, `network`,
 `storage`, `tenant`, `deterministicSeedValue`. `$sys.namespace`, `$sys.instanceId`,
-`$sys.restore.*`, `$sys.sourceInstanceId` and `$sys.targetInstanceId` are **real but
+`$sys.restore.*`, `$sys.sourceInstanceId`, `$sys.targetInstanceId`, and
+`$sys.validation.operation` are **real but
 absent from it** — they are used throughout the platform's own operator examples.
 Never remove one because `system-parameters` omits it. For those, use
 `omctl docs search "Backup and Restore Workflow Context" --limit 15`.
@@ -84,6 +85,9 @@ Never remove one because `system-parameters` omits it. For those, use
 it returns the whole operator build guide: the lifecycle-verb table, a complete
 create-workflow example, the minimal plan shape, and the backup/restore context.
 Nothing else in the toolset gives you a copyable end-to-end workflow.
+When the request includes ContainerSet, HTTP, custom workflows, or automatic
+post-operation verification, also run
+`omctl docs search "Advanced Workflow Templates" --limit 10`.
 
 Also note: no `enum` is emitted anywhere in the schema, so api-param `type:` values
 and `cloudProvider` values must come from the prose
@@ -196,7 +200,11 @@ debugging workflow.
 after each: `modify` (re-apply CR with new `$var` values), `stop`/`start`
 (operator-native quiesce via `action: patch`),
 `backup`/`restore`/`deleteBackup` (+ `capabilities.backupConfiguration`),
-`failover`, then provider-defined `customWorkflows`. Syntax for each verb and
+`failover`, automatic `systemWorkflows.validation`, then provider-defined
+`customWorkflows`. Validation runs after successful create, modify, and restore;
+patches, parameter updates, and version upgrades surface as `MODIFY`. Any system
+or custom workflow may combine named `dag`, `resource`, `containerSet`, and
+`http` templates. Syntax for each verb and
 its context variables: see the reference.
 
 **Phase 4 — Networking and endpoints** per decision 3.
@@ -272,6 +280,15 @@ then deploy instances with `--customer-account-id`).
     platform in manifest` — verify the operator's CRD actually forwards a
     placement field BEFORE onboarding (some operators have none; that's a
     vendor gap, see reference §8).
+12. **Validation is a system workflow, not a custom workflow.** Put automatic
+    post-operation checks under `systemWorkflows.validation`; explicit
+    provider/customer actions remain under `customWorkflows`. Validation failure
+    fails the parent create, modify, or restore operation and does not roll back
+    already-deployed resources.
+13. **Advanced templates use the supported named subset only.** A template must
+    define exactly one of `dag`, `resource`, `containerSet`, or `http`. Plain
+    Argo `container` templates and inline DAG task templates are unsupported;
+    use a one-container ContainerSet and a named `template` reference.
 
 ## Red Flags — STOP, you are hallucinating
 
@@ -284,6 +301,8 @@ then deploy instances with `--customer-account-id`).
 | "Outputs are templated strings on the resource" | Outputs are workflow `outputParameters` from `$tasks.*.resource.status.*`, gated on successCondition. |
 | "The operator's pods will schedule fine by default" | Omnistrate places only containers it creates. Pin operator-created pods to the managed node group via CR affinity (reference §8). |
 | "I'll install the operator via helmChartDependencies" | Deprecated. Cluster-scoped → cell amenity; namespace-scoped → hybrid (amenity CRDs + sibling service). |
+| "I'll put post-create verification in a custom workflow." | Custom workflows run only when explicitly invoked. Put automatic checks under `systemWorkflows.validation`; use `$sys.validation.operation` to distinguish `CREATE`, `MODIFY`, and `RESTORE`. |
+| "A plain Argo `container` or inline task template should work." | It is outside the supported subset. Use named `dag`, `resource`, `containerSet`, or `http` templates; use a one-container ContainerSet for a single process. |
 | "This ctl flag probably exists" | Verify with `--help` before using it; verify spec fields with `omctl docs json-schema service-plan`. |
 | "I know the plan-spec section name for systemWorkflows" | There isn't one. Read `$defs.SystemWorkflowsConfiguration` out of `omctl docs json-schema service-plan`. |
 
@@ -316,6 +335,9 @@ Public sources to verify against:
 - Every declared lifecycle verb exercised at least once against a live
   instance (modify, stop→start, delete leaves nothing orphaned in the
   namespace)
+- If `systemWorkflows.validation` is defined, exercise it through create and
+  modify (and restore when supported), confirm failures fail the parent
+  operation, and verify the workflow UI groups its tasks under **Validation**.
 - For data services, **data verified around every verb**, not just instance
   status: load a known dataset and record its checksum, run an external writer
   that logs every client-acknowledged write, and after each operation re-read

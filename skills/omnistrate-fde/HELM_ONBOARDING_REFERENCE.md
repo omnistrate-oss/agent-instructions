@@ -1446,6 +1446,276 @@ is `helm upgrade` with no explicit values flag — chart defaults for unchanged 
 
 ---
 
+## Workflow templates, custom workflows, and Validation
+
+A Helm-backed Resource can define `customWorkflows` and the
+`systemWorkflows.validation` system workflow next to `helmChartConfiguration`.
+These workflows supplement the normal Helm install, upgrade, and uninstall
+lifecycle; they do not replace it.
+
+- **Custom workflows** are provider-defined actions invoked explicitly from the
+  UI, API, or CLI.
+- **Validation** is an internal system workflow invoked automatically after a
+  successful create, modify, or restore deployment step. A failed Validation
+  workflow fails the parent lifecycle operation. Omnistrate does not
+  automatically roll back the Helm release.
+- Patch, parameter-update, and version-upgrade mutations that use the update
+  lifecycle are exposed to Validation as `MODIFY` through
+  `$sys.validation.operation`. The other values are `CREATE` and `RESTORE`.
+
+### Supported workflow-template subset
+
+Each named entry in `workflow.templates` must define exactly one template type:
+
+| Template key | Use |
+|---|---|
+| `dag` | Order named tasks and pass parameters or outputs between them. |
+| `resource` | `apply`, `patch`, `get`, or `delete` one Kubernetes resource. |
+| `containerSet` | Run dependent containers in one ephemeral Pod. |
+| `http` | Make an HTTP request from the data plane agent (DPA). |
+
+Plain Argo `container` templates are not supported; use a one-container
+ContainerSet. Inline task templates are not supported; define a named template
+and reference it with `template`. Omnistrate executes the stored workflow spec
+directly and does not create an Argo `Workflow` custom resource.
+
+Thread values explicitly at every hop:
+
+1. Bind `$sys.*`, `$var.*`, `$secret.*`, or `$func.*` under top-level
+   `workflow.arguments.parameters`.
+2. Declare the parameter in the entrypoint template's `inputs.parameters`.
+3. Pass it through each DAG task's `arguments.parameters`.
+4. Declare it again in the leaf template's `inputs.parameters` and reference it
+   as `{{inputs.parameters.<name>}}`.
+
+Downstream tasks can consume:
+
+- `{{tasks.<task>.outputs.result}}` — `main` ContainerSet stdout or the HTTP
+  response body.
+- `{{tasks.<task>.outputs.parameters.<name>}}` — a named ContainerSet file
+  output.
+
+### ContainerSet templates
+
+A ContainerSet creates one ephemeral Pod in the Resource namespace. The DPA
+waits for the Pod, extracts outputs or errors, records diagnostics, and deletes
+the Pod. It is not persisted as an Omnistrate infrastructure Resource.
+
+```yaml
+- name: prepare
+  activeDeadlineSeconds: 600
+  volumes:
+    - name: workspace
+      emptyDir: {}
+  containerSet:
+    volumeMounts:
+      - name: workspace
+        mountPath: /workspace
+    retryStrategy:
+      retries: "2"       # retries after the first attempt
+      duration: 2s       # Go duration: 250ms, 2s, 1m, ...
+    containers:
+      - name: fetch
+        image: ghcr.io/omnistrate/alpine:3.23.3
+        command: [sh, -c]
+        args: ["printf ready > /workspace/input"]
+        resources:
+          requests: {cpu: 25m, memory: 32Mi}
+          limits: {cpu: 100m, memory: 64Mi}
+      - name: main
+        image: ghcr.io/omnistrate/alpine:3.23.3
+        dependencies: [fetch]
+        command: [sh, -c]
+        args: ["cat /workspace/input | tee /workspace/result"]
+  outputs:
+    parameters:
+      - name: prepared-value
+        valueFrom:
+          path: /workspace/result
+```
+
+ContainerSet constraints that change spec design:
+
+- Only `emptyDir` volumes are supported.
+- Every container needs a unique DNS-label name and an explicit `command`.
+- Images must contain `/bin/sh`; Omnistrate wraps the command for dependencies,
+  retries, status, and output collection.
+- Dependencies must reference containers in the set and cannot repeat or form
+  cycles.
+- `resources.requests` and `resources.limits` are passed to Kubernetes.
+- Named output paths must be absolute and on an `emptyDir` mounted by the
+  container named `main`. A `main` container is also required for
+  `outputs.result`.
+- Retries run the process again inside the same Pod; they do not recreate the
+  Pod or reset `emptyDir`.
+- Outputs use Kubernetes termination messages. Leave headroom below the
+  4,096-byte per-message and 12 KiB Pod-wide limits.
+
+On failure, Debug Events include the rendered Pod manifest, Kubernetes events,
+and bounded per-container details: container name, exit code, reason, and logs.
+
+### HTTP templates
+
+The DPA in the target data plane makes the request, so cluster-local DNS names
+can be used when permitted and reachable. The request does not originate from
+the control plane or the user's workstation.
+
+```yaml
+- name: check-endpoint
+  inputs:
+    parameters:
+      - name: namespace
+      - name: context
+  http:
+    method: GET
+    url: "http://web.{{inputs.parameters.namespace}}.svc.cluster.local/"
+    headers:
+      - name: X-Validation-Context
+        value: "{{inputs.parameters.context}}"
+      - name: Authorization
+        valueFrom:
+          secretKeyRef:
+            name: workflow-credentials
+            key: authorization
+            optional: true
+    timeoutSeconds: 30
+    successCondition: response.statusCode >= 200 && response.statusCode < 300
+```
+
+Important HTTP behavior:
+
+- The response body is `{{tasks.<task>.outputs.result}}`.
+- Without `successCondition`, any 2xx response succeeds and other status codes
+  fail the task. Conditions can inspect `request.*` and `response.statusCode`,
+  `response.body`, and `response.headers`.
+- Use either `body` or `bodyFrom.bytes`, not both.
+- TLS verification is enabled by default. `insecureSkipVerify: true` disables
+  certificate and hostname verification; use it only for a controlled endpoint
+  when secure verification cannot be configured.
+- Redirects are not followed, process-level proxies are disabled, and unsafe
+  destinations such as loopback, metadata endpoints, the Kubernetes API, and
+  DPA-local addresses are blocked.
+- Request/response bodies are limited to 1 MiB, headers to 64 KiB, timeout to
+  300 seconds, and each DPA process to 10 concurrent requests.
+- HTTP requests are not automatically retried because retrying a non-idempotent
+  request can duplicate an operation.
+
+HTTP Debug Events include the response status code and bounded, redacted
+response details. Password, secret, token, API-key, private-key, and credential
+fields are redacted.
+
+### Helm custom-workflow example
+
+This workflow is invoked explicitly. `fullnameOverride` makes the chart-created
+Service name deterministic for the cluster-local URL:
+
+```yaml
+services:
+  - name: web
+    helmChartConfiguration:
+      chartName: nginx
+      chartVersion: 18.2.4
+      chartRepoName: bitnami
+      chartRepoURL: https://charts.bitnami.com/bitnami
+      chartValues:
+        fullnameOverride: web
+    customWorkflows:
+      - verb: smokeTest
+        displayName: Run smoke test
+        scope: [FLEET]
+        workflow:
+          entrypoint: smoke
+          arguments:
+            parameters:
+              - name: namespace
+                value: "{{ $sys.namespace }}"
+          templates:
+            - name: smoke
+              inputs:
+                parameters:
+                  - name: namespace
+              http:
+                method: GET
+                url: "http://web.{{inputs.parameters.namespace}}.svc.cluster.local/"
+                timeoutSeconds: 30
+                successCondition: response.statusCode == 200
+```
+
+### Helm Validation example
+
+Define automatic verification under `systemWorkflows.validation`, not under
+`customWorkflows`. The example runs a ContainerSet preflight and then checks the
+cluster-local Helm Service with an HTTP task:
+
+```yaml
+systemWorkflows:
+  validation:
+    workflow:
+      entrypoint: validate
+      arguments:
+        parameters:
+          - name: operation
+            value: "{{ $sys.validation.operation }}"
+          - name: namespace
+            value: "{{ $sys.namespace }}"
+      templates:
+        - name: validate
+          inputs:
+            parameters:
+              - name: operation
+              - name: namespace
+          dag:
+            tasks:
+              - name: preflight
+                template: preflight
+                arguments:
+                  parameters:
+                    - name: operation
+                      value: "{{inputs.parameters.operation}}"
+              - name: endpoint
+                template: check-endpoint
+                dependencies: [preflight]
+                arguments:
+                  parameters:
+                    - name: namespace
+                      value: "{{inputs.parameters.namespace}}"
+                    - name: context
+                      value: "{{tasks.preflight.outputs.result}}"
+        - name: preflight
+          inputs:
+            parameters:
+              - name: operation
+          containerSet:
+            containers:
+              - name: main
+                image: ghcr.io/omnistrate/alpine:3.23.3
+                command: [sh, -c]
+                args: ['printf "validating %s" "{{inputs.parameters.operation}}"']
+                resources:
+                  requests: {cpu: 25m, memory: 32Mi}
+        - name: check-endpoint
+          inputs:
+            parameters:
+              - name: namespace
+              - name: context
+          http:
+            method: GET
+            url: "http://web.{{inputs.parameters.namespace}}.svc.cluster.local/"
+            headers:
+              - name: X-Validation-Context
+                value: "{{inputs.parameters.context}}"
+            timeoutSeconds: 30
+            successCondition: response.statusCode == 200
+```
+
+Validation appears as the **Validation** group in workflow diagnostics;
+explicit custom workflows appear as **Custom workflow**. Omnistrate waits for
+Validation before marking the parent create/modify/restore operation successful.
+Validation does not run after delete, start, stop, or an explicitly invoked
+custom workflow.
+
+---
+
 ## Lifecycle: backups and stop/start for Helm services
 
 The intake often flags "backups matter" or "stop/start" for stateful charts

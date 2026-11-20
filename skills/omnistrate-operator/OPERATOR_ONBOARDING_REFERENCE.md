@@ -252,12 +252,16 @@ systemWorkflows.<verb>:
       - name: <leafTemplate>   # exactly ONE k8s resource per leaf template
         inputs.parameters: [...]
         resource:
-          action: apply | patch | delete
+          action: apply | patch | get | delete
           successCondition: <cond>   # optional; blocks until true
           failureCondition: <cond>   # optional; fails fast
           manifest: |
             <single-document Kubernetes YAML with {{inputs.parameters.x}}>
 ```
+
+`action: get` is read-only: the manifest identifies the resource by
+apiVersion, kind, name, and namespace. It is useful for Validation workflows
+that should verify live operator status without mutating the CR.
 
 ### Condition syntax
 
@@ -409,6 +413,103 @@ Numeric CR fields take the parameter unquoted (`instances: {{...}}`); string
 fields quoted. The CR name is `$sys.instanceId` so create and modify address
 the same object.
 
+### ContainerSet and HTTP templates
+
+System and custom workflows can use the same supported Argo-compatible subset:
+named `dag`, `resource`, `containerSet`, and `http` templates. Each template
+must define exactly one type. Plain Argo `container` templates and inline DAG
+task templates are unsupported; use a one-container ContainerSet and reference
+every leaf by its named `template`.
+
+Parameter threading is unchanged: top-level workflow arguments bind `$sys.*`
+or `$var.*`, DAG tasks pass `{{inputs.parameters.*}}`, and leaf templates
+declare matching inputs. Downstream tasks can consume:
+
+- `{{tasks.<task>.outputs.result}}` — the `main` ContainerSet stdout or HTTP
+  response body.
+- `{{tasks.<task>.outputs.parameters.<name>}}` — a named ContainerSet file
+  output.
+
+**ContainerSet** runs dependent processes in one ephemeral Pod. Only
+`emptyDir` volumes are supported. Every container needs a unique DNS-label name,
+an explicit `command`, and an image containing `/bin/sh`. A container named
+`main` is required for `outputs.result` and named outputs. Resource requests and
+limits are passed to Kubernetes; retries run in the same Pod and do not reset
+`emptyDir`.
+
+```yaml
+- name: inspect-cluster
+  activeDeadlineSeconds: 600
+  volumes:
+    - name: workspace
+      emptyDir: {}
+  containerSet:
+    volumeMounts:
+      - name: workspace
+        mountPath: /workspace
+    retryStrategy:
+      retries: "2"
+      duration: 2s
+    containers:
+      - name: prepare
+        image: ghcr.io/omnistrate/alpine:3.23.3
+        command: [sh, -c]
+        args: ["printf ready > /workspace/state"]
+        resources:
+          requests: {cpu: 25m, memory: 32Mi}
+      - name: main
+        image: ghcr.io/omnistrate/alpine:3.23.3
+        dependencies: [prepare]
+        command: [sh, -c]
+        args: ["cat /workspace/state | tee /workspace/result"]
+  outputs:
+    parameters:
+      - name: inspected-state
+        valueFrom:
+          path: /workspace/result
+```
+
+Named output paths must be absolute and on an `emptyDir` mounted by `main`.
+Leave headroom below Kubernetes' 4,096-byte per-termination-message and 12 KiB
+Pod-wide limits. ContainerSet Debug Events retain the rendered Pod manifest,
+Kubernetes events, and bounded per-container name, exit code, reason, and logs
+after the Pod is deleted.
+
+**HTTP** asks the DPA in the target data plane to make a bounded request. This
+allows permitted cluster-local URLs; the request does not originate from the
+control plane.
+
+```yaml
+- name: check-operator-endpoint
+  inputs:
+    parameters:
+      - name: namespace
+      - name: context
+  http:
+    method: GET
+    url: "http://operator-api.{{inputs.parameters.namespace}}.svc.cluster.local/healthz"
+    headers:
+      - name: X-Validation-Context
+        value: "{{inputs.parameters.context}}"
+      - name: Authorization
+        valueFrom:
+          secretKeyRef:
+            name: workflow-credentials
+            key: authorization
+            optional: true
+    timeoutSeconds: 30
+    successCondition: response.statusCode == 200
+```
+
+The response body is `{{tasks.<task>.outputs.result}}`. Without a
+`successCondition`, any 2xx response succeeds. Use either `body` or
+`bodyFrom.bytes`. TLS verification is enabled by default;
+`insecureSkipVerify: true` disables certificate and hostname verification and
+should be limited to controlled endpoints. Redirects are not followed, unsafe
+destinations are blocked, and HTTP requests are not automatically retried.
+Debug Events include the response status code and bounded, redacted response
+details.
+
 ## 4. Lifecycle verbs
 
 | Verb | Trigger | Extra context variables | Typical shape |
@@ -420,12 +521,104 @@ the same object.
 | `delete` | instance delete | — | delete CR first, then secrets/aux objects (`dependencies` orders it) |
 | `backup` | manual, periodic (`backupPeriodInHours`), before-delete (`snapshotBeforeDeletion`) | `$sys.snapshot.id`, `$sys.snapshot.time` | un-quiesce if needed (operators can't back up hibernated clusters) → apply Backup CR named `{{ $sys.snapshot.id }}` with `successCondition: status.phase == completed` |
 | `restore` | restore API | `$sys.restore.snapshotId`, `$sys.restore.snapshotTime`, `$sys.restore.metadata.*`, `$sys.sourceInstanceId`, `$sys.targetInstanceId` | create NEW cluster named `{{ $sys.targetInstanceId }}` bootstrapped from the snapshot |
+| `validation` | automatically after successful create, modify, or restore | `$sys.validation.operation` (`CREATE`, `MODIFY`, `RESTORE`) | read live state and/or run ContainerSet or HTTP checks; failure fails the parent operation |
 | `deleteBackup` | snapshot deletion / retention cleanup | `$sys.snapshot.id`, `$sys.snapshot.time` | delete the Backup CR |
 | `failover` | Omnistrate failover action | `$var.failedReplicaId`, `$var.failedReplicaAction` | e.g. delete the failed pod, let the operator promote |
 
 `addCapacity`/`removeCapacity` verbs also exist (patch the CR's instance
 count) but are intentionally not covered here yet — scale via `modify` with a
 replica-count parameter instead.
+
+### Validation system workflow
+
+Define automatic post-operation verification under
+`systemWorkflows.validation`, not `customWorkflows`. Omnistrate invokes it only
+after the deployment portion of create, modify, or restore succeeds. Instance
+patches, parameter updates, and version upgrades that follow the update path
+are reported as `MODIFY` through `$sys.validation.operation`.
+
+The parent lifecycle operation waits for Validation. A failed Validation task
+fails the parent operation and exposes its task diagnostics under the
+**Validation** workflow group. Already-applied CRs and other resources are not
+automatically rolled back. Validation does not run after delete, start, stop,
+or an explicitly invoked custom workflow.
+
+Use `resource.action: get` when the operator already reconciled the CR and the
+Validation workflow only needs to read and gate on live status:
+
+```yaml
+systemWorkflows:
+  validation:
+    workflow:
+      entrypoint: validate
+      arguments:
+        parameters:
+          - name: operation
+            value: "{{ $sys.validation.operation }}"
+          - name: namespace
+            value: "{{ $sys.namespace }}"
+          - name: instanceId
+            value: "{{ $sys.instanceId }}"
+          - name: memberCount
+            value: "{{ $var.memberCount }}"
+      templates:
+        - name: validate
+          inputs:
+            parameters:
+              - name: operation
+              - name: namespace
+              - name: instanceId
+              - name: memberCount
+          dag:
+            tasks:
+              - name: verifycluster
+                template: verify-cluster
+                arguments:
+                  parameters:
+                    - name: namespace
+                      value: "{{inputs.parameters.namespace}}"
+                    - name: instanceId
+                      value: "{{inputs.parameters.instanceId}}"
+                    - name: memberCount
+                      value: "{{inputs.parameters.memberCount}}"
+              - name: inspect
+                template: inspect-cluster
+                dependencies: [verifycluster]
+                arguments:
+                  parameters:
+                    - name: operation
+                      value: "{{inputs.parameters.operation}}"
+        - name: verify-cluster
+          inputs:
+            parameters:
+              - name: namespace
+              - name: instanceId
+              - name: memberCount
+          resource:
+            action: get
+            successCondition: status.instances == {{inputs.parameters.memberCount}}, status.readyInstances == {{inputs.parameters.memberCount}}
+            failureCondition: status.phase == failed
+            manifest: |
+              apiVersion: postgresql.cnpg.io/v1
+              kind: Cluster
+              metadata:
+                name: "{{inputs.parameters.instanceId}}"
+                namespace: "{{inputs.parameters.namespace}}"
+        - name: inspect-cluster
+          inputs:
+            parameters:
+              - name: operation
+          containerSet:
+            containers:
+              - name: main
+                image: ghcr.io/omnistrate/alpine:3.23.3
+                command: [sh, -c]
+                args: ['printf "validated-%s" "{{inputs.parameters.operation}}"']
+```
+
+Add an HTTP leaf (using the §3 pattern) when verification must call an
+operator-managed or application endpoint. Keep cluster-local checks on
+cluster-local DNS; do not expose a public endpoint only to run Validation.
 
 Backup verbs require the capability block on the CR service:
 
@@ -551,7 +744,7 @@ customWorkflows:
     displayName: Force switch primary
     description: Delete the current primary pod; the operator promotes a replica.
     scope:
-      - fleet                      # who may invoke it
+      - FLEET                      # who may invoke it
     apiParameters:
       - key: primaryPodName
         displayName: Primary Pod Name
@@ -635,6 +828,7 @@ manifest: |
 | `$sys.snapshot.id`, `$sys.snapshot.time` | backup/deleteBackup context |
 | `$sys.restore.snapshotId/.snapshotTime/.metadata.<k>` | restore context |
 | `$sys.sourceInstanceId`, `$sys.targetInstanceId` | restore source/target |
+| `$sys.validation.operation` | Validation trigger: `CREATE`, `MODIFY`, or `RESTORE`; patch/update/upgrade mutations use `MODIFY` |
 | `$func.base64encode(x)` | e.g. secret `data:` values |
 
 Concatenation needs `{{ }}`: `host: "reader-{{ $sys.network.externalClusterEndpoint }}"`.
@@ -648,7 +842,8 @@ omctl docs system-parameters -o json          # full $sys.* schema
 > **`docs system-parameters` does not cover workflow-context variables.** Its root
 > exposes only `backup`, `compute`, `deployment`, `deploymentCell`, `id`, `network`,
 > `storage`, `tenant`, `deterministicSeedValue`. `$sys.namespace`, `$sys.instanceId`,
-> `$sys.restore.*`, `$sys.sourceInstanceId` and `$sys.targetInstanceId` are **real but
+> `$sys.restore.*`, `$sys.sourceInstanceId`, `$sys.targetInstanceId`, and
+> `$sys.validation.operation` are **real but
 > absent from it**. Never drop a `$sys.*` path just because this command omits it —
 > confirm with `omctl docs search "workflow context system parameters" --limit 15`.
 
