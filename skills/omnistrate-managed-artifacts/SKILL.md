@@ -1,6 +1,6 @@
 ---
 name: omnistrate-managed-artifacts
-description: Inspect Omnistrate-managed amenity releases, Base Amenities release policies, and private ECR synchronization; guide explicitly requested policy changes and single-sync copy, verification, or reconcile actions, and diagnose signed private BYOC-K8s install-kit readiness. Not application image publishing, custom Helm artifacts, air-gapped packaging, or a deployment/agent upgrade workflow.
+description: Inspect Omnistrate-managed amenity releases, Base Amenities release policies, and private ECR synchronization; guide explicitly requested policy changes, automatic/manual private-publication settings, and single-sync copy (with customer vet/sign hooks), verification, or reconcile actions, and diagnose signed private BYOC-K8s install-kit readiness. Not application image publishing, custom Helm artifacts, air-gapped packaging, or a deployment/agent upgrade workflow.
 ---
 
 # Managed Artifact Releases
@@ -26,8 +26,8 @@ source artifacts.
   policy updates and `sync copy`, `sync refresh-status`, or `sync reconcile`
   require Root, Admin, Service Operator, or Service Editor.
 - Default to inspection. Ask for exact scope and action-time confirmation before
-  a policy update, sync copy/refresh-status/reconcile, IAM/CloudFormation change,
-  installation, or live rollout. A request to inspect readiness does not
+  a policy update, sync copy/refresh-status/reconcile, account private-publication
+  setting change, IAM/CloudFormation change, installation, or live rollout. A request to inspect readiness does not
   authorize any of those actions.
 
 Merged source is not deployment evidence. Consult local help and, when needed,
@@ -203,6 +203,32 @@ onboarding defaults these controls on; customer onboarding does not grant the
 provider-only policies. Existing accounts may need a separately approved
 onboarding-stack update.
 
+## Automatic or manual private publication
+
+The account governance control `privateArtifactPublicationEnabled` decides who
+copies managed artifacts into a SaaS Provider AWS account's private ECR. It applies
+only to AWS accounts that are not BYOA. Enabled (default for new accounts): new
+records are `PENDING` and Omnistrate copies them. Disabled: new records are
+`MANUAL` and the provider copies, optionally vetting and signing first.
+
+Change it only when the user explicitly requests it for an exact account, and
+confirm immediately before running:
+
+```bash
+omnistrate-ctl account update <account-name-or-id> --private-artifact-push-enabled=false
+omnistrate-ctl account update <account-name-or-id> --private-artifact-push-enabled=true
+```
+
+- Always use `=` with the value. Saving puts the account in `PENDING_UPDATE`.
+  The setting applies only after the existing CloudFormation stack or Terraform
+  deployment is updated to the matching `EnablePrivateArtifactPublication` value
+  and Omnistrate verifies it. Never create a new stack; the stack update is a
+  separate IAM change needing its own approval.
+- The command waits and prints the next step; `--skip-wait` returns immediately.
+  Confirm the applied value with `omnistrate-ctl account describe <account>`.
+- Changing the setting does not retry existing records. `MANUAL` records stay
+  `MANUAL` after enabling; each needs an explicitly requested `sync reconcile`.
+
 ## Act on one private sync
 
 Run these only when the user explicitly requests the action for an exact
@@ -221,11 +247,33 @@ omnistrate-ctl managed-artifact sync refresh-status --id <sync-id>
 omnistrate-ctl managed-artifact sync reconcile --id <sync-id>
 ```
 
-- `sync copy` uses the user's destination AWS profile and local Docker source
-  credentials, runs optional customer `--vetter`/`--signer` executables before
-  publishing final tags, and requests verification after success. It does not
+- `sync copy` reads `manualCopyPlan` from `sync describe` and refuses non-`MANUAL`
+  records. It needs a destination AWS profile that can describe, create, push to,
+  and untag ECR repositories, plus local Docker credentials for private sources.
+  Never alter the plan's prefix, relative path, version, or digest. It does not
   manage repository policies; other consumer accounts need separate pull grants.
-  Re-running is safe.
+- Copy lifecycle: stage every artifact by digest to a `manual-*` tag (creating
+  repositories and checking digests/chart checksums), run the vetter for every
+  staged artifact, then the signer for every artifact, and only then publish the
+  version tag and `<version>-sha256-<16 hex>` alias, remove staging tags, and
+  request `refresh-status`. If that final status request fails, run
+  `refresh-status` separately.
+- Hook events: each `--vetter`/`--signer` executable runs once per staged
+  artifact, directly (no shell or arguments), with one JSON object on stdin:
+  `artifactKey`, `sourceRef`, `destinationRef` (staging tag), `destinationDigest`,
+  `destinationRegion`, and `awsProfile` (when set). `AWS_REGION`,
+  `AWS_DEFAULT_REGION`, and `AWS_PROFILE` are set for the hook; its output goes
+  to stderr. Exit `0` accepts; non-zero stops before any final tag is published,
+  leaves staging tags for inspection, and keeps the record `MANUAL`. Hooks must
+  act on `<destinationRef without :tag>@<destinationDigest>`, not the staging
+  tag, and be safe to repeat. Use the `artifactKey` prefix (`container-image/`
+  or `helm-chart/`) to choose image-only checks. The vetting and signing tools
+  are the customer's choice; do not assume or install them.
+- Re-running `sync copy` is safe: artifacts whose version tag already resolves to
+  the planned digest are skipped with their hooks; the rest reuse matching
+  staging tags and run the hooks again. The standalone `omnistrate-artifact-sync`
+  runner (`--plan <sync describe JSON>`) does the same without calling the API;
+  follow it with `refresh-status`.
 - `refresh-status` promotes `MANUAL` to `READY` only when every artifact's version
   tag resolves to the release digest; otherwise the record stays `MANUAL` with
   per-artifact results. It does not verify cross-account repository policies.

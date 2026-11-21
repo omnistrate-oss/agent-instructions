@@ -71,7 +71,8 @@ This repository organizes agent capabilities into specialized skills:
 #### [**skills/omnistrate-managed-artifacts/**](./skills/omnistrate-managed-artifacts/) - Managed Artifact Releases
 
 - **SKILL.md** - Managed amenity release inspection, template release policies,
-  private ECR synchronization and single-sync copy/verify/reconcile actions, and
+  private ECR synchronization, automatic/manual private publication, single-sync
+  copy (with customer vet/sign hooks)/verify/reconcile actions, and
   signed private BYOC-K8s kit readiness.
 
 **Use when**: Inspecting managed releases or private registry delivery, diagnosing
