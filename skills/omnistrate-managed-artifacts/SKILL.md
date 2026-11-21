@@ -1,6 +1,6 @@
 ---
 name: omnistrate-managed-artifacts
-description: Inspect Omnistrate-managed amenity releases, Base Amenities release policies, and private ECR synchronization; guide explicitly requested policy changes and diagnose signed private BYOC-K8s install-kit readiness. Not application image publishing, custom Helm artifacts, air-gapped packaging, or a deployment/agent upgrade workflow.
+description: Inspect Omnistrate-managed amenity releases, Base Amenities release policies, and private ECR synchronization; guide explicitly requested policy changes and single-sync copy, verification, or reconcile actions, and diagnose signed private BYOC-K8s install-kit readiness. Not application image publishing, custom Helm artifacts, air-gapped packaging, or a deployment/agent upgrade workflow.
 ---
 
 # Managed Artifact Releases
@@ -23,10 +23,12 @@ source artifacts.
   access. Installer tasks additionally require the provider's signed private
   installer access.
 - Root, Admin, Service Operator, Service Editor, and Service Reader can inspect;
-  policy updates require Root, Admin, Service Operator, or Service Editor.
+  policy updates and `sync copy`, `sync refresh-status`, or `sync reconcile`
+  require Root, Admin, Service Operator, or Service Editor.
 - Default to inspection. Ask for exact scope and action-time confirmation before
-  a policy update, IAM/CloudFormation change, installation, or live rollout.
-  A request to inspect readiness does not authorize any of those actions.
+  a policy update, sync copy/refresh-status/reconcile, IAM/CloudFormation change,
+  installation, or live rollout. A request to inspect readiness does not
+  authorize any of those actions.
 
 Merged source is not deployment evidence. Consult local help and, when needed,
 `omctl docs search "managed artifact releases" --limit 15` for target-platform
@@ -99,15 +101,18 @@ omnistrate-ctl managed-artifact policy describe \
 ```
 
 `autoUpgrade=true` means no stored pin. `preferredBundleVersion` is the stored
-pin; `effectiveBundleVersion` is the newest published release in automatic mode
-and can be absent if none is published. Pinning additionally requires the selected
-cloud's managed-consumption access; CTL forwards supported clouds and the API
-enforces access. Clearing a pin remains possible after pinning access is revoked.
+pin; `effectiveBundleVersion` is the newest published release whose private sync
+is `READY` on every eligible provisioner in the organization, and is absent if no
+such release exists. A stored pin that is not `READY` is reported without
+`preferredBundleVersion` or `effectiveBundleVersion`. Pinning additionally
+requires the selected cloud's managed-consumption access; CTL forwards supported
+clouds and the API enforces access. Clearing a pin remains possible after pinning
+access is revoked.
 
 Only after the user confirms the exact template and policy change:
 
 ```bash
-# Pin a published release. Check the relevant registry copy first.
+# Pin a published release whose private sync is READY; the API rejects others.
 omnistrate-ctl managed-artifact policy update \
   --environment-type <environment-type> --cloud-provider <cloud-provider> \
   --auto-upgrade=false --preferred-bundle-version <bundle-version> --output json
@@ -119,10 +124,11 @@ omnistrate-ctl managed-artifact policy update \
 ```
 
 The `--auto-upgrade` flag must be explicit. Do not combine `true` with a preferred
-release. With `false`, omitting the preferred version retains an existing pin or
-freezes the current effective published release; freezing fails if none exists.
-An update can enqueue private synchronization but does not certify readiness or
-apply changes to installed cells. Re-describe the policy afterward.
+release. With `false`, omitting the preferred version retains an existing `READY`
+pin or freezes the newest `READY` release; freezing fails if none exists.
+Enabling auto-upgrade can enqueue private synchronization of the newest published
+release, but the effective release changes only after that copy is `READY`. An
+update does not apply changes to installed cells. Re-describe the policy afterward.
 
 ## BYOC-K8s signed private install kits
 
@@ -162,21 +168,25 @@ This does not relax the signed private installer's no-fallback requirement.
 
 ## Diagnose without changing delivery state
 
-- Record statuses: `PENDING`, `IN_PROGRESS`, `READY`, `FAILED`, `SKIPPED`.
-  Per-artifact statuses: `PENDING`, `READY`, `FAILED`. Clients must tolerate new
-  response values; documented filter values remain the accepted inputs.
+- Record statuses: `PENDING`, `IN_PROGRESS`, `READY`, `FAILED`, `SKIPPED`,
+  `MANUAL`. Per-artifact statuses: `PENDING`, `READY`, `FAILED`. Clients must
+  tolerate new response values; documented filter values remain the accepted
+  inputs.
 - Completed/failed counts describe artifact results; the remainder is not
   necessarily in progress. A failed record can contain successful artifacts.
-- A never-established private target's recognized ECR permission denial can be
-  `SKIPPED`, allowing eligible public-egress consumers to use public references.
-  Later denials after successful private delivery remain failures. `SKIPPED` is
-  not proof that private ECR works.
+- A recognized private-ECR permission denial makes the record `SKIPPED` when the
+  target is no longer an eligible provisioner, `MANUAL` when the account's applied
+  `EnablePrivateArtifactPublication` setting is disabled or unrecorded, and
+  `FAILED` otherwise. `MANUAL` is never retried automatically, and enabling the
+  setting alone does not start a copy. Neither `SKIPPED` nor `MANUAL` proves that
+  private ECR works.
 - Inspect sanitized `failureCategory`/`failureMessage`, artifact results, and
   source/destination references and digests. Use the record status for readiness
   rather than treating a completion count or timestamp as proof.
 - `sync describe` can refresh known workflow state, so it may be newer than a
-  persisted-state list. Neither command is a retry, resync, publish, or cancel
-  operation. Do not retry workflows or modify IAM to make inspection succeed.
+  persisted-state list. Neither inspection command is a retry, resync, publish,
+  or cancel operation. Do not retry workflows or modify IAM to make inspection
+  succeed.
 - If intervention is needed, report the release, private destination,
   record ID, execution target if present, and sanitized failure category. Do not
   infer a specific customer-VPC fault from a generic failure category.
@@ -192,3 +202,38 @@ and `EnablePrivateArtifactPublication` for private publisher permissions. Provid
 onboarding defaults these controls on; customer onboarding does not grant the
 provider-only policies. Existing accounts may need a separately approved
 onboarding-stack update.
+
+## Act on one private sync
+
+Run these only when the user explicitly requests the action for an exact
+`spabs-` record, and confirm immediately before running. Each acts on that record
+and its exact bundle version; none retries other records or releases.
+
+```bash
+# MANUAL only: copy by digest into the destination account, then verify.
+omnistrate-ctl managed-artifact sync copy --id <sync-id> \
+  --aws-profile <destination-account-profile>
+
+# MANUAL only: verify a customer-populated destination; never copies.
+omnistrate-ctl managed-artifact sync refresh-status --id <sync-id>
+
+# MANUAL, FAILED, SKIPPED, or READY: request one platform copy and verification.
+omnistrate-ctl managed-artifact sync reconcile --id <sync-id>
+```
+
+- `sync copy` uses the user's destination AWS profile and local Docker source
+  credentials, runs optional customer `--vetter`/`--signer` executables before
+  publishing final tags, and requests verification after success. It does not
+  manage repository policies; other consumer accounts need separate pull grants.
+  Re-running is safe.
+- `refresh-status` promotes `MANUAL` to `READY` only when every artifact's version
+  tag resolves to the release digest; otherwise the record stays `MANUAL` with
+  per-artifact results. It does not verify cross-account repository policies.
+- `reconcile` requires that automatic private publication is not disabled and
+  that the target remains eligible. `MANUAL`, `FAILED`, and `SKIPPED` move to
+  `IN_PROGRESS`, become `READY` on success, and restore their previous status
+  and artifact results on failure. `READY` stays `READY`: success refreshes its
+  results and failure leaves it unchanged. `IN_PROGRESS` and an active `READY`
+  republish are rejected. Follow the result with `sync describe`.
+- Treat a rejection as state to report, not a reason to change IAM, account
+  settings, or workflows.

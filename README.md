@@ -71,12 +71,14 @@ This repository organizes agent capabilities into specialized skills:
 #### [**skills/omnistrate-managed-artifacts/**](./skills/omnistrate-managed-artifacts/) - Managed Artifact Releases
 
 - **SKILL.md** - Managed amenity release inspection, template release policies,
-  private ECR synchronization, and signed private BYOC-K8s kit readiness.
+  private ECR synchronization and single-sync copy/verify/reconcile actions, and
+  signed private BYOC-K8s kit readiness.
 
 **Use when**: Inspecting managed releases or private registry delivery, diagnosing
-signed install-kit artifact selection, or guiding an explicitly requested release-policy change.
-Registry `READY` does not prove cell installation. Policy changes, IAM updates,
-installations, and rollouts require separate scope and confirmation.
+signed install-kit artifact selection, or guiding an explicitly requested release-policy
+change or private sync copy, verification, or reconcile. Registry `READY` does not prove
+cell installation. Policy changes, sync actions, IAM updates, installations, and rollouts
+require separate scope and confirmation.
 
 This skill does not publish product images, onboard custom artifacts, or upgrade
 an installed agent.
