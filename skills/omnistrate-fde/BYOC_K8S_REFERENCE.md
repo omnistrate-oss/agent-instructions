@@ -141,7 +141,7 @@ The cluster needs outbound HTTPS to:
 | Destination | Why | Needed by |
 |---|---|---|
 | `*.omnistrate.cloud` | Control-plane / agent connection; without it nothing deploys | Agent install |
-| Registry host listed in the kit's `README.md` — `ghcr.io` for public kits, the provider's private ECR host for private signed kits | Dataplane-agent chart and image | **Agent install — before any plan workload exists** |
+| Agent registry used by the kit — `ghcr.io` by default, the provider's public ECR when public managed-artifact sync is enabled, or the private ECR host listed in a private kit's `README.md` | Dataplane-agent chart and image | **Agent install — before any plan workload exists** |
 | `get.helm.sh` | Only if `helm` is not already installed on the operator's machine | Agent install |
 | `registry.k8s.io`, `quay.io`, `docker.io`, `ghcr.io` | Deployment-cell amenity images from public sources (external-dns, cert-manager, prometheus, grafana, headlamp, dcgm-exporter) | Amenity install |
 | Provider's private ECR host, when a `READY` private managed release is selected | Managed amenity charts and images delivered through private ECR | Amenity install |
@@ -155,10 +155,12 @@ firewall ticket scoped only to your product's registries will fail at agent
 install. Add your plan's actual registries to the generic list above — image-pull
 failures on BYOC-K8s are almost always a missing allowlist entry.
 
-Derive the agent allowlist from a fresh kit's `README.md` rather than assuming
-GHCR: a private signed kit pulls the agent chart and image from the provider's
-private ECR registry instead. Private kits contain short-lived pull credentials;
-handle their files and account-bound signed download URLs as credential material.
+Derive the agent allowlist from a fresh kit rather than assuming GHCR. Public
+artifacts come from GHCR, or from the provider's public ECR when public
+managed-artifact sync is enabled; a private signed kit pulls the agent chart and
+image from the provider's private ECR registry instead. Private kits contain
+short-lived pull credentials; handle their files and account-bound signed
+download URLs as credential material.
 
 ### What lands in the customer's cluster automatically
 
@@ -584,14 +586,14 @@ instructions rather than a remembered registry or tag:
 
 | Organization access | Kit |
 |---|---|
-| Signed installer not enabled | Legacy unsigned download; public GHCR chart and image |
-| Signed installer enabled, private managed artifacts not enabled | Signed download; public GHCR chart and image |
+| Signed installer not enabled | Legacy unsigned download; public chart and image |
+| Signed installer enabled, private managed artifacts not enabled | Signed download; public chart and image |
 | Signed installer and private managed artifacts enabled | Signed download; chart and images from the provider's private ECR with minted pull credentials |
 
 The private form uses the `byoc-onprem` release selection and needs a `READY`
 private sync on the selected provider AWS provisioner. If no `READY` private
 release is selected, or the provisioner permanently fails to mint registry
-credentials, the kit falls back to public GHCR artifacts instead of failing;
+credentials, the kit falls back to public artifacts instead of failing;
 transient minting errors fail generation and can be retried. Organization access,
 provider private publication permissions, and registry readiness are separate
 prerequisites.
@@ -1377,7 +1379,7 @@ cells:
 | Assuming `account customer delete` finishes the job | It stalls at `READY_TO_OFFBOARD`. Uninstall the agent, then re-issue the delete. |
 | Polling `.account_status` | The field is `.summary.account_status`. |
 | Running `install.sh` on a cluster with no LoadBalancer | Preflight hard-fails. Install MetalLB, or `--skip-nginx-validation`. Use `--validate-only` first. |
-| Scoping the firewall ticket to your product's registries only | The kit's agent registry (`ghcr.io` or the provider's private ECR) and `*.omnistrate.cloud` are needed before your plan is ever involved. |
+| Scoping the firewall ticket to your product's registries only | The kit's agent registry (`ghcr.io` or the provider's ECR) and `*.omnistrate.cloud` are needed before your plan is ever involved. |
 | Promising "we only deploy workloads in your cluster" | The amenity stack installs 8 releases incl. cluster-scoped CRDs and an ingress controller. Disclose at intake. |
 | Passing a service ID to `omctl service delete` | It takes the service **name**. |
 | Declaring `endpointConfiguration` in the **first** BYOC-K8s spec | Start with no endpoints; add them (with the External DNS amenity) only when the user asks for a reachable endpoint. |
