@@ -6,7 +6,7 @@ description: Inspect Omnistrate-managed amenity releases, Base Amenities release
 # Managed Artifact Releases
 
 Use `omnistrate-ctl` (alias `omctl`) by default. Use equivalent MCP tools only
-when the user asks for MCP. This workflow concerns Omnistrate-managed artifacts,
+when the user asks for MCP; `sync copy` has no MCP tool. This workflow concerns Omnistrate-managed artifacts,
 not a product's application images, custom amenities, or uploaded Helm/Terraform
 source artifacts.
 
@@ -247,6 +247,10 @@ omnistrate-ctl managed-artifact sync refresh-status --id <sync-id>
 omnistrate-ctl managed-artifact sync reconcile --id <sync-id>
 ```
 
+- `sync copy` is CLI-only: it runs operator-selected local hook executables with
+  the CLI's AWS credentials, so the MCP server does not expose it. Never
+  substitute another tool for it; ask the user to run it locally if the CLI is
+  unavailable. `refresh-status` and `reconcile` have MCP equivalents.
 - `sync copy` reads `manualCopyPlan` from `sync describe` and refuses non-`MANUAL`
   records. It needs a destination AWS profile that can describe, create, push to,
   and untag ECR repositories, plus local Docker credentials for private sources.
@@ -262,8 +266,13 @@ omnistrate-ctl managed-artifact sync reconcile --id <sync-id>
   artifact, directly (no shell or arguments), with one JSON object on stdin:
   `artifactKey`, `sourceRef`, `destinationRef` (staging tag), `destinationDigest`,
   `destinationRegion`, and `awsProfile` (when set). `AWS_REGION`,
-  `AWS_DEFAULT_REGION`, and `AWS_PROFILE` are set for the hook; its output goes
-  to stderr. Exit `0` accepts; non-zero stops before any final tag is published,
+  `AWS_DEFAULT_REGION`, and `AWS_PROFILE` are set for the hook. With
+  `--aws-profile`, the hook also receives that profile's resolved credentials
+  (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and, when present,
+  `AWS_SESSION_TOKEN`/`AWS_CREDENTIAL_EXPIRATION`) in place of inherited AWS
+  credential variables, so it authenticates as the same identity as the copy;
+  hooks should use the default credential chain rather than select another
+  profile. Hook output goes to stderr. Exit `0` accepts; non-zero stops before any final tag is published,
   leaves staging tags for inspection, and keeps the record `MANUAL`. Hooks must
   act on `<destinationRef without :tag>@<destinationDigest>`, not the staging
   tag, and be safe to repeat. Use the `artifactKey` prefix (`container-image/`
@@ -283,5 +292,11 @@ omnistrate-ctl managed-artifact sync reconcile --id <sync-id>
   and artifact results on failure. `READY` stays `READY`: success refreshes its
   results and failure leaves it unchanged. `IN_PROGRESS` and an active `READY`
   republish are rejected. Follow the result with `sync describe`.
+- The CLI sends `refresh-status` and `reconcile` exactly once; it never retries
+  them automatically. After a timeout, gateway error, or dropped connection, the
+  action may already have taken effect: run `sync describe` before anything else
+  and repeat only if the record shows it did not, with fresh confirmation. A
+  `409 invalid_state` following such a failure can mean the first attempt
+  succeeded (for example, the record is now `IN_PROGRESS` or `READY`).
 - Treat a rejection as state to report, not a reason to change IAM, account
   settings, or workflows.
