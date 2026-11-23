@@ -141,9 +141,11 @@ The cluster needs outbound HTTPS to:
 | Destination | Why | Needed by |
 |---|---|---|
 | `*.omnistrate.cloud` | Control-plane / agent connection; without it nothing deploys | Agent install |
-| `ghcr.io` | The dataplane agent chart itself is `oci://ghcr.io/omnistrate/dataplane-agent-chart` | **Agent install — before any plan workload exists** |
+| Registry host listed in the kit's `README.md` — `ghcr.io` for public kits, the provider's private ECR host for private signed kits | Dataplane-agent chart and image | **Agent install — before any plan workload exists** |
 | `get.helm.sh` | Only if `helm` is not already installed on the operator's machine | Agent install |
-| `registry.k8s.io`, `quay.io`, `docker.io`, `ghcr.io` | Deployment-cell amenity images (external-dns, cert-manager, prometheus, grafana, headlamp, dcgm-exporter) | Amenity install |
+| `registry.k8s.io`, `quay.io`, `docker.io`, `ghcr.io` | Deployment-cell amenity images from public sources (external-dns, cert-manager, prometheus, grafana, headlamp, dcgm-exporter) | Amenity install |
+| Provider's private ECR host, when a `READY` private managed release is selected | Managed amenity charts and images delivered through private ECR | Amenity install |
+| Registries used by custom amenities, if configured | Custom charts and images have separate registry requirements | Amenity install |
 | Container image registries used by **your plan** | Image pulls at deploy time — images are **not** pre-embedded on BYOC-K8s | Instance deploy |
 | Helm chart registries / OCI repos used by **your plan** | Chart pulls at deploy time | Instance deploy |
 | Regional AWS CloudWatch Logs endpoint | **Only if** the plan enables native logs — see §Native logs | Runtime |
@@ -152,6 +154,11 @@ The first three rows are needed **before your plan is ever involved**, so a
 firewall ticket scoped only to your product's registries will fail at agent
 install. Add your plan's actual registries to the generic list above — image-pull
 failures on BYOC-K8s are almost always a missing allowlist entry.
+
+Derive the agent allowlist from a fresh kit's `README.md` rather than assuming
+GHCR: a private signed kit pulls the agent chart and image from the provider's
+private ECR registry instead. Private kits contain short-lived pull credentials;
+handle their files and account-bound signed download URLs as credential material.
 
 ### What lands in the customer's cluster automatically
 
@@ -571,6 +578,32 @@ The installer creates the dataplane-agent resources only. Amenities and product
 workloads are installed later, by your control plane, over the agent connection —
 see §What lands in the customer's cluster automatically.
 
+The kit takes one of three forms, so use the fresh kit's own chart
+reference/version, image values, Helm authentication, and image-pull Secret
+instructions rather than a remembered registry or tag:
+
+| Organization access | Kit |
+|---|---|
+| Signed installer not enabled | Legacy unsigned download; public GHCR chart and image |
+| Signed installer enabled, private managed artifacts not enabled | Signed download; public GHCR chart and image |
+| Signed installer and private managed artifacts enabled | Signed download; chart and images from the provider's private ECR with minted pull credentials |
+
+The private form uses the `byoc-onprem` release selection and needs a `READY`
+private sync on the selected provider AWS provisioner. If no `READY` private
+release is selected, or the provisioner permanently fails to mint registry
+credentials, the kit falls back to public GHCR artifacts instead of failing;
+transient minting errors fail generation and can be retried. Organization access,
+provider private publication permissions, and registry readiness are separate
+prerequisites.
+
+Private registry credentials are minted at download and are not renewed;
+re-download before reinstalling if they may have expired, and do not substitute
+a registry/tag or report signed URLs/credentials. Installation creates or updates
+the agent image-pull Secret and needs separate authorization for the target
+cluster. To check whether the `byoc-onprem` release and its private sync are
+`READY` when a kit unexpectedly uses public artifacts, use the
+`omnistrate-managed-artifacts` skill.
+
 Poll until the account configuration reports `READY`. The status is at
 **`.summary.account_status`** — a top-level `.account_status` does not exist, and
 polling for it silently never matches:
@@ -587,13 +620,14 @@ States you will see: **`VERIFYING`** → **`READY`** (and later
 
 ### Handing the install to a real customer
 
-The kit's `result_params.byoc_onprem_install_command` is a one-liner that
-downloads, extracts, and installs in a single step — this is what belongs in an
-ISV's customer runbook rather than the manual tarball dance:
-
-```bash
-bash -c 'd=$(mktemp -d) && curl -fsSL "https://api.omnistrate.cloud/2022-09-01-00/account-setup/byoc-onprem?account_config_id=<account-config-id>" | tar -xf - -C "$d" && bash "$d/install.sh"'
-```
+Use the generated `result_params.byoc_onprem_install_command` when supplied.
+A signed download URL is bound to the account configuration and expires after
+12 hours; never reconstruct it from an account-config ID or strip its
+signature/query parameters. If it expires, use the authenticated customer-account
+workflow below to request a fresh kit/command. Deliver the fresh command/kit
+through the customer's approved secure channel; do not commit it to a shared
+runbook or paste it into logs. Confirm the intended cluster and installation
+before running it.
 
 To re-download the kit later (reinstall, recovery, a rebuilt cluster):
 
@@ -1120,7 +1154,7 @@ Non-obvious facts, all confirmed via `omctl docs plan-spec "Features schema"`:
 - Keep **`ExpandBoundaryForAWSServiceIntegrations=true`** in that AWS account's
   generated CloudFormation stack, or the credentials cannot be issued. If the
   account was onboarded before this parameter existed, update the stack.
-- This is independent of **`EnableECRHelmChartPull=true`** (needed when the plan
+- This is independent of **`EnableArtifactECRPull=true`** (needed when the plan
   pulls a Helm OCI chart from the provider's private ECR). A plan using both
   capabilities needs both flags.
 - The cluster needs an **HTTPS path to the regional CloudWatch Logs endpoint** —
@@ -1343,7 +1377,7 @@ cells:
 | Assuming `account customer delete` finishes the job | It stalls at `READY_TO_OFFBOARD`. Uninstall the agent, then re-issue the delete. |
 | Polling `.account_status` | The field is `.summary.account_status`. |
 | Running `install.sh` on a cluster with no LoadBalancer | Preflight hard-fails. Install MetalLB, or `--skip-nginx-validation`. Use `--validate-only` first. |
-| Scoping the firewall ticket to your product's registries only | `ghcr.io` and `*.omnistrate.cloud` are needed before your plan is ever involved. |
+| Scoping the firewall ticket to your product's registries only | The kit's agent registry (`ghcr.io` or the provider's private ECR) and `*.omnistrate.cloud` are needed before your plan is ever involved. |
 | Promising "we only deploy workloads in your cluster" | The amenity stack installs 8 releases incl. cluster-scoped CRDs and an ingress controller. Disclose at intake. |
 | Passing a service ID to `omctl service delete` | It takes the service **name**. |
 | Declaring `endpointConfiguration` in the **first** BYOC-K8s spec | Start with no endpoints; add them (with the External DNS amenity) only when the user asks for a reachable endpoint. |
