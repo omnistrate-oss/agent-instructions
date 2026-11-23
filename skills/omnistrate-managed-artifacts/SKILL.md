@@ -220,9 +220,9 @@ omnistrate-ctl account update <account-name-or-id> --private-artifact-push-enabl
 ```
 
 - Always use `=` with the value. Saving puts the account in `PENDING_UPDATE`.
-  The setting applies only after the existing CloudFormation stack or Terraform
-  deployment is updated to the matching `EnablePrivateArtifactPublication` value
-  and Omnistrate verifies it. Never create a new stack; the stack update is a
+  The setting applies only after the existing CloudFormation stack is updated to
+  the matching `EnablePrivateArtifactPublication` value and Omnistrate verifies
+  it. Never create a new stack; the stack update is a
   separate IAM change needing its own approval.
 - The command waits and prints the next step; `--skip-wait` returns immediately.
   Confirm the applied value with `omnistrate-ctl account describe <account>`.
