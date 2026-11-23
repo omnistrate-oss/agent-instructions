@@ -1,6 +1,6 @@
 ---
 name: omnistrate-managed-artifacts
-description: Inspect Omnistrate-managed amenity releases, Base Amenities release policies, and private ECR synchronization; guide explicitly requested policy changes, automatic/manual private-publication settings, and single-sync copy (with customer vet/sign hooks), verification, or reconcile actions, and diagnose signed private BYOC-K8s install-kit readiness. Not application image publishing, custom Helm artifacts, air-gapped packaging, or a deployment/agent upgrade workflow.
+description: Inspect Omnistrate-managed amenity releases, Base Amenities release policies, and private ECR synchronization; guide explicitly requested policy changes, automatic/manual private-publication settings, and single-sync copy (with customer vet/sign hooks), verification, or reconcile actions. Not application image publishing, custom Helm artifacts, BYOC-K8s agent installation, air-gapped packaging, or a deployment/agent upgrade workflow.
 ---
 
 # Managed Artifact Releases
@@ -20,14 +20,13 @@ source artifacts.
   before using the optional account filter.
 - Release/policy commands and private sync inspection require private managed
   artifact access. CLI availability does not prove backend routes or feature
-  access. Installer tasks additionally require the provider's signed private
-  installer access.
+  access.
 - Root, Admin, Service Operator, Service Editor, and Service Reader can inspect;
   policy updates and `sync copy`, `sync refresh-status`, or `sync reconcile`
   require Root, Admin, Service Operator, or Service Editor.
 - Default to inspection. Ask for exact scope and action-time confirmation before
   a policy update, sync copy/refresh-status/reconcile, account private-publication
-  setting change, IAM/CloudFormation change, installation, or live rollout. A request to inspect readiness does not
+  setting change, IAM/CloudFormation change, or live rollout. A request to inspect readiness does not
   authorize any of those actions.
 
 Merged source is not deployment evidence. Consult local help and, when needed,
@@ -130,31 +129,7 @@ Enabling auto-upgrade can enqueue private synchronization of the newest publishe
 release, but the effective release changes only after that copy is `READY`. An
 update does not apply changes to installed cells. Re-describe the policy afterward.
 
-## BYOC-K8s signed private install kits
-
-Do not confuse connected `byoc-onprem` with an air-gapped installer. This workflow
-uses the signed private installer and private managed-artifact access for the
-SaaS Provider organization. The `byoc-onprem` template policy selects the release;
-its private copy must be `READY` on the selected provider AWS provisioner. A
-missing/unready copy fails kit generation without public-source fallback.
-
-Copy the chart reference/version, image values, Helm authentication, and
-image-pull Secret instructions from a fresh generated kit. Do not substitute a
-hardcoded registry or tag. Use the generated
-`result_params.byoc_onprem_install_command` when supplied: its download URL is
-signed, expiring, and bound to the account configuration. Never reconstruct the
-URL from an account ID or strip its signature/query parameters. If it has expired,
-request a fresh kit/command through the authenticated customer-account workflow.
-
-Private kits contain short-lived pull-only ECR credentials; their download URLs
-are account-bound. Treat kits and signed URLs as credential material. Re-download
-before reinstalling if credentials may have expired. Do not log them, commit them,
-or paste them into a support report. Installation creates/updates the agent
-image-pull Secret and requires separate authorization for the target cluster.
-
-Allow outbound HTTPS to the generated private registry and its download hosts as
-well as the control plane. Provider private-publication permissions, organization
-feature access, and registry readiness are independent prerequisites.
+## Private managed-artifact consumption
 
 For private managed consumption, provider-minted pull credentials are the
 authorization source. A customer-account repository/IAM grant is a best-effort
@@ -164,7 +139,11 @@ requires a permitted public-egress path: endpoint-only cells with public egress
 disabled reject it. The PrivateLink flag alone is not that restriction; eligible
 PrivateLink consumers with public egress can retain the selected release through
 public references after a recognized permission denial, including with a pin.
-This does not relax the signed private installer's no-fallback requirement.
+
+The BYOC-K8s signed agent installer (install kits, signed download URLs, and kit
+credentials) is out of scope here; use the `omnistrate-fde` skill's
+`BYOC_K8S_REFERENCE.md`. This skill only answers whether the `byoc-onprem`
+release and its private sync are `READY`.
 
 ## Diagnose without changing delivery state
 

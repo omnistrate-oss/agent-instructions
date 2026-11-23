@@ -72,17 +72,16 @@ This repository organizes agent capabilities into specialized skills:
 
 - **SKILL.md** - Managed amenity release inspection, template release policies,
   private ECR synchronization, automatic/manual private publication, single-sync
-  copy (with customer vet/sign hooks)/verify/reconcile actions, and
-  signed private BYOC-K8s kit readiness.
+  copy (with customer vet/sign hooks)/verify/reconcile actions.
 
-**Use when**: Inspecting managed releases or private registry delivery, diagnosing
-signed install-kit artifact selection, or guiding an explicitly requested release-policy
-change or private sync copy, verification, or reconcile. Registry `READY` does not prove
-cell installation. Policy changes, sync actions, IAM updates, installations, and rollouts
-require separate scope and confirmation.
+**Use when**: Inspecting managed releases or private registry delivery, or guiding an
+explicitly requested release-policy change or private sync copy, verification, or
+reconcile. Registry `READY` does not prove cell installation. Policy changes, sync
+actions, IAM updates, and rollouts require separate scope and confirmation.
 
-This skill does not publish product images, onboard custom artifacts, or upgrade
-an installed agent.
+This skill does not publish product images, onboard custom artifacts, install the
+BYOC-K8s agent (see `omnistrate-fde` `BYOC_K8S_REFERENCE.md`), or upgrade an
+installed agent.
 
 #### [**skills/omnistrate-sa/**](./skills/omnistrate-sa/) - Solutions Architect
 
@@ -150,7 +149,7 @@ Use this table to pick the right skill for a request:
 | Mixed stack (e.g., Terraform infra + Helm app) | hosted / BYOC / BYOC-K8s / air-gapped | **omnistrate-fde** |
 | Kubernetes operator (CRDs + controller) | hosted / BYOC / BYOC-K8s | **omnistrate-operator** |
 | Instance showing FAILED / DEPLOYING / probe errors | hosted / BYOC / BYOC-K8s / air-gapped | **omnistrate-sre** |
-| Managed amenity releases, policy, private ECR synchronization, or signed install-kit artifact readiness | hosted / BYOC / BYOC-K8s (connected) | **omnistrate-managed-artifacts** |
+| Managed amenity releases, policy, or private ECR synchronization | hosted / BYOC / BYOC-K8s (connected) | **omnistrate-managed-artifacts** |
 
 **Deployment model quick-map** (all models available for all artifact types via the FDE skill; the air-gapped installer packages Helm chart(s), so non-Helm stacks must first be bundled into chart(s)):
 

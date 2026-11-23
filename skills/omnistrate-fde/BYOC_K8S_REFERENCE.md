@@ -586,6 +586,10 @@ generation without public-source fallback. Organization access, provider private
 publication permissions, and registry readiness are separate prerequisites.
 Re-download before reinstalling if its packaged credentials may have expired;
 do not substitute a registry/tag or report signed URLs/credentials.
+Installation creates or updates the agent image-pull Secret and needs separate
+authorization for the target cluster. To check whether the `byoc-onprem` release
+and its private sync are `READY` when kit generation fails, use the
+`omnistrate-managed-artifacts` skill.
 
 Poll until the account configuration reports `READY`. The status is at
 **`.summary.account_status`** — a top-level `.account_status` does not exist, and
